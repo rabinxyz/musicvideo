@@ -1,7 +1,28 @@
 """Logo overlay utilities for compositing logos onto video frames."""
 
+import io
 from pathlib import Path
 from PIL import Image
+
+try:
+    import cairosvg
+except ImportError:
+    cairosvg = None
+
+
+def _load_svg(path, logo_width, logo_height):
+    """Convert SVG to PIL Image via cairosvg at 2x resolution for retina sharpness."""
+    if cairosvg is None:
+        raise ImportError(
+            "cairosvg is required for SVG logo files. Install it with: pip install cairosvg"
+        )
+    # Render at 2x for sharp edges, then downscale
+    png_data = cairosvg.svg2png(
+        url=path,
+        output_width=logo_width * 2,
+        output_height=logo_height * 2,
+    )
+    return Image.open(io.BytesIO(png_data))
 
 
 def load_logo(path, logo_width, logo_height, opacity):

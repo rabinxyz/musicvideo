@@ -112,3 +112,49 @@ class TestLoadLogo:
         import pytest
         with pytest.raises(FileNotFoundError):
             load_logo("/nonexistent/logo.png", 200, 100, 0.85)
+
+
+class TestLoadLogoSvg:
+    def _create_test_svg(self, tmp_path):
+        """Create a minimal test SVG and return its path."""
+        svg_content = '<svg xmlns="http://www.w3.org/2000/svg" width="100" height="50"><rect width="100" height="50" fill="red"/></svg>'
+        path = tmp_path / "logo.svg"
+        path.write_text(svg_content)
+        return str(path)
+
+    @patch("musicvid.pipeline.logo_overlay.cairosvg")
+    def test_load_svg_calls_cairosvg(self, mock_cairosvg, tmp_path):
+        # cairosvg.svg2png returns a valid PNG bytes
+        img = Image.new("RGBA", (200, 100), (255, 0, 0, 255))
+        import io
+        buf = io.BytesIO()
+        img.save(buf, format="PNG")
+        mock_cairosvg.svg2png.return_value = buf.getvalue()
+
+        path = self._create_test_svg(tmp_path)
+        result = load_logo(path, 200, 100, 1.0)
+        assert result.mode == "RGBA"
+        assert result.size == (200, 100)
+        mock_cairosvg.svg2png.assert_called_once()
+
+    @patch("musicvid.pipeline.logo_overlay.cairosvg")
+    def test_svg_renders_at_2x_for_retina(self, mock_cairosvg, tmp_path):
+        img = Image.new("RGBA", (400, 200), (255, 0, 0, 255))
+        import io
+        buf = io.BytesIO()
+        img.save(buf, format="PNG")
+        mock_cairosvg.svg2png.return_value = buf.getvalue()
+
+        path = self._create_test_svg(tmp_path)
+        load_logo(path, 200, 100, 1.0)
+        call_kwargs = mock_cairosvg.svg2png.call_args
+        # Should render at 2x size for retina sharpness
+        assert call_kwargs[1]["output_width"] == 400
+        assert call_kwargs[1]["output_height"] == 200
+
+    def test_svg_without_cairosvg_raises(self, tmp_path):
+        import pytest
+        path = self._create_test_svg(tmp_path)
+        with patch("musicvid.pipeline.logo_overlay.cairosvg", None):
+            with pytest.raises(ImportError, match="cairosvg"):
+                load_logo(path, 200, 100, 1.0)

@@ -15,6 +15,7 @@ from moviepy import (
 )
 
 from musicvid.pipeline.effects import apply_effects, create_cinematic_bars, create_light_leak
+from musicvid.pipeline.logo_overlay import apply_logo
 
 
 RESOLUTION_MAP = {
@@ -197,7 +198,7 @@ def _load_scene_clip(video_path, scene, target_size):
     return _create_ken_burns_clip(clip, duration, scene.get("motion", "static"), target_size)
 
 
-def assemble_video(analysis, scene_plan, fetch_manifest, audio_path, output_path, resolution="1080p", font_path=None, effects_level="minimal", clip_start=None, clip_end=None, title_card_text=None, audio_fade_out=1.0, subtitle_margin_bottom=80, cinematic_bars=True):
+def assemble_video(analysis, scene_plan, fetch_manifest, audio_path, output_path, resolution="1080p", font_path=None, effects_level="minimal", clip_start=None, clip_end=None, title_card_text=None, audio_fade_out=1.0, subtitle_margin_bottom=80, cinematic_bars=True, logo_path=None, logo_position="top-left", logo_size=None, logo_opacity=0.85):
     """Assemble the final music video.
 
     Args:
@@ -245,6 +246,13 @@ def assemble_video(analysis, scene_plan, fetch_manifest, audio_path, output_path
             leak = leak.with_start(leak.start + scene["start"])
             leak = leak.with_end(leak.end + scene["start"])
             layers.append(leak)
+
+    # Logo overlay — topmost layer
+    if logo_path:
+        logo_clip = apply_logo(
+            video, logo_path, logo_position, logo_size, logo_opacity
+        )
+        layers.append(logo_clip)
 
     final = CompositeVideoClip(layers, size=target_size)
 

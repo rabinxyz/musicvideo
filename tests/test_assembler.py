@@ -646,3 +646,130 @@ class TestPortraitKenBurns:
         assert _remap_motion_for_portrait("slow_zoom_in") == "slow_zoom_in"
         assert _remap_motion_for_portrait("slow_zoom_out") == "slow_zoom_out"
         assert _remap_motion_for_portrait("static") == "static"
+
+
+class TestAssembleVideoLogo:
+    """Tests for logo overlay integration in assembler."""
+
+    @patch("musicvid.pipeline.assembler.apply_logo")
+    @patch("musicvid.pipeline.assembler.create_cinematic_bars")
+    @patch("musicvid.pipeline.assembler.create_light_leak")
+    @patch("musicvid.pipeline.assembler.apply_effects")
+    @patch("musicvid.pipeline.assembler.vfx")
+    @patch("musicvid.pipeline.assembler.VideoFileClip")
+    @patch("musicvid.pipeline.assembler.ImageClip")
+    @patch("musicvid.pipeline.assembler.AudioFileClip")
+    @patch("musicvid.pipeline.assembler.TextClip")
+    @patch("musicvid.pipeline.assembler.CompositeVideoClip")
+    @patch("musicvid.pipeline.assembler.concatenate_videoclips")
+    def test_logo_overlay_added_as_last_layer(
+        self, mock_concat, mock_composite, mock_text, mock_audio,
+        mock_image, mock_video, mock_vfx, mock_apply_effects,
+        mock_light_leak, mock_bars, mock_apply_logo,
+        sample_analysis, sample_scene_plan, tmp_output
+    ):
+        mock_clip = MagicMock()
+        mock_clip.duration = 5.0
+        mock_clip.size = (1920, 1080)
+        mock_clip.w = 1920
+        mock_clip.h = 1080
+        mock_clip.resized.return_value = mock_clip
+        mock_clip.subclipped.return_value = mock_clip
+        mock_clip.with_duration.return_value = mock_clip
+        mock_clip.with_position.return_value = mock_clip
+        mock_clip.with_start.return_value = mock_clip
+        mock_clip.with_effects.return_value = mock_clip
+        mock_clip.transform.return_value = mock_clip
+        mock_clip.with_audio.return_value = mock_clip
+
+        mock_video.return_value = mock_clip
+        mock_image.return_value = mock_clip
+        mock_audio.return_value = mock_clip
+        mock_text.return_value = mock_clip
+        mock_concat.return_value = mock_clip
+        mock_composite.return_value = mock_clip
+        mock_apply_effects.return_value = mock_clip
+        mock_bars.return_value = [mock_clip, mock_clip]
+
+        mock_logo_clip = MagicMock()
+        mock_apply_logo.return_value = mock_logo_clip
+
+        fetch_manifest = [
+            {"scene_index": 0, "video_path": "/fake/scene_000.mp4", "search_query": "test"},
+        ]
+        output_file = str(tmp_output / "output.mp4")
+
+        assemble_video(
+            analysis=sample_analysis,
+            scene_plan=sample_scene_plan,
+            fetch_manifest=fetch_manifest,
+            audio_path="/fake/audio.mp3",
+            output_path=output_file,
+            logo_path="/fake/logo.png",
+            logo_position="top-left",
+            logo_size=None,
+            logo_opacity=0.85,
+        )
+
+        mock_apply_logo.assert_called_once_with(
+            mock_clip, "/fake/logo.png", "top-left", None, 0.85
+        )
+        # Logo should be in layers passed to CompositeVideoClip
+        composite_call = mock_composite.call_args
+        layers = composite_call[0][0]
+        assert mock_logo_clip in layers
+
+    @patch("musicvid.pipeline.assembler.apply_logo")
+    @patch("musicvid.pipeline.assembler.create_cinematic_bars")
+    @patch("musicvid.pipeline.assembler.create_light_leak")
+    @patch("musicvid.pipeline.assembler.apply_effects")
+    @patch("musicvid.pipeline.assembler.vfx")
+    @patch("musicvid.pipeline.assembler.VideoFileClip")
+    @patch("musicvid.pipeline.assembler.ImageClip")
+    @patch("musicvid.pipeline.assembler.AudioFileClip")
+    @patch("musicvid.pipeline.assembler.TextClip")
+    @patch("musicvid.pipeline.assembler.CompositeVideoClip")
+    @patch("musicvid.pipeline.assembler.concatenate_videoclips")
+    def test_no_logo_when_path_is_none(
+        self, mock_concat, mock_composite, mock_text, mock_audio,
+        mock_image, mock_video, mock_vfx, mock_apply_effects,
+        mock_light_leak, mock_bars, mock_apply_logo,
+        sample_analysis, sample_scene_plan, tmp_output
+    ):
+        mock_clip = MagicMock()
+        mock_clip.duration = 5.0
+        mock_clip.size = (1920, 1080)
+        mock_clip.w = 1920
+        mock_clip.h = 1080
+        mock_clip.resized.return_value = mock_clip
+        mock_clip.subclipped.return_value = mock_clip
+        mock_clip.with_duration.return_value = mock_clip
+        mock_clip.with_position.return_value = mock_clip
+        mock_clip.with_start.return_value = mock_clip
+        mock_clip.with_effects.return_value = mock_clip
+        mock_clip.transform.return_value = mock_clip
+        mock_clip.with_audio.return_value = mock_clip
+
+        mock_video.return_value = mock_clip
+        mock_image.return_value = mock_clip
+        mock_audio.return_value = mock_clip
+        mock_text.return_value = mock_clip
+        mock_concat.return_value = mock_clip
+        mock_composite.return_value = mock_clip
+        mock_apply_effects.return_value = mock_clip
+        mock_bars.return_value = [mock_clip, mock_clip]
+
+        fetch_manifest = [
+            {"scene_index": 0, "video_path": "/fake/scene_000.mp4", "search_query": "test"},
+        ]
+        output_file = str(tmp_output / "output.mp4")
+
+        assemble_video(
+            analysis=sample_analysis,
+            scene_plan=sample_scene_plan,
+            fetch_manifest=fetch_manifest,
+            audio_path="/fake/audio.mp3",
+            output_path=output_file,
+        )
+
+        mock_apply_logo.assert_not_called()

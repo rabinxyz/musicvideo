@@ -1,215 +1,174 @@
 # Idea
 
-# Spec: Batch processing — folder z piosenkami
+# Spec: Transition variety — różne typy przejść między scenami
 
 ## Cel
-Przetwarzanie całego folderu z piosenkami w jednym uruchomieniu.
-Wrzucasz folder przed snem, rano masz gotowe teledyski do wszystkich pieśni.
+Dodać różnorodne typy przejść między scenami dopasowane do momentu
+w piosence. Obecny kod ma tylko fade i cut — brakuje przejść które
+są standardem w profesjonalnych teledyskach worship.
 
-## Nowa komenda CLI
-python3 -m musicvid.musicvid --batch /sciezka/do/folderu
+## Nowa flaga CLI
+--transitions [auto|fade|cut|dip-white|cross-dissolve|push|none]
+(domyślnie: auto)
 
-Przykłady:
-python3 -m musicvid.musicvid --batch ~/Pulpit/piesni/
-python3 -m musicvid.musicvid --batch ~/Pulpit/piesni/ --preset all
-python3 -m musicvid.musicvid --batch ~/Pulpit/piesni/ --mode ai --provider flux-pro
-python3 -m musicvid.musicvid --batch ~/Pulpit/piesni/ --preset all --effects minimal
+auto         — Claude wybiera typ przejścia per scena na podstawie kontekstu
+fade         — wszystkie przejścia jako fade (obecne zachowanie)
+cut          — wszystkie jako twarde cięcie na beat
+dip-white    — wszystkie jako wybielenie
+cross-dissolve — wszystkie jako cross dissolve
+push         — wszystkie jako push
+none         — brak przejść (sceny sklejone bez efektu)
 
-Wszystkie pozostałe flagi działają tak samo jak dla pojedynczego pliku
-i są stosowane do każdej piosenki w folderze.
+## Typy przejść do zaimplementowania
 
-## Struktura folderu wejściowego
+### cut (twarde cięcie)
+Brak efektu przejścia — jedna scena kończy się, natychmiast zaczyna następna.
+Zawsze synchronizowane z downbeat (patrz: hard-cut-on-beat spec).
+Najlepsze dla: energetycznych momentów, refrenu, zmiany sekcji przy wysokiej energii.
+Implementacja: brak dodatkowego kodu — domyślne zachowanie concatenate_videoclips.
 
-Obsłuż dwa warianty automatycznie:
+### fade (obecne)
+Scena zanika do czarnego, następna pojawia się z czarnego.
+Czas: 0.5s in + 0.5s out.
+Najlepsze dla: spokojnych momentów, intro, outro, verse przy niskiej energii.
+Implementacja: with_effects([vfx.CrossFadeIn(0.5)]) — już działa.
 
-Wariant A — luźne pliki (auto-parowanie MP3 + TXT o tej samej nazwie):
-  piesni/
-    Tylko w Bogu.mp3
-    Tylko w Bogu.txt
-    Pan jest moca moja.mp3
-    Pan jest moca moja.txt
-    Badz uwielbiony.mp3     (brak .txt — Whisper jako fallback)
+### dip-white (wybielenie)
+Scena zanika do białego, następna pojawia się z białego.
+Czas: 0.4s in + 0.4s out.
+Najlepsze dla: kulminacyjnych momentów, refrenu, "świetlistych" tekstów.
+Bardzo charakterystyczny look dla worship music — używany przez Hillsong,
+Elevation Worship, Bethel Music.
+Implementacja: ColorClip biały (#FFFFFF) o długości 0.8s wstawiony między scenami
+jako osobny klip. Fade in ostatniej klatki sceny A do bieli 0.4s,
+fade out z bieli do pierwszej klatki sceny B 0.4s.
+Alternatywnie przez FFmpeg filter: fade=t=out:st={t}:d=0.4:color=white
 
-Wariant B — podfoldery per piosenka:
-  piesni/
-    Tylko w Bogu/
-      Tylko w Bogu (Cover).mp3
-      tekst.txt
-      logo.svg              (opcjonalne logo specyficzne dla piosenki)
-    Pan jest moca moja/
-      Pan jest moca moja.mp3
-      tekst.txt
+### cross-dissolve
+Scena A i scena B nakładają się płynnie przez określony czas.
+Czas nakładania: 0.6s
+Najlepsze dla: płynnych przejść między podobnymi wizualnie scenami,
+bridge, wolnych momentów.
+Implementacja: CompositeVideoClip z nakładającymi się klipami i
+animowaną opacity. Lub przez FFmpeg xfade filter:
+xfade=transition=dissolve:duration=0.6:offset={offset}
 
-Wykryj wariant automatycznie po strukturze folderu.
-Parowanie lyrics: szukaj .txt o tej samej nazwie co .mp3 (wariant A)
-lub dowolnego .txt w tym samym podfolderze (wariant B).
+### push (pchanie)
+Scena B wjeżdża z prawej strony wypychając scenę A w lewo.
+Czas: 0.5s
+Najlepsze dla: zmiany sekcji, dynamicznych momentów, bridge→chorus.
+Implementacja: przez FFmpeg xfade filter:
+xfade=transition=slideleft:duration=0.5:offset={offset}
+Warianty kierunku: slideleft, slideright, slideup, slidedown
 
-## Obsługiwane formaty audio
-MP3, WAV, FLAC, M4A, OGG
+## Logika auto-wyboru przejść przez Claude
 
-## Struktura folderu wyjściowego
+W planie scen Claude dostaje dodatkowe pole transition per scena.
+Prompt dla Claude:
+"Dla każdej sceny wybierz typ przejścia do NASTĘPNEJ sceny.
+Kieruj się zasadami:
+- cut: zmiana sekcji przy wysokiej energii (verse→chorus z mocnym beatem)
+- dip-white: kulminacyjny moment, tekst o świetle/chwale/uwielbieniu
+- cross-dissolve: płynne przejście między podobnymi scenami, wolne tempo
+- push: dramatyczna zmiana sekcji, bridge→chorus
+- fade: spokojne momenty, intro, outro, niska energia
+Uwzględnij BPM i energy_mood przy wyborze."
 
-piesni/
-  output/
-    Tylko w Bogu/
-      pelny/
-        Tylko_w_Bogu_youtube.mp4
-        Tylko_w_Bogu_youtube_metadata.txt
-      social/
-        Tylko_w_Bogu_rolka_A_15s.mp4
-        Tylko_w_Bogu_rolka_B_15s.mp4
-        Tylko_w_Bogu_rolka_C_15s.mp4
-    Pan jest moca moja/
-      pelny/
-        ...
-      social/
-        ...
-    batch_report.html
+Struktura w scene_plan.json — dodaj pole do każdej sceny:
+  "transition_to_next": "cut|fade|dip-white|cross-dissolve|push"
+  "transition_duration": float  (w sekundach, domyślnie 0.5)
 
-## Kolejność przetwarzania
+## Implementacja przez FFmpeg xfade (rekomendowane)
 
-Flaga --batch-order [alpha|random|size-asc|size-desc] (domyślnie: alpha)
-alpha      — alfabetycznie
-random     — losowo
-size-asc   — od najkrótszej piosenki
-size-desc  — od najdłuższej
+FFmpeg xfade filter obsługuje przejścia natywnie i jest znacznie
+szybszy niż Python frame-by-frame przez MoviePy.
 
-## Obsługa błędów
+Przepływ:
+1. Wygeneruj każdą scenę jako osobny plik MP4 bez przejść
+2. Łącz sceny przez FFmpeg z xfade filterem
+3. Każde przejście to osobna operacja xfade z odpowiednim offset
 
-Gdy piosenka X się nie powiedzie:
-- Zaloguj błąd do batch_report.html
-- Przejdź do następnej piosenki
-- Po zakończeniu: "Gotowe 8/10 — sprawdź batch_report.html"
+Mapowanie typów na FFmpeg xfade:
+  fade         → fade (lub crossfade)
+  dip-white    → fadewhite
+  cross-dissolve → dissolve
+  push         → slideleft
+  cut          → brak xfade — bezpośrednie concat
 
-Wyjątek: błąd 402 (brak kredytów API) — zatrzymaj cały batch natychmiast.
+Przykład komendy FFmpeg dla 3 scen:
+ffmpeg -i scene_0.mp4 -i scene_1.mp4 -i scene_2.mp4 \
+  -filter_complex \
+  "[0][1]xfade=transition=fadewhite:duration=0.5:offset=11.5[v01]; \
+   [v01][2]xfade=transition=dissolve:duration=0.6:offset=23.0[vout]" \
+  -map "[vout]" output.mp4
 
-## Równoległość
+Offset = czas końca poprzedniej sceny minus czas trwania przejścia.
 
-Flaga --batch-parallel INT (domyślnie: 1)
-1 — sekwencyjnie (bezpieczne, domyślne)
-2 — dwie piosenki naraz (szybciej, większe ryzyko rate limit)
-Zalecane max 2-3.
-
-## Pomijanie już przetworzonych
-
-Jeśli piosenka ma już gotowy MP4 w output/ — pomiń ją.
-Wyświetl: "Pomijam: Tylko w Bogu (juz przetworzona, uzyj --batch-force aby powtorzyc)"
-
-Flaga --batch-force: pomiń sprawdzanie, przetwórz wszystkie od nowa.
-
-## Logowanie postępu
-
-Wyświetlaj prefix z numerem i nazwą piosenki:
-  BATCH [1/10] Tylko w Bogu
-  [1/4] Analiza audio...
-  [2/4] Rezyseria (Claude)...
-  [3/4] Generowanie obrazow...
-  [4/4] Montaz...
-  Gotowe — output/Tylko w Bogu/ (8m 32s)
-
-  BATCH [2/10] Pan jest moca moja
-  ...
-
-Szacowany czas do końca po każdej piosence:
-"Szacowany czas do konca: ~42 minuty (5 piosenek x ~8.5 min)"
-
-## Szacowanie kosztu przed startem
-
-Przed uruchomieniem wyświetl szacunek i pytaj o potwierdzenie:
-
-  Znaleziono 10 piosenek.
-  Szacowany koszt (--mode ai --preset all):
-    BFL flux-pro: ~10 x 8 scen x $0.05 = ~$4.00
-    Claude API:   ~10 x 4 wywolania x $0.01 = ~$0.40
-    Lacznie: ~$4.40
-  Szacowany czas: ~10 x 9 minut = ~90 minut
-  Kontynuowac? [T/n]:
-
-Flaga --batch-yes: pomiń potwierdzenie (dla automatyzacji nocnej).
-
-## Plik konfiguracyjny batcha (opcjonalnie)
-
-Obsłuż plik batch.yaml w folderze wejściowym:
-
-  default:
-    mode: ai
-    provider: flux-pro
-    preset: all
-    effects: minimal
-    logo: ~/logo.svg
-
-  overrides:
-    "Pan jest moca moja":
-      style: powerful
-    "Tylko w Bogu":
-      provider: flux-dev
-      clip_duration: 30
-
-Gdy batch.yaml istnieje: użyj ustawień z pliku zamiast flag CLI.
-Overrides per piosenka nadpisują ustawienia domyślne.
-
-## Raport HTML — batch_report.html
-
-Generuj po zakończeniu całego batcha.
-Zawiera:
-- Tabelę: nazwa, status, czas generowania, szacowany koszt API
-- Miniatury pierwszej klatki każdego teledysku
-- Linki do wygenerowanych plików MP4
-- Podsumowanie: łączny czas, łączny koszt, liczba plików
-- Błędy z opisem dla nieudanych piosenek
-
-## Nowy moduł musicvid/pipeline/batch_processor.py
+## Nowy moduł musicvid/pipeline/transitions.py
 
 Funkcje:
-- discover_songs(folder_path) -> list[SongJob]
-  Wykrywa piosenki i paruje z lyrics/logo.
-  SongJob zawiera: audio_path, lyrics_path, logo_path, output_dir, config
+- get_transition_for_scene(scene, next_scene, analysis) -> dict
+  Zwraca {type, duration} dla przejścia między sceną a następną.
+  Używane gdy --transitions auto bez Claude (fallback deterministyczny):
+    chorus po verse → dip-white
+    zmiana sekcji przy mood_energy > 0.6 → cut
+    bridge → push
+    pozostałe → cross-dissolve
 
-- estimate_cost(songs, config) -> dict
-  Szacuje koszt i czas dla całego batcha.
-  Zwraca dict z polami: bfl, claude, runway, total, minutes
+- build_ffmpeg_xfade_filter(scenes, transitions) -> str
+  Buduje string filter_complex dla FFmpeg z wszystkimi przejściami.
+  Zwraca gotowy string do przekazania do FFmpeg.
 
-- run_batch(songs, config, parallel=1) -> BatchReport
-  Przetwarza piosenki sekwencyjnie lub równolegle.
-  Błąd jednej piosenki nie zatrzymuje pozostałych.
-  Błąd 402 zatrzymuje cały batch natychmiast.
+- apply_transitions(scene_files, transitions, output_path) -> str
+  Wywołuje FFmpeg z xfade filterem.
+  scene_files: lista ścieżek do plików MP4 per scena
+  transitions: lista dictów {type, duration} per przejście
+  Zwraca ścieżkę do złączonego pliku.
 
-- generate_html_report(report, output_path)
-  Generuje batch_report.html z miniaturami i podsumowaniem.
+- get_transition_offset(scene_durations, transition_idx, transition_duration) -> float
+  Oblicza offset dla xfade na podstawie długości poprzednich scen.
 
-- load_batch_config(folder_path) -> dict
-  Wczytuje batch.yaml jeśli istnieje, zwraca pusty dict jeśli nie ma.
+## Integracja w assembler.py
 
-## Integracja w musicvid.py
+Obecny przepływ:
+  concatenate_videoclips(clips) → jeden długi klip
 
-Dodaj obsługę flag:
-  --batch PATH: wywołaj discover_songs() + run_batch() zamiast standardowego pipeline
-  --batch-order: przekaż do discover_songs()
-  --batch-parallel INT: przekaż do run_batch()
-  --batch-force: pomiń sprawdzanie gotowych plików
-  --batch-yes: pomiń potwierdzenie kosztu
+Nowy przepływ gdy transitions != none:
+  1. Wygeneruj każdą scenę jako osobny plik MP4 w tmp/
+  2. Pobierz listę transitions z scene_plan (lub oblicz deterministycznie)
+  3. Wywołaj apply_transitions() z FFmpeg xfade
+  4. Wynik to złączony MP4 z przejściami
+  5. Usuń pliki pośrednie per scena
+
+Gdy transitions == none lub wszystkie cut:
+  Użyj dotychczasowego concatenate_videoclips (szybciej).
+
+## Długości przejść a synchronizacja z beatem
+
+Długość przejścia powinna być wielokrotnością czasu jednego beatu:
+  BPM=84: beat = 0.714s → przejście 0.5s (bliskie 0.71s)
+  BPM=120: beat = 0.5s → przejście 0.5s (dokładnie jeden beat)
+
+Oblicz optymalną długość przejścia:
+  beat_duration = 60 / bpm
+  transition_duration = round(beat_duration / 2, 2)  (pół beatu)
+  Clamp do zakresu 0.3s - 0.8s
 
 ## Testy
-- discover_songs wariant A: paruje MP3 z TXT o tej samej nazwie
-- discover_songs wariant B: wykrywa podfoldery i paruje pliki
-- discover_songs brak TXT: lyrics_path=None (Whisper jako fallback)
-- estimate_cost: zwraca dict z polami bfl, claude, total, minutes
-- run_batch: błąd jednej piosenki nie zatrzymuje kolejnych
-- run_batch: błąd 402 zatrzymuje batch natychmiast
-- Pomijanie: piosenka z gotowym MP4 pomijana bez --batch-force
-- --batch-force: wszystkie piosenki przetwarzane nawet z gotowym MP4
-- generate_html_report: plik HTML zawiera tabelę i linki
-- load_batch_config: wczytuje overrides per piosenka
+- get_transition_offset: poprawny offset dla 3 scen
+- build_ffmpeg_xfade_filter: zawiera xfade dla każdego przejścia
+- Przejście cut: brak xfade w filtrze
+- apply_transitions: mockuj FFmpeg, sprawdź komendę
+- auto wybór: chorus po verse → dip-white
+- auto wybór: mood_energy > 0.6 przy zmianie sekcji → cut
+- Długość przejścia skalowana do BPM
 
 ## Acceptance Criteria
-- --batch folder/ przetwarza wszystkie piosenki w folderze
-- Parowanie MP3+TXT działa dla obu wariantów struktury folderu
-- Brak TXT: Whisper jako fallback bez błędu
-- Błąd jednej piosenki nie zatrzymuje pozostałych
-- Błąd 402 zatrzymuje cały batch natychmiast z komunikatem
-- Piosenki z gotowym MP4 pomijane (chyba że --batch-force)
-- Szacunek kosztu wyświetlany przed startem z potwierdzeniem
-- --batch-yes pomija potwierdzenie
-- batch_report.html generowany po zakończeniu
-- batch.yaml obsługiwany gdy istnieje w folderze
+- --transitions dip-white: wszystkie przejścia jako wybielenie
+- --transitions auto: różne typy per scena z planu Claude
+- --transitions cut: twarde cięcia wszędzie
+- --transitions none: sceny sklejone bez efektu
+- Implementacja przez FFmpeg xfade (nie MoviePy frame-by-frame)
+- Przejścia zsynchronizowane z BPM
+- Czas generowania nie wzrasta o więcej niż 15%
 - python3 -m pytest tests/ -v przechodzi

@@ -1,125 +1,125 @@
-"""Stage 3 (AI mode): Generate images with multiple providers."""
+"""Stage 3 (AI mode): Generate images via Black Forest Labs API."""
 
 import os
+import time
 from pathlib import Path
 
-import fal_client
-import openai
 import requests
-from tenacity import retry, stop_after_attempt, wait_exponential
+from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception
 
+BFL_BASE_URL = "https://api.bfl.ai"
 
-NEGATIVE_PROMPT = (
-    "catholic church interior, religious figures, icon, stained glass with people, "
-    "cross with body crucifix, statue figurine, rosary prayer beads, altar tabernacle, "
-    "monastery nun monk pope bishop, cathedral chapel shrine, byzantine painting, "
-    "sacred heart with thorns, watermark text logo, ugly blurry low quality, nsfw"
-)
-
-FLUX_MODELS = {
-    "flux-dev": "fal-ai/flux/dev",
-    "flux-pro": "fal-ai/flux-pro",
-    "schnell": "fal-ai/flux/schnell",
+BFL_MODELS = {
+    "flux-dev": "flux-dev",
+    "flux-pro": "flux-pro1.1",
+    "schnell": "flux-schnell",
 }
 
-FLUX_STEPS = {
-    "flux-dev": 28,
-    "flux-pro": 28,
-    "schnell": 4,
-}
+POLL_INTERVAL = 1.5
+POLL_TIMEOUT = 120
+
+
+def _is_retryable(exc):
+    """Return True for network errors and 5xx responses (retryable)."""
+    if isinstance(exc, requests.exceptions.ConnectionError):
+        return True
+    if isinstance(exc, requests.exceptions.Timeout):
+        return True
+    if isinstance(exc, requests.HTTPError) and exc.response is not None:
+        return exc.response.status_code >= 500
+    return False
 
 
 def _detect_provider(requested):
-    """Validate that the API key for the requested provider is available."""
-    if requested in FLUX_MODELS:
-        if not os.environ.get("FAL_KEY", ""):
-            raise EnvironmentError(
-                "FAL_KEY not set. Register at https://fal.ai for free $10 credits, "
-                "then export FAL_KEY or add to .env file."
-            )
-    elif requested == "dalle":
-        if not os.environ.get("OPENAI_API_KEY", ""):
-            raise EnvironmentError(
-                "OPENAI_API_KEY not set. Export it or add to .env file."
-            )
-    else:
-        raise ValueError(f"Unknown provider: {requested}. Choose from: flux-dev, flux-pro, schnell, dalle")
+    """Validate that BFL_API_KEY is set and provider is known."""
+    if requested not in BFL_MODELS:
+        available = ", ".join(BFL_MODELS.keys())
+        raise ValueError(f"Unknown provider: {requested}. Choose from: {available}")
+    if not os.environ.get("BFL_API_KEY", ""):
+        raise EnvironmentError(
+            "BFL_API_KEY not set. Register at https://bfl.ai/dashboard for an API key, "
+            "then export BFL_API_KEY or add to .env file."
+        )
 
 
-@retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10))
-def _generate_flux(prompt, model_id, output_path, num_steps):
-    """Call fal.ai Flux API to generate a single image."""
-    result = fal_client.run(
-        model_id,
-        arguments={
-            "prompt": prompt,
-            "negative_prompt": NEGATIVE_PROMPT,
-            "image_size": {"width": 1280, "height": 720},
-            "num_inference_steps": num_steps,
-            "guidance_scale": 3.5,
-            "num_images": 1,
-            "output_format": "jpeg",
-        },
+def _get_headers():
+    """Return auth headers for BFL API."""
+    return {"X-Key": os.environ["BFL_API_KEY"]}
+
+
+@retry(
+    stop=stop_after_attempt(3),
+    wait=wait_exponential(multiplier=1, min=2, max=10),
+    retry=retry_if_exception(_is_retryable),
+)
+def _submit_task(model_name, prompt):
+    """Submit an image generation task to BFL API. Returns task ID."""
+    url = f"{BFL_BASE_URL}/v1/{model_name}"
+    payload = {
+        "prompt": prompt,
+        "width": 1280,
+        "height": 720,
+        "output_format": "jpeg",
+    }
+    resp = requests.post(url, json=payload, headers=_get_headers())
+    resp.raise_for_status()
+    return resp.json()["id"]
+
+
+def _poll_result(task_id):
+    """Poll BFL API until task is Ready or timeout (120s)."""
+    url = f"{BFL_BASE_URL}/v1/get_result"
+    start = time.monotonic()
+    while time.monotonic() - start < POLL_TIMEOUT:
+        resp = requests.get(url, params={"id": task_id}, headers=_get_headers())
+        resp.raise_for_status()
+        data = resp.json()
+        if data["status"] == "Ready":
+            return data["result"]["sample"]
+        time.sleep(POLL_INTERVAL)
+    raise TimeoutError(
+        f"BFL task {task_id} did not complete within {POLL_TIMEOUT} seconds."
     )
-    image_url = result["images"][0]["url"]
-    response = requests.get(image_url)
-    response.raise_for_status()
-    Path(output_path).write_bytes(response.content)
 
 
-@retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10))
-def _generate_dalle(client, prompt):
-    """Call DALL-E 3 to generate a single image."""
-    response = client.images.generate(
-        model="dall-e-3",
-        prompt=prompt,
-        size="1792x1024",
-        quality="standard",
-        n=1,
-    )
-    return response.data[0].url
+def _download_image(image_url, output_path):
+    """Download image from URL to local path."""
+    resp = requests.get(image_url)
+    resp.raise_for_status()
+    Path(output_path).write_bytes(resp.content)
 
 
 def generate_images(scene_plan, output_dir, provider="flux-dev"):
-    """Generate one image per scene using the specified provider.
+    """Generate one image per scene using BFL API.
 
     Args:
         scene_plan: Scene plan dict from Stage 2.
         output_dir: Directory to save generated images.
-        provider: One of flux-dev, flux-pro, schnell, dalle.
+        provider: One of flux-dev, flux-pro, schnell.
 
     Returns:
         list of image file paths in scene order.
     """
     _detect_provider(provider)
 
+    model_name = BFL_MODELS[provider]
     scenes = scene_plan.get("scenes", [])
     output_path = Path(output_dir)
     output_path.mkdir(parents=True, exist_ok=True)
 
     image_paths = []
+    total = len(scenes)
 
-    if provider == "dalle":
-        client = openai.OpenAI(api_key=os.environ["OPENAI_API_KEY"])
-        for i, scene in enumerate(scenes):
-            visual_prompt = scene.get("visual_prompt", "nature landscape")
-            full_prompt = f"{visual_prompt}, cinematic 16:9, photorealistic, high quality"
+    for i, scene in enumerate(scenes):
+        visual_prompt = scene.get("visual_prompt", "nature landscape")
+        full_prompt = f"{visual_prompt}, cinematic 16:9, photorealistic, high quality"
 
-            image_url = _generate_dalle(client, full_prompt)
+        task_id = _submit_task(model_name, full_prompt)
+        image_url = _poll_result(task_id)
 
-            dest = output_path / f"scene_{i:03d}.jpg"
-            resp = requests.get(image_url)
-            resp.raise_for_status()
-            dest.write_bytes(resp.content)
-            image_paths.append(str(dest))
-    else:
-        model_id = FLUX_MODELS[provider]
-        num_steps = FLUX_STEPS[provider]
-        for i, scene in enumerate(scenes):
-            visual_prompt = scene.get("visual_prompt", "nature landscape")
-            dest = output_path / f"scene_{i:03d}.jpg"
-
-            _generate_flux(visual_prompt, model_id, str(dest), num_steps)
-            image_paths.append(str(dest))
+        dest = output_path / f"scene_{i:03d}.jpg"
+        _download_image(image_url, str(dest))
+        image_paths.append(str(dest))
+        print(f"Scena {i + 1}/{total} gotowa")
 
     return image_paths

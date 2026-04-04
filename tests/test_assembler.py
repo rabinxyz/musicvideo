@@ -607,3 +607,42 @@ class TestLoadSceneClipAnimated:
 
         # transform (Ken Burns) SHOULD be called for non-animated video
         mock_clip.transform.assert_called()
+
+
+class TestPortraitKenBurns:
+    """Tests for portrait-mode Ken Burns restrictions."""
+
+    def test_pan_up_calls_transform(self):
+        from musicvid.pipeline.assembler import _create_ken_burns_clip
+        from unittest.mock import MagicMock
+
+        mock_clip = MagicMock()
+        mock_clip.resized.return_value = mock_clip
+        mock_clip.with_duration.return_value = mock_clip
+        mock_clip.transform.return_value = mock_clip
+
+        result = _create_ken_burns_clip(mock_clip, 5.0, "pan_up", (1080, 1920))
+
+        mock_clip.transform.assert_called_once()
+
+    def test_pan_down_calls_transform(self):
+        from musicvid.pipeline.assembler import _create_ken_burns_clip
+        from unittest.mock import MagicMock
+
+        mock_clip = MagicMock()
+        mock_clip.resized.return_value = mock_clip
+        mock_clip.with_duration.return_value = mock_clip
+        mock_clip.transform.return_value = mock_clip
+
+        result = _create_ken_burns_clip(mock_clip, 5.0, "pan_down", (1080, 1920))
+
+        mock_clip.transform.assert_called_once()
+
+    def test_remap_motion_for_portrait_replaces_horizontal(self):
+        from musicvid.pipeline.assembler import _remap_motion_for_portrait
+
+        assert _remap_motion_for_portrait("pan_left") == "pan_up"
+        assert _remap_motion_for_portrait("pan_right") == "pan_down"
+        assert _remap_motion_for_portrait("slow_zoom_in") == "slow_zoom_in"
+        assert _remap_motion_for_portrait("slow_zoom_out") == "slow_zoom_out"
+        assert _remap_motion_for_portrait("static") == "static"

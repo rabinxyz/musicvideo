@@ -162,6 +162,10 @@ def _load_scene_clip(video_path, scene, target_size):
             clip = concatenate_videoclips([clip] * loops)
         clip = clip.subclipped(0, duration)
 
+    # Animated clips from Runway Gen-4: resize only, skip Ken Burns
+    if scene.get("animate", False) and path.suffix.lower() == ".mp4":
+        return clip.resized(new_size=target_size)
+
     return _create_ken_burns_clip(clip, duration, scene.get("motion", "static"), target_size)
 
 

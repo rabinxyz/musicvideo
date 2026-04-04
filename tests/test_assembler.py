@@ -539,3 +539,71 @@ class TestAssembleVideoClipMode:
         w, h = _get_resolution("portrait")
         assert w == 1080
         assert h == 1920
+
+
+class TestLoadSceneClipAnimated:
+    """Tests that animated scenes skip Ken Burns and use VideoFileClip resized."""
+
+    @patch("musicvid.pipeline.assembler.VideoFileClip")
+    def test_animated_scene_skips_ken_burns(self, mock_vfc, tmp_path):
+        from musicvid.pipeline.assembler import _load_scene_clip
+
+        # Create a fake .mp4 file
+        fake_mp4 = tmp_path / "animated.mp4"
+        fake_mp4.write_bytes(b"fake video")
+
+        mock_clip = MagicMock()
+        mock_clip.duration = 5.0
+        mock_vfc.return_value = mock_clip
+        mock_clip.subclipped.return_value = mock_clip
+        mock_clip.resized.return_value = mock_clip
+
+        scene = {"start": 0.0, "end": 5.0, "motion": "slow_zoom_in", "animate": True}
+        result = _load_scene_clip(str(fake_mp4), scene, (1920, 1080))
+
+        # resized should be called to fit target_size
+        mock_clip.resized.assert_called_once_with(new_size=(1920, 1080))
+        # transform (Ken Burns) should NOT be called
+        mock_clip.transform.assert_not_called()
+
+    @patch("musicvid.pipeline.assembler.ImageClip")
+    def test_non_animated_image_uses_ken_burns(self, mock_ic, tmp_path):
+        from musicvid.pipeline.assembler import _load_scene_clip
+
+        fake_jpg = tmp_path / "scene.jpg"
+        fake_jpg.write_bytes(b"fake jpeg")
+
+        mock_clip = MagicMock()
+        mock_clip.duration = None
+        mock_ic.return_value = mock_clip
+        mock_clip.resized.return_value = mock_clip
+        mock_clip.with_duration.return_value = mock_clip
+        mock_clip.transform.return_value = mock_clip
+
+        scene = {"start": 0.0, "end": 5.0, "motion": "slow_zoom_in", "animate": False}
+        _load_scene_clip(str(fake_jpg), scene, (1920, 1080))
+
+        # transform (Ken Burns) SHOULD be called
+        mock_clip.transform.assert_called()
+
+    @patch("musicvid.pipeline.assembler.VideoFileClip")
+    def test_non_animated_mp4_uses_ken_burns(self, mock_vfc, tmp_path):
+        """Non-animated .mp4 (stock video) should still get Ken Burns."""
+        from musicvid.pipeline.assembler import _load_scene_clip
+
+        fake_mp4 = tmp_path / "stock.mp4"
+        fake_mp4.write_bytes(b"fake video")
+
+        mock_clip = MagicMock()
+        mock_clip.duration = 5.0
+        mock_vfc.return_value = mock_clip
+        mock_clip.subclipped.return_value = mock_clip
+        mock_clip.resized.return_value = mock_clip
+        mock_clip.with_duration.return_value = mock_clip
+        mock_clip.transform.return_value = mock_clip
+
+        scene = {"start": 0.0, "end": 5.0, "motion": "slow_zoom_in", "animate": False}
+        _load_scene_clip(str(fake_mp4), scene, (1920, 1080))
+
+        # transform (Ken Burns) SHOULD be called for non-animated video
+        mock_clip.transform.assert_called()

@@ -41,7 +41,8 @@ def _image_files_exist(manifest):
 @click.option("--new", is_flag=True, default=False, help="Force recalculation, ignore cache.")
 @click.option("--font", "font_path", type=click.Path(), default=None, help="Custom .ttf font file for subtitles.")
 @click.option("--lyrics", "lyrics_path", type=click.Path(), default=None, help="Path to .txt lyrics file (skips Whisper).")
-def cli(audio_file, mode, provider, style, output, resolution, lang, new, font_path, lyrics_path):
+@click.option("--effects", type=click.Choice(["none", "minimal", "full"]), default="minimal", help="Visual effects level.")
+def cli(audio_file, mode, provider, style, output, resolution, lang, new, font_path, lyrics_path, effects):
     """Generate a music video from AUDIO_FILE."""
     audio_path = Path(audio_file).resolve()
     output_dir = Path(output).resolve()
@@ -148,6 +149,7 @@ def cli(audio_file, mode, provider, style, output, resolution, lang, new, font_p
         output_path=output_path,
         resolution=resolution,
         font_path=font,
+        effects_level=effects,
     )
     click.echo(f"  Done! Output: {output_path}")
 

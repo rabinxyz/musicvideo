@@ -1,174 +1,158 @@
 # Idea
 
-# Spec: Transition variety — różne typy przejść między scenami
+# Spec: Równoległe generowanie wielu piosenek
 
 ## Cel
-Dodać różnorodne typy przejść między scenami dopasowane do momentu
-w piosence. Obecny kod ma tylko fade i cut — brakuje przejść które
-są standardem w profesjonalnych teledyskach worship.
+Generowanie 2-3 piosenek jednocześnie na lokalnym Macu.
+Stage 3 (generowanie obrazów BFL) jest naturalnie async i idealnie
+nadaje się do zrównoleglenia. Stage 4 (FFmpeg montaż) jest CPU-intensive
+i powinien być sekwencyjny.
 
 ## Nowa flaga CLI
---transitions [auto|fade|cut|dip-white|cross-dissolve|push|none]
-(domyślnie: auto)
+--parallel INT  (domyślnie: 1, max: 4)
+Liczba piosenek przetwarzanych równolegle.
 
-auto         — Claude wybiera typ przejścia per scena na podstawie kontekstu
-fade         — wszystkie przejścia jako fade (obecne zachowanie)
-cut          — wszystkie jako twarde cięcie na beat
-dip-white    — wszystkie jako wybielenie
-cross-dissolve — wszystkie jako cross dissolve
-push         — wszystkie jako push
-none         — brak przejść (sceny sklejone bez efektu)
+Użycie:
+python3 -m musicvid.musicvid --batch ~/piesni/ --parallel 2
+python3 -m musicvid.musicvid --batch ~/piesni/ --parallel 3
 
-## Typy przejść do zaimplementowania
+## Architektura równoległości
 
-### cut (twarde cięcie)
-Brak efektu przejścia — jedna scena kończy się, natychmiast zaczyna następna.
-Zawsze synchronizowane z downbeat (patrz: hard-cut-on-beat spec).
-Najlepsze dla: energetycznych momentów, refrenu, zmiany sekcji przy wysokiej energii.
-Implementacja: brak dodatkowego kodu — domyślne zachowanie concatenate_videoclips.
+Nie zrównoleglaj wszystkiego naraz — różne stage mają różne bottlenecki.
 
-### fade (obecne)
-Scena zanika do czarnego, następna pojawia się z czarnego.
-Czas: 0.5s in + 0.5s out.
-Najlepsze dla: spokojnych momentów, intro, outro, verse przy niskiej energii.
-Implementacja: with_effects([vfx.CrossFadeIn(0.5)]) — już działa.
+### Stage 1 (Whisper + librosa) — sekwencyjny
+Whisper jest CPU-intensive i zajmuje dużo RAM.
+Uruchamiaj sekwencyjnie — jedna piosenka na raz.
+Wszyskie analizy najpierw, potem dalej.
 
-### dip-white (wybielenie)
-Scena zanika do białego, następna pojawia się z białego.
-Czas: 0.4s in + 0.4s out.
-Najlepsze dla: kulminacyjnych momentów, refrenu, "świetlistych" tekstów.
-Bardzo charakterystyczny look dla worship music — używany przez Hillsong,
-Elevation Worship, Bethel Music.
-Implementacja: ColorClip biały (#FFFFFF) o długości 0.8s wstawiony między scenami
-jako osobny klip. Fade in ostatniej klatki sceny A do bieli 0.4s,
-fade out z bieli do pierwszej klatki sceny B 0.4s.
-Alternatywnie przez FFmpeg filter: fade=t=out:st={t}:d=0.4:color=white
+### Stage 2 (Claude reżyseria) — równoległy, async
+Claude API jest async i szybki.
+Wszystkie piosenki mogą pytać Claude jednocześnie.
+Użyj asyncio.gather() dla wszystkich wywołań Claude.
 
-### cross-dissolve
-Scena A i scena B nakładają się płynnie przez określony czas.
-Czas nakładania: 0.6s
-Najlepsze dla: płynnych przejść między podobnymi wizualnie scenami,
-bridge, wolnych momentów.
-Implementacja: CompositeVideoClip z nakładającymi się klipami i
-animowaną opacity. Lub przez FFmpeg xfade filter:
-xfade=transition=dissolve:duration=0.6:offset={offset}
+### Stage 3 (BFL generowanie obrazów) — równoległy, async
+BFL obsługuje max 24 równoległe zadania.
+Wszystkie obrazy dla wszystkich piosenek wysyłaj jednocześnie.
+Jeden globalny semaphore: max 20 równoległych requestów do BFL
+(zostawia bufor na rate limity).
+Użyj asyncio z semaphore dla kontroli przepływu.
 
-### push (pchanie)
-Scena B wjeżdża z prawej strony wypychając scenę A w lewo.
-Czas: 0.5s
-Najlepsze dla: zmiany sekcji, dynamicznych momentów, bridge→chorus.
-Implementacja: przez FFmpeg xfade filter:
-xfade=transition=slideleft:duration=0.5:offset={offset}
-Warianty kierunku: slideleft, slideright, slideup, slidedown
+### Stage 4 (FFmpeg montaż) — sekwencyjny
+FFmpeg jest CPU-intensive — jeden montaż na raz.
+Kolejkuj montaże i wykonuj jeden po drugim.
+Mac M2 ma dobre single-core performance — nie ma sensu parallelizować.
 
-## Logika auto-wyboru przejść przez Claude
+## Implementacja
 
-W planie scen Claude dostaje dodatkowe pole transition per scena.
-Prompt dla Claude:
-"Dla każdej sceny wybierz typ przejścia do NASTĘPNEJ sceny.
-Kieruj się zasadami:
-- cut: zmiana sekcji przy wysokiej energii (verse→chorus z mocnym beatem)
-- dip-white: kulminacyjny moment, tekst o świetle/chwale/uwielbieniu
-- cross-dissolve: płynne przejście między podobnymi scenami, wolne tempo
-- push: dramatyczna zmiana sekcji, bridge→chorus
-- fade: spokojne momenty, intro, outro, niska energia
-Uwzględnij BPM i energy_mood przy wyborze."
+### Nowy moduł musicvid/pipeline/parallel_runner.py
 
-Struktura w scene_plan.json — dodaj pole do każdej sceny:
-  "transition_to_next": "cut|fade|dip-white|cross-dissolve|push"
-  "transition_duration": float  (w sekundach, domyślnie 0.5)
+Klasa ParallelRunner:
 
-## Implementacja przez FFmpeg xfade (rekomendowane)
+  __init__(self, max_parallel=2, max_bfl_requests=20)
 
-FFmpeg xfade filter obsługuje przejścia natywnie i jest znacznie
-szybszy niż Python frame-by-frame przez MoviePy.
+  run_parallel(self, song_jobs: list[SongJob]) -> list[Result]
+    Główna metoda — orkiestruje cały pipeline dla wielu piosenek.
 
-Przepływ:
-1. Wygeneruj każdą scenę jako osobny plik MP4 bez przejść
-2. Łącz sceny przez FFmpeg z xfade filterem
-3. Każde przejście to osobna operacja xfade z odpowiednim offset
+    Algorytm:
+    1. SEQUENTIAL: dla każdej piosenki wykonaj Stage 1 (Whisper + librosa)
+       Wyświetl: "[Song 1/3] Analiza audio: Tylko w Bogu..."
+    
+    2. PARALLEL async: dla wszystkich piosenek równolegle Stage 2 (Claude)
+       asyncio.gather(*[self._run_director(song) for song in songs])
+       Wyświetl: "Reżyseria Claude: 3 piosenki równolegle..."
+    
+    3. PARALLEL async z semaphore: Stage 3 (BFL obrazy) dla wszystkich
+       Globalny semaphore(max_bfl_requests) — dzielony między piosenki
+       asyncio.gather(*[self._generate_images(song) for song in songs])
+       Wyświetl: "Generowanie obrazów: [Song A: 3/8] [Song B: 5/8] [Song C: 1/8]"
+    
+    4. SEQUENTIAL: dla każdej piosenki Stage 4 (FFmpeg montaż)
+       Kolejkuj montaże, wykonuj jeden po drugim
+       Wyświetl: "[1/3] Montaż: Tylko w Bogu..."
 
-Mapowanie typów na FFmpeg xfade:
-  fade         → fade (lub crossfade)
-  dip-white    → fadewhite
-  cross-dissolve → dissolve
-  push         → slideleft
-  cut          → brak xfade — bezpośrednie concat
+  _run_director(self, song) -> dict
+    Async wywołanie Claude API dla jednej piosenki.
 
-Przykład komendy FFmpeg dla 3 scen:
-ffmpeg -i scene_0.mp4 -i scene_1.mp4 -i scene_2.mp4 \
-  -filter_complex \
-  "[0][1]xfade=transition=fadewhite:duration=0.5:offset=11.5[v01]; \
-   [v01][2]xfade=transition=dissolve:duration=0.6:offset=23.0[vout]" \
-  -map "[vout]" output.mp4
+  _generate_images(self, song) -> list[str]
+    Async generowanie obrazów z globalnym semaphore.
+    async with self.bfl_semaphore:
+      task_id, polling_url = await _submit_task_async(...)
+    Polluj async przez asyncio.sleep(1.5) zamiast time.sleep().
 
-Offset = czas końca poprzedniej sceny minus czas trwania przejścia.
+  _run_ffmpeg(self, song) -> str
+    Synchroniczny montaż FFmpeg. Wywoływany sekwencyjnie.
 
-## Nowy moduł musicvid/pipeline/transitions.py
+### Async wersje wywołań API
 
-Funkcje:
-- get_transition_for_scene(scene, next_scene, analysis) -> dict
-  Zwraca {type, duration} dla przejścia między sceną a następną.
-  Używane gdy --transitions auto bez Claude (fallback deterministyczny):
-    chorus po verse → dip-white
-    zmiana sekcji przy mood_energy > 0.6 → cut
-    bridge → push
-    pozostałe → cross-dissolve
+Stwórz async wersje istniejących funkcji:
+- _submit_task_async() — aiohttp zamiast requests
+- _poll_result_async() — aiohttp z asyncio.sleep()
+- _call_claude_async() — anthropic AsyncAnthropic client
 
-- build_ffmpeg_xfade_filter(scenes, transitions) -> str
-  Buduje string filter_complex dla FFmpeg z wszystkimi przejściami.
-  Zwraca gotowy string do przekazania do FFmpeg.
+Istniejące synchroniczne wersje zostają dla trybu --parallel 1.
 
-- apply_transitions(scene_files, transitions, output_path) -> str
-  Wywołuje FFmpeg z xfade filterem.
-  scene_files: lista ścieżek do plików MP4 per scena
-  transitions: lista dictów {type, duration} per przejście
-  Zwraca ścieżkę do złączonego pliku.
+### Integracja w musicvid.py i batch_processor.py
 
-- get_transition_offset(scene_durations, transition_idx, transition_duration) -> float
-  Oblicza offset dla xfade na podstawie długości poprzednich scen.
+Gdy --parallel > 1 i --batch podane:
+  runner = ParallelRunner(max_parallel=parallel)
+  results = asyncio.run(runner.run_parallel(song_jobs))
 
-## Integracja w assembler.py
+Gdy --parallel 1 (domyślnie):
+  Zachowanie bez zmian — sekwencyjny pipeline jak dotychczas.
 
-Obecny przepływ:
-  concatenate_videoclips(clips) → jeden długi klip
+## Wyświetlanie postępu przy parallel
 
-Nowy przepływ gdy transitions != none:
-  1. Wygeneruj każdą scenę jako osobny plik MP4 w tmp/
-  2. Pobierz listę transitions z scene_plan (lub oblicz deterministycznie)
-  3. Wywołaj apply_transitions() z FFmpeg xfade
-  4. Wynik to złączony MP4 z przejściami
-  5. Usuń pliki pośrednie per scena
+Używaj rich library lub prostego inline update:
+  [Tylko w Bogu    ] [1/4] Analiza audio...    ████░░░░ 25%
+  [Pan jest mocą   ] [3/4] Generowanie 5/8...  ██████░░ 62%
+  [Bądź uwielbiony ] [2/4] Reżyseria...        ██░░░░░░ 20%
 
-Gdy transitions == none lub wszystkie cut:
-  Użyj dotychczasowego concatenate_videoclips (szybciej).
+Jeśli rich niedostępny: zwykłe logi z prefixem nazwy piosenki.
 
-## Długości przejść a synchronizacja z beatem
+## Obsługa błędów przy parallel
 
-Długość przejścia powinna być wielokrotnością czasu jednego beatu:
-  BPM=84: beat = 0.714s → przejście 0.5s (bliskie 0.71s)
-  BPM=120: beat = 0.5s → przejście 0.5s (dokładnie jeden beat)
+Gdy jedna piosenka się nie powiedzie:
+- Nie zatrzymuj pozostałych
+- Zaloguj błąd per piosenka
+- Kontynuuj z kolejnymi stage dla pozostałych piosenek
+- Na końcu pokaż podsumowanie: "2/3 gotowe, 1 błąd"
 
-Oblicz optymalną długość przejścia:
-  beat_duration = 60 / bpm
-  transition_duration = round(beat_duration / 2, 2)  (pół beatu)
-  Clamp do zakresu 0.3s - 0.8s
+Gdy błąd 429 (rate limit BFL):
+- Exponential backoff dla tej konkretnej sceny
+- Pozostałe sceny innych piosenek kontynuują bez przerwy
+
+Gdy błąd 402 (brak kredytów):
+- Zatrzymaj wszystkie równoległe zadania natychmiast
+- Wyczyść zasoby (anuluj pending requests)
+
+## Ograniczenia i rekomendacje
+
+Wyświetl ostrzeżenie gdy --parallel > 2 na lokalnym Macu:
+"Uwaga: --parallel 3+ może być wolniejszy niż 2 ze względu na
+RAM i CPU. Rekomendowane max 2 dla Mac M2."
+
+Szacunek przyspieszenia:
+- 3 piosenki sequential: ~27 minut
+- 3 piosenki --parallel 2: ~16 minut (Stage 3 dominuje)
+- 3 piosenki --parallel 3: ~14 minut (mniejszy zysk ze Stage 4)
+
+## requirements.txt — dodaj
+aiohttp>=3.9.0      (async HTTP dla BFL i innych API)
+rich>=13.0.0        (opcjonalne, ładniejszy progress display)
 
 ## Testy
-- get_transition_offset: poprawny offset dla 3 scen
-- build_ffmpeg_xfade_filter: zawiera xfade dla każdego przejścia
-- Przejście cut: brak xfade w filtrze
-- apply_transitions: mockuj FFmpeg, sprawdź komendę
-- auto wybór: chorus po verse → dip-white
-- auto wybór: mood_energy > 0.6 przy zmianie sekcji → cut
-- Długość przejścia skalowana do BPM
+- ParallelRunner z 2 piosenkami: Stage 1 sekwencyjny, Stage 3 równoległy
+- Semaphore: max max_bfl_requests równoległych requestów BFL
+- Błąd jednej piosenki w Stage 3: pozostałe kontynuują
+- Błąd 402: wszystkie zadania zatrzymane
+- --parallel 1: używa synchronicznego pipeline (bez asyncio)
+- asyncio.gather dla Stage 2: wszystkie wywołania Claude równoległe
 
 ## Acceptance Criteria
-- --transitions dip-white: wszystkie przejścia jako wybielenie
-- --transitions auto: różne typy per scena z planu Claude
-- --transitions cut: twarde cięcia wszędzie
-- --transitions none: sceny sklejone bez efektu
-- Implementacja przez FFmpeg xfade (nie MoviePy frame-by-frame)
-- Przejścia zsynchronizowane z BPM
-- Czas generowania nie wzrasta o więcej niż 15%
+- --batch folder/ --parallel 2: dwie piosenki przetwarzane równolegle
+- Stage 1 i Stage 4 zawsze sekwencyjne
+- Stage 2 i Stage 3 zawsze równoległe (gdy --parallel > 1)
+- Max 20 równoległych requestów do BFL (globalny semaphore)
+- Błąd jednej piosenki nie zatrzymuje innych
+- --parallel 1 (domyślnie): zachowanie identyczne jak przed zmianą
 - python3 -m pytest tests/ -v przechodzi

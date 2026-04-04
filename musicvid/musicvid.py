@@ -30,12 +30,13 @@ def _image_files_exist(manifest):
 @click.command()
 @click.argument("audio_file", type=click.Path(exists=True))
 @click.option("--mode", type=click.Choice(["stock", "ai", "hybrid"]), default="stock", help="Video source mode.")
+@click.option("--provider", type=click.Choice(["dalle", "flux-dev", "flux-pro", "schnell"]), default="flux-dev", help="Image provider for --mode ai.")
 @click.option("--style", type=click.Choice(["auto", "contemplative", "joyful", "worship", "powerful"]), default="auto", help="Visual style.")
 @click.option("--output", type=click.Path(), default="./output/", help="Output directory.")
 @click.option("--resolution", type=click.Choice(["720p", "1080p", "4k"]), default="1080p", help="Output resolution.")
 @click.option("--lang", default="auto", help="Language for transcription.")
 @click.option("--new", is_flag=True, default=False, help="Force recalculation, ignore cache.")
-def cli(audio_file, mode, style, output, resolution, lang, new):
+def cli(audio_file, mode, provider, style, output, resolution, lang, new):
     """Generate a music video from AUDIO_FILE."""
     audio_path = Path(audio_file).resolve()
     output_dir = Path(output).resolve()
@@ -78,8 +79,8 @@ def cli(audio_file, mode, style, output, resolution, lang, new):
             click.echo("[3/4] Generating images... CACHED (skipped)")
             fetch_manifest = image_manifest
         else:
-            click.echo("[3/4] Generating AI images...")
-            image_paths = generate_images(scene_plan, str(cache_dir))
+            click.echo(f"[3/4] Generating images (provider: {provider})...")
+            image_paths = generate_images(scene_plan, str(cache_dir), provider=provider)
             fetch_manifest = [
                 {"scene_index": i, "video_path": path, "search_query": scene["visual_prompt"]}
                 for i, (path, scene) in enumerate(zip(image_paths, scene_plan["scenes"]))

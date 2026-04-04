@@ -4,7 +4,7 @@
 CLI tool that generates synchronized MP4 music videos from audio files using stock footage, beat-synced cuts, and whisper-based subtitles.
 
 ## Commands
-- `python3 -m pytest tests/ -v` - run all tests (111 tests)
+- `python3 -m pytest tests/ -v` - run all tests (127 tests)
 - `python3 -m musicvid.musicvid song.mp3` - run the CLI (uses cache by default)
 - `python3 -m musicvid.musicvid song.mp3 --new` - force recalculation, ignore cache
 - `python3 -c "import musicvid; print(musicvid.__version__)"` - check version
@@ -17,12 +17,18 @@ CLI tool that generates synchronized MP4 music videos from audio files using sto
 - `--font PATH`: custom .ttf font for subtitles (optional, defaults to auto-downloaded Montserrat Light)
 - `--lyrics PATH`: custom .txt lyrics file (optional); auto-detects single .txt in audio dir. When provided, Whisper still runs for timing, then Claude API aligns file text to Whisper segments
 - `--effects [none|minimal|full]` (default: minimal): visual effects level — none (Ken Burns only), minimal (warm grade + vignette + cinematic bars), full (+ film grain + light leak)
+- `--clip [15|20|25|30]`: generate short social-media clip — Claude selects best fragment (chorus preferred); clips analysis to window before director; output named `{stem}_{N}s.mp4`
+- `--platform [reels|shorts|tiktok]`: forces portrait 9:16 resolution (1080×1920) and adds platform name to output filename; use with `--clip`
+- `--title-card`: prepends 2s black title card with song name; only active when used with `--clip`
+- Clip selector: `musicvid/pipeline/clip_selector.py` — `select_clip(analysis, clip_duration)` calls Claude API; manual 2-attempt retry loop with fallback to song center; mock target: `@patch("musicvid.pipeline.clip_selector.anthropic")`
+- Clip analysis filter: `_filter_analysis_to_clip(analysis, clip_start, clip_end)` in `musicvid.py` — offsets lyrics/beats/sections to clip-relative t=0 before passing to director
 - Lyrics parser: `musicvid/pipeline/lyrics_parser.py` — `align_with_claude(whisper_segments, file_lines)` for AI alignment via Claude API; also has `parse()` with variant A (plain text, even distribution) and B (MM:SS/HH:MM:SS timestamps)
 - Visual effects: `musicvid/pipeline/effects.py` — `apply_effects(clip, level)` orchestrates per-frame transforms (warm grade, vignette, film grain) and overlay effects (cinematic bars, light leak)
 
 ## Caching
 - Content-addressed cache in `output/tmp/{audio_hash}/` (MD5 of first 64KB, 12 chars)
 - Cached files: `audio_analysis.json` (or `audio_analysis_{lyrics_hash}.json` when --lyrics used), `lyrics_aligned_{lyrics_hash}.json` (AI alignment result), `scene_plan.json`, `video_manifest.json`, `image_manifest.json` (ai mode)
+- Clip mode adds separate cache files: `clip_{N}s.json` (clip selection), `scene_plan_clip_{N}s.json`, `video_manifest_clip_{N}s.json` / `image_manifest_clip_{N}s.json` — changing `--clip` only invalidates `clip_{N}s.json`
 - Stages 1-3 skip if cached; stage 3 also verifies video files exist on disk
 - `--new` flag forces full recalculation (deletes cache dir)
 - Cache utilities in `musicvid/pipeline/cache.py` (`get_audio_hash`, `load_cache`, `save_cache`)
@@ -48,6 +54,10 @@ CLI tool that generates synchronized MP4 music videos from audio files using sto
 - Font loader: `musicvid/pipeline/font_loader.py` auto-downloads Montserrat from Google Fonts ZIP, falls back to system DejaVuSans
 - CLI tests that run the full pipeline must mock `get_font_path` via `@patch("musicvid.musicvid.get_font_path", return_value="/fake/font.ttf")`
 - Assembler tests must mock effects imports: `@patch("musicvid.pipeline.assembler.apply_effects")`, `@patch("musicvid.pipeline.assembler.create_cinematic_bars")`, `@patch("musicvid.pipeline.assembler.create_light_leak")`
+- Assembler clip mode tests must also mock `@patch("musicvid.pipeline.assembler.afx")` and `@patch("musicvid.pipeline.assembler.ColorClip")` to test fades and title card
+- Assembler `assemble_video` accepts `clip_start`, `clip_end`, `title_card_text` kwargs; audio trimmed via `audio.subclipped(clip_start, clip_end)` + `afx.AudioFadeIn/AudioFadeOut`; video via `vfx.FadeIn/FadeOut`
+- Assembler `RESOLUTION_MAP` includes `"portrait": (1080, 1920)` for social media clips
+- CLI tests for `--clip` must mock `@patch("musicvid.musicvid.select_clip")` in addition to the usual pipeline mocks
 - Effects per-frame transforms use `clip.transform(fn)` where `fn(get_frame, t)` returns numpy array; test by extracting transform_fn from `mock_clip.transform.call_args[0][0]`
 - Use `python3` not `python` on this macOS system
 

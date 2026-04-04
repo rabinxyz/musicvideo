@@ -9,7 +9,9 @@ cd "$PROJECT_DIR"
 source venv/bin/activate
 mkdir -p "$DONE_DIR"
 
-SPECS=($(ls "$SPECS_DIR"/*.md 2>/dev/null | sort))
+# Sortuj numerycznie po prefiksie (01-, 02- itd.)
+# Pliki bez prefiksu idą na końcu
+SPECS=($(ls "$SPECS_DIR"/*.md 2>/dev/null | sort -t'/' -k9 -V))
 
 if [ ${#SPECS[@]} -eq 0 ]; then
   echo "Brak specyfikacji w $SPECS_DIR"
@@ -22,6 +24,9 @@ FAILED=0
 
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo "  Kolejka: $TOTAL specyfikacji"
+ls "$SPECS_DIR"/*.md 2>/dev/null | sort -t'/' -k9 -V | while read f; do
+  echo "  • $(basename $f)"
+done
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
 for SPEC_PATH in "${SPECS[@]}"; do
@@ -34,7 +39,7 @@ for SPEC_PATH in "${SPECS[@]}"; do
 
   if loop run -i "@$SPEC_PATH"; then
     mv "$SPEC_PATH" "$DONE_DIR/$SPEC_NAME"
-    echo "✅ [$CURRENT/$TOTAL] Gotowe → przeniesiony do done/"
+    echo "✅ [$CURRENT/$TOTAL] Gotowe → done/$SPEC_NAME"
   else
     echo "❌ [$CURRENT/$TOTAL] Błąd: $SPEC_NAME — zostaje w specs/"
     FAILED=$((FAILED + 1))

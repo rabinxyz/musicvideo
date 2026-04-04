@@ -1,5 +1,3 @@
-# Idea
-
 # Spec: Skrócone wideo na social media (15/20/25/30 sekund)
 
 ## Cel

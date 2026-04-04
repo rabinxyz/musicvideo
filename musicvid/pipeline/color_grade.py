@@ -127,3 +127,16 @@ def load_lut_file(path):
     if not path.endswith(".cube"):
         raise ValueError(f"LUT file must have .cube extension, got: {path}")
     return path
+
+
+def get_ffmpeg_lut_filter(lut_path, intensity):
+    """Build FFmpeg video filter string for LUT application."""
+    if intensity <= 0.0:
+        return None
+    if intensity >= 1.0:
+        return f"lut3d='{lut_path}':interp=trilinear"
+    return (
+        f"split[a][b];"
+        f"[b]lut3d='{lut_path}':interp=trilinear[graded];"
+        f"[a][graded]blend=all_mode=normal:all_opacity={intensity:.2f}"
+    )

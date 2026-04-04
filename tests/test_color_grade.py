@@ -5,6 +5,7 @@ import numpy as np
 import pytest
 
 from musicvid.pipeline.color_grade import generate_builtin_lut, save_lut_as_cube, load_lut_file
+from musicvid.pipeline.color_grade import get_ffmpeg_lut_filter
 
 
 class TestGenerateBuiltinLut:
@@ -116,3 +117,25 @@ class TestLoadLutFile:
         bad_file.write_text("not a lut")
         with pytest.raises(ValueError, match=".cube"):
             load_lut_file(str(bad_file))
+
+
+class TestGetFfmpegLutFilter:
+    def test_contains_lut3d(self):
+        result = get_ffmpeg_lut_filter("/tmp/test.cube", 0.85)
+        assert "lut3d" in result
+
+    def test_contains_file_path(self):
+        result = get_ffmpeg_lut_filter("/tmp/test.cube", 0.85)
+        assert "/tmp/test.cube" in result
+
+    def test_default_intensity(self):
+        result = get_ffmpeg_lut_filter("/tmp/test.cube", 1.0)
+        assert "lut3d" in result
+
+    def test_partial_intensity_uses_blend(self):
+        result = get_ffmpeg_lut_filter("/tmp/test.cube", 0.5)
+        assert "0.5" in result or "0.50" in result
+
+    def test_zero_intensity_returns_none(self):
+        result = get_ffmpeg_lut_filter("/tmp/test.cube", 0.0)
+        assert result is None

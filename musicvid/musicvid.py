@@ -1,5 +1,6 @@
 """MusicVid CLI — Christian Music Video Generator."""
 
+import hashlib
 import shutil
 from pathlib import Path
 
@@ -67,14 +68,21 @@ def cli(audio_file, mode, provider, style, output, resolution, lang, new, font_p
     elif len(txt_files_in_dir) > 1:
         click.echo("  ⚠ Znaleziono wiele plików .txt — użyj --lyrics aby wybrać")
 
+    # Compute lyrics hash for cache invalidation
+    lyrics_hash = None
+    if lyrics_file:
+        with open(lyrics_file, "rb") as f:
+            lyrics_hash = hashlib.md5(f.read()).hexdigest()[:12]
+
     # Stage 1: Analyze Audio
-    analysis = load_cache(str(cache_dir), "audio_analysis.json") if not new else None
+    analysis_cache_name = f"audio_analysis_{lyrics_hash}.json" if lyrics_hash else "audio_analysis.json"
+    analysis = load_cache(str(cache_dir), analysis_cache_name) if not new else None
     if analysis:
         click.echo("[1/4] Audio analysis... CACHED (skipped)")
     else:
         click.echo("[1/4] Analyzing audio...")
         analysis = analyze_audio(str(audio_path), output_dir=str(cache_dir))
-        save_cache(str(cache_dir), "audio_analysis.json", analysis)
+        save_cache(str(cache_dir), analysis_cache_name, analysis)
     # Replace lyrics from file if available
     if lyrics_file:
         parsed_lyrics = parse_lyrics(str(lyrics_file), analysis["duration"])

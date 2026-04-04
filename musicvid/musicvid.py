@@ -13,6 +13,7 @@ from musicvid.pipeline.stock_fetcher import fetch_videos
 from musicvid.pipeline.image_generator import generate_images
 from musicvid.pipeline.assembler import assemble_video
 from musicvid.pipeline.font_loader import get_font_path
+from musicvid.pipeline.lyrics_parser import parse as parse_lyrics
 
 
 load_dotenv()
@@ -38,7 +39,8 @@ def _image_files_exist(manifest):
 @click.option("--lang", default="auto", help="Language for transcription.")
 @click.option("--new", is_flag=True, default=False, help="Force recalculation, ignore cache.")
 @click.option("--font", "font_path", type=click.Path(), default=None, help="Custom .ttf font file for subtitles.")
-def cli(audio_file, mode, provider, style, output, resolution, lang, new, font_path):
+@click.option("--lyrics", "lyrics_path", type=click.Path(), default=None, help="Path to .txt lyrics file (skips Whisper).")
+def cli(audio_file, mode, provider, style, output, resolution, lang, new, font_path, lyrics_path):
     """Generate a music video from AUDIO_FILE."""
     audio_path = Path(audio_file).resolve()
     output_dir = Path(output).resolve()
@@ -52,6 +54,19 @@ def cli(audio_file, mode, provider, style, output, resolution, lang, new, font_p
         shutil.rmtree(cache_dir)
         cache_dir.mkdir(parents=True, exist_ok=True)
 
+    # Resolve lyrics file (explicit flag or auto-detection)
+    lyrics_file = None
+    txt_files_in_dir = sorted(audio_path.parent.glob("*.txt"))
+
+    if lyrics_path:
+        lyrics_file = Path(lyrics_path).resolve()
+        if not lyrics_file.exists():
+            raise click.BadParameter(f"Lyrics file not found: {lyrics_file}", param_hint="--lyrics")
+    elif len(txt_files_in_dir) == 1:
+        lyrics_file = txt_files_in_dir[0]
+    elif len(txt_files_in_dir) > 1:
+        click.echo("  ⚠ Znaleziono wiele plików .txt — użyj --lyrics aby wybrać")
+
     # Stage 1: Analyze Audio
     analysis = load_cache(str(cache_dir), "audio_analysis.json") if not new else None
     if analysis:
@@ -60,6 +75,16 @@ def cli(audio_file, mode, provider, style, output, resolution, lang, new, font_p
         click.echo("[1/4] Analyzing audio...")
         analysis = analyze_audio(str(audio_path), output_dir=str(cache_dir))
         save_cache(str(cache_dir), "audio_analysis.json", analysis)
+    # Replace lyrics from file if available
+    if lyrics_file:
+        parsed_lyrics = parse_lyrics(str(lyrics_file), analysis["duration"])
+        analysis["lyrics"] = parsed_lyrics
+        line_count = len(parsed_lyrics)
+        if lyrics_path:
+            click.echo(f"[1/4] Tekst: wczytano z pliku ({line_count} linijek)")
+        else:
+            click.echo(f"[1/4] Tekst: znaleziono automatycznie → {lyrics_file.name} ({line_count} linijek)")
+
     click.echo(f"  BPM: {analysis['bpm']}, Duration: {analysis['duration']}s, "
                f"Sections: {len(analysis['sections'])}, Mood: {analysis['mood_energy']}")
 

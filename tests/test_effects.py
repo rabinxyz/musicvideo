@@ -9,6 +9,7 @@ from musicvid.pipeline.effects import apply_vignette
 from musicvid.pipeline.effects import create_cinematic_bars
 from musicvid.pipeline.effects import apply_film_grain
 from musicvid.pipeline.effects import create_light_leak
+from musicvid.pipeline.effects import apply_effects
 
 
 class TestApplyWarmGrade:
@@ -182,3 +183,53 @@ class TestCreateLightLeak:
 
         start_call = mock_clip.with_start.call_args[0][0]
         assert 2.0 <= start_call <= 6.0, f"Start {start_call} not in 20-60% of 10s"
+
+
+class TestApplyEffects:
+    """Tests for the apply_effects orchestrator."""
+
+    def test_none_returns_clip_unchanged(self):
+        """Level 'none' should not apply any effects."""
+        mock_clip = MagicMock()
+        result = apply_effects(mock_clip, level="none")
+        assert result is mock_clip
+        mock_clip.transform.assert_not_called()
+
+    @patch("musicvid.pipeline.effects.apply_vignette")
+    @patch("musicvid.pipeline.effects.apply_warm_grade")
+    def test_minimal_applies_warm_and_vignette(self, mock_warm, mock_vignette):
+        """Level 'minimal' should apply warm grade and vignette."""
+        mock_clip = MagicMock()
+        mock_warm.return_value = mock_clip
+        mock_vignette.return_value = mock_clip
+
+        apply_effects(mock_clip, level="minimal")
+
+        mock_warm.assert_called_once_with(mock_clip)
+        mock_vignette.assert_called_once()
+
+    @patch("musicvid.pipeline.effects.apply_film_grain")
+    @patch("musicvid.pipeline.effects.apply_vignette")
+    @patch("musicvid.pipeline.effects.apply_warm_grade")
+    def test_full_applies_all_frame_effects(self, mock_warm, mock_vignette, mock_grain):
+        """Level 'full' should apply warm grade, vignette, and film grain."""
+        mock_clip = MagicMock()
+        mock_warm.return_value = mock_clip
+        mock_vignette.return_value = mock_clip
+        mock_grain.return_value = mock_clip
+
+        apply_effects(mock_clip, level="full")
+
+        mock_warm.assert_called_once()
+        mock_vignette.assert_called_once()
+        mock_grain.assert_called_once()
+
+    def test_default_level_is_minimal(self):
+        """Default level should be 'minimal'."""
+        mock_clip = MagicMock()
+        mock_clip.transform.return_value = mock_clip
+
+        with patch("musicvid.pipeline.effects.apply_warm_grade", return_value=mock_clip) as mock_warm, \
+             patch("musicvid.pipeline.effects.apply_vignette", return_value=mock_clip):
+            apply_effects(mock_clip)
+            mock_warm.assert_called_once()

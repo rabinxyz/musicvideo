@@ -79,6 +79,28 @@ def create_light_leak(duration, size):
     return clip
 
 
+def apply_effects(clip, level="minimal"):
+    """Apply visual effects based on level.
+
+    Args:
+        clip: MoviePy clip (after Ken Burns, before subtitles).
+        level: "none" | "minimal" | "full"
+
+    Returns:
+        Processed clip.
+    """
+    if level == "none":
+        return clip
+
+    clip = apply_warm_grade(clip)
+    clip = apply_vignette(clip)
+
+    if level == "full":
+        clip = apply_film_grain(clip)
+
+    return clip
+
+
 def create_cinematic_bars(width, height, duration):
     """Create top and bottom black cinematic bars (12% height each)."""
     bar_h = int(height * 0.12)

@@ -14,7 +14,7 @@ from musicvid.pipeline.stock_fetcher import fetch_videos
 from musicvid.pipeline.image_generator import generate_images
 from musicvid.pipeline.assembler import assemble_video
 from musicvid.pipeline.font_loader import get_font_path
-from musicvid.pipeline.lyrics_parser import parse as parse_lyrics
+from musicvid.pipeline.lyrics_parser import align_with_claude
 
 
 load_dotenv()
@@ -84,15 +84,22 @@ def cli(audio_file, mode, provider, style, output, resolution, lang, new, font_p
         click.echo("[1/4] Analyzing audio...")
         analysis = analyze_audio(str(audio_path), output_dir=str(cache_dir))
         save_cache(str(cache_dir), analysis_cache_name, analysis)
-    # Replace lyrics from file if available
+    # Replace lyrics using AI alignment if lyrics file available
     if lyrics_file:
-        parsed_lyrics = parse_lyrics(str(lyrics_file), analysis["duration"])
-        analysis["lyrics"] = parsed_lyrics
-        line_count = len(parsed_lyrics)
-        if lyrics_path:
-            click.echo(f"[1/4] Tekst: wczytano z pliku ({line_count} linijek)")
+        aligned_cache_name = f"lyrics_aligned_{lyrics_hash}.json"
+        aligned = load_cache(str(cache_dir), aligned_cache_name) if not new else None
+        if aligned:
+            analysis["lyrics"] = aligned
+            line_count = len(aligned)
+            click.echo(f"[1/4] Tekst: AI dopasowanie... CACHED ({line_count} linii)")
         else:
-            click.echo(f"[1/4] Tekst: znaleziono automatycznie → {lyrics_file.name} ({line_count} linijek)")
+            with open(lyrics_file, "r", encoding="utf-8") as f:
+                file_lines = [line.strip() for line in f if line.strip()]
+            aligned = align_with_claude(analysis["lyrics"], file_lines)
+            save_cache(str(cache_dir), aligned_cache_name, aligned)
+            analysis["lyrics"] = aligned
+            line_count = len(file_lines)
+            click.echo(f"[1/4] Tekst: Whisper timing + AI dopasowanie tekstu z pliku ({line_count} linii)")
 
     click.echo(f"  BPM: {analysis['bpm']}, Duration: {analysis['duration']}s, "
                f"Sections: {len(analysis['sections'])}, Mood: {analysis['mood_energy']}")

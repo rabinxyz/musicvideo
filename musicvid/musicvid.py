@@ -128,7 +128,11 @@ def _filter_manifest_to_clip(manifest, scenes, clip_start, clip_end):
 @click.option("--animate", "animate_mode", type=click.Choice(["auto", "always", "never"]), default="auto", help="Animated video via Runway Gen-4 (auto: director decides, always: all scenes, never: off). Only with --mode ai.")
 @click.option("--preset", type=click.Choice(["full", "social", "all"]), default=None, help="Preset mode: full (YouTube), social (3 reels), all (both).")
 @click.option("--reel-duration", type=click.Choice(["15", "20", "30"]), default="15", help="Duration of social media reels in seconds.")
-def cli(audio_file, mode, provider, style, output, resolution, lang, new, font_path, lyrics_path, effects, clip_duration, platform, title_card, animate_mode, preset, reel_duration):
+@click.option("--logo", "logo_path", type=click.Path(), default=None, help="Path to logo file (SVG/PNG) to overlay on video.")
+@click.option("--logo-position", type=click.Choice(["top-left", "top-right", "bottom-left", "bottom-right"]), default="top-left", help="Logo position on screen.")
+@click.option("--logo-size", type=int, default=None, help="Logo width in pixels (default: auto 12%% of frame width).")
+@click.option("--logo-opacity", type=float, default=0.85, help="Logo opacity 0.0-1.0.")
+def cli(audio_file, mode, provider, style, output, resolution, lang, new, font_path, lyrics_path, effects, clip_duration, platform, title_card, animate_mode, preset, reel_duration, logo_path, logo_position, logo_size, logo_opacity):
     """Generate a music video from AUDIO_FILE."""
     audio_path = Path(audio_file).resolve()
     output_dir = Path(output).resolve()
@@ -306,6 +310,10 @@ def cli(audio_file, mode, provider, style, output, resolution, lang, new, font_p
             effects=effects,
             cache_dir=cache_dir,
             new=new,
+            logo_path=logo_path,
+            logo_position=logo_position,
+            logo_size=logo_size,
+            logo_opacity=logo_opacity,
         )
         return
 
@@ -337,12 +345,17 @@ def cli(audio_file, mode, provider, style, output, resolution, lang, new, font_p
         clip_start=clip_start,
         clip_end=clip_end,
         title_card_text=title_card_text,
+        logo_path=logo_path,
+        logo_position=logo_position,
+        logo_size=logo_size,
+        logo_opacity=logo_opacity,
     )
     click.echo(f"  Done! Output: {output_path}")
 
 
 def _run_preset_mode(preset, reel_duration, analysis, scene_plan, fetch_manifest,
-                     audio_path, output_dir, stem, font, effects, cache_dir, new):
+                     audio_path, output_dir, stem, font, effects, cache_dir, new,
+                     logo_path=None, logo_position="top-left", logo_size=None, logo_opacity=0.85):
     """Handle --preset flag: generate full video and/or social reels."""
     generate_full = preset in ("full", "all")
     generate_social = preset in ("social", "all")
@@ -384,6 +397,10 @@ def _run_preset_mode(preset, reel_duration, analysis, scene_plan, fetch_manifest
             resolution="1080p",
             font_path=font,
             effects_level=effects,
+            logo_path=logo_path,
+            logo_position=logo_position,
+            logo_size=logo_size,
+            logo_opacity=logo_opacity,
         )
         click.echo(f"  \u2192 Pe\u0142ny teledysk YouTube ({assembly_num}/{total})... \u2705")
 
@@ -429,6 +446,10 @@ def _run_preset_mode(preset, reel_duration, analysis, scene_plan, fetch_manifest
                 audio_fade_out=1.5,
                 subtitle_margin_bottom=200,
                 cinematic_bars=False,
+                logo_path=logo_path,
+                logo_position=logo_position,
+                logo_size=logo_size,
+                logo_opacity=logo_opacity,
             )
             click.echo(f"  \u2192 Rolka {clip_id} \u2014 {section} ({assembly_num}/{total})... \u2705")
 

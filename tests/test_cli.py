@@ -1941,3 +1941,116 @@ class TestPresetMode:
         # Run with 30s — different cache key
         runner.invoke(cli, [str(audio_file), "--output", str(output_dir), "--preset", "social", "--reel-duration", "30"])
         assert mock_social.call_count == 2  # called again because different duration
+
+
+class TestLogoFlag:
+    """Tests for --logo CLI flag."""
+
+    @patch("musicvid.musicvid.get_font_path", return_value="/fake/font.ttf")
+    @patch("musicvid.musicvid.assemble_video")
+    @patch("musicvid.musicvid.fetch_videos")
+    @patch("musicvid.musicvid.create_scene_plan")
+    @patch("musicvid.musicvid.analyze_audio")
+    def test_logo_passed_to_assembler(self, mock_analyze, mock_director, mock_fetch, mock_assemble, mock_font, runner, tmp_path):
+        audio = tmp_path / "song.mp3"
+        audio.write_bytes(b"fake")
+        logo = tmp_path / "logo.png"
+        logo.write_bytes(b"fake_png")
+
+        mock_analyze.return_value = {
+            "lyrics": [], "beats": [0.0, 0.5], "bpm": 120.0,
+            "duration": 10.0, "sections": [{"label": "verse", "start": 0.0, "end": 10.0}],
+            "mood_energy": "contemplative", "language": "en",
+        }
+        mock_director.return_value = {
+            "overall_style": "contemplative",
+            "color_palette": ["#aaa"],
+            "subtitle_style": {"font_size": 48, "color": "#FFF", "outline_color": "#000",
+                               "position": "center-bottom", "animation": "fade"},
+            "scenes": [{"section": "verse", "start": 0.0, "end": 10.0,
+                         "visual_prompt": "test", "motion": "static",
+                         "transition": "cut", "overlay": "none"}],
+        }
+        mock_fetch.return_value = [{"scene_index": 0, "video_path": "/fake/v.mp4", "search_query": "test"}]
+
+        result = runner.invoke(cli, [str(audio), "--logo", str(logo), "--output", str(tmp_path / "out")])
+
+        assert result.exit_code == 0, f"CLI failed: {result.output}"
+        call_kwargs = mock_assemble.call_args[1]
+        assert call_kwargs["logo_path"] == str(logo)
+        assert call_kwargs["logo_position"] == "top-left"
+        assert call_kwargs["logo_opacity"] == 0.85
+        assert call_kwargs["logo_size"] is None
+
+    @patch("musicvid.musicvid.get_font_path", return_value="/fake/font.ttf")
+    @patch("musicvid.musicvid.assemble_video")
+    @patch("musicvid.musicvid.fetch_videos")
+    @patch("musicvid.musicvid.create_scene_plan")
+    @patch("musicvid.musicvid.analyze_audio")
+    def test_logo_all_options(self, mock_analyze, mock_director, mock_fetch, mock_assemble, mock_font, runner, tmp_path):
+        audio = tmp_path / "song.mp3"
+        audio.write_bytes(b"fake")
+        logo = tmp_path / "logo.svg"
+        logo.write_text('<svg xmlns="http://www.w3.org/2000/svg"/>')
+
+        mock_analyze.return_value = {
+            "lyrics": [], "beats": [0.0, 0.5], "bpm": 120.0,
+            "duration": 10.0, "sections": [{"label": "verse", "start": 0.0, "end": 10.0}],
+            "mood_energy": "contemplative", "language": "en",
+        }
+        mock_director.return_value = {
+            "overall_style": "contemplative",
+            "color_palette": ["#aaa"],
+            "subtitle_style": {"font_size": 48, "color": "#FFF", "outline_color": "#000",
+                               "position": "center-bottom", "animation": "fade"},
+            "scenes": [{"section": "verse", "start": 0.0, "end": 10.0,
+                         "visual_prompt": "test", "motion": "static",
+                         "transition": "cut", "overlay": "none"}],
+        }
+        mock_fetch.return_value = [{"scene_index": 0, "video_path": "/fake/v.mp4", "search_query": "test"}]
+
+        result = runner.invoke(cli, [
+            str(audio), "--logo", str(logo),
+            "--logo-position", "bottom-right",
+            "--logo-size", "200",
+            "--logo-opacity", "0.5",
+            "--output", str(tmp_path / "out"),
+        ])
+
+        assert result.exit_code == 0, f"CLI failed: {result.output}"
+        call_kwargs = mock_assemble.call_args[1]
+        assert call_kwargs["logo_path"] == str(logo)
+        assert call_kwargs["logo_position"] == "bottom-right"
+        assert call_kwargs["logo_size"] == 200
+        assert call_kwargs["logo_opacity"] == 0.5
+
+    @patch("musicvid.musicvid.get_font_path", return_value="/fake/font.ttf")
+    @patch("musicvid.musicvid.assemble_video")
+    @patch("musicvid.musicvid.fetch_videos")
+    @patch("musicvid.musicvid.create_scene_plan")
+    @patch("musicvid.musicvid.analyze_audio")
+    def test_no_logo_by_default(self, mock_analyze, mock_director, mock_fetch, mock_assemble, mock_font, runner, tmp_path):
+        audio = tmp_path / "song.mp3"
+        audio.write_bytes(b"fake")
+
+        mock_analyze.return_value = {
+            "lyrics": [], "beats": [0.0, 0.5], "bpm": 120.0,
+            "duration": 10.0, "sections": [{"label": "verse", "start": 0.0, "end": 10.0}],
+            "mood_energy": "contemplative", "language": "en",
+        }
+        mock_director.return_value = {
+            "overall_style": "contemplative",
+            "color_palette": ["#aaa"],
+            "subtitle_style": {"font_size": 48, "color": "#FFF", "outline_color": "#000",
+                               "position": "center-bottom", "animation": "fade"},
+            "scenes": [{"section": "verse", "start": 0.0, "end": 10.0,
+                         "visual_prompt": "test", "motion": "static",
+                         "transition": "cut", "overlay": "none"}],
+        }
+        mock_fetch.return_value = [{"scene_index": 0, "video_path": "/fake/v.mp4", "search_query": "test"}]
+
+        result = runner.invoke(cli, [str(audio), "--output", str(tmp_path / "out")])
+
+        assert result.exit_code == 0, f"CLI failed: {result.output}"
+        call_kwargs = mock_assemble.call_args[1]
+        assert call_kwargs["logo_path"] is None

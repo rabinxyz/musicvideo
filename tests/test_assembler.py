@@ -83,6 +83,9 @@ class TestCreateSubtitleClips:
 class TestAssembleVideo:
     """Tests for the main assemble_video function."""
 
+    @patch("musicvid.pipeline.assembler.create_cinematic_bars")
+    @patch("musicvid.pipeline.assembler.create_light_leak")
+    @patch("musicvid.pipeline.assembler.apply_effects")
     @patch("musicvid.pipeline.assembler.vfx")
     @patch("musicvid.pipeline.assembler.VideoFileClip")
     @patch("musicvid.pipeline.assembler.ImageClip")
@@ -92,7 +95,9 @@ class TestAssembleVideo:
     @patch("musicvid.pipeline.assembler.concatenate_videoclips")
     def test_produces_output_file(
         self, mock_concat, mock_composite, mock_text, mock_audio,
-        mock_image, mock_video, mock_vfx, sample_analysis, sample_scene_plan, tmp_output
+        mock_image, mock_video, mock_vfx, mock_apply_effects,
+        mock_light_leak, mock_bars,
+        sample_analysis, sample_scene_plan, tmp_output
     ):
         mock_clip = MagicMock()
         mock_clip.duration = 5.0
@@ -114,6 +119,8 @@ class TestAssembleVideo:
         mock_text.return_value = mock_clip
         mock_concat.return_value = mock_clip
         mock_composite.return_value = mock_clip
+        mock_apply_effects.return_value = mock_clip
+        mock_bars.return_value = [mock_clip, mock_clip]
 
         fetch_manifest = [
             {"scene_index": 0, "video_path": "/fake/scene_000.mp4", "search_query": "test"},
@@ -136,6 +143,9 @@ class TestAssembleVideo:
         call_args = mock_clip.write_videofile.call_args
         assert output_file in str(call_args)
 
+    @patch("musicvid.pipeline.assembler.create_cinematic_bars")
+    @patch("musicvid.pipeline.assembler.create_light_leak")
+    @patch("musicvid.pipeline.assembler.apply_effects")
     @patch("musicvid.pipeline.assembler.vfx")
     @patch("musicvid.pipeline.assembler.VideoFileClip")
     @patch("musicvid.pipeline.assembler.ImageClip")
@@ -145,7 +155,9 @@ class TestAssembleVideo:
     @patch("musicvid.pipeline.assembler.concatenate_videoclips")
     def test_passes_font_path_to_subtitles(
         self, mock_concat, mock_composite, mock_text, mock_audio,
-        mock_image, mock_video, mock_vfx, sample_analysis, sample_scene_plan, tmp_output
+        mock_image, mock_video, mock_vfx, mock_apply_effects,
+        mock_light_leak, mock_bars,
+        sample_analysis, sample_scene_plan, tmp_output
     ):
         mock_clip = MagicMock()
         mock_clip.duration = 5.0
@@ -167,6 +179,8 @@ class TestAssembleVideo:
         mock_text.return_value = mock_clip
         mock_concat.return_value = mock_clip
         mock_composite.return_value = mock_clip
+        mock_apply_effects.return_value = mock_clip
+        mock_bars.return_value = [mock_clip, mock_clip]
 
         fetch_manifest = [
             {"scene_index": 0, "video_path": "/fake/scene_000.mp4", "search_query": "test"},
@@ -188,3 +202,130 @@ class TestAssembleVideo:
 
         call_kwargs = mock_text.call_args[1]
         assert call_kwargs["font"] == "/custom/font.ttf"
+
+
+class TestAssembleVideoEffects:
+    """Tests for visual effects integration in assembler."""
+
+    @patch("musicvid.pipeline.assembler.create_cinematic_bars")
+    @patch("musicvid.pipeline.assembler.create_light_leak")
+    @patch("musicvid.pipeline.assembler.apply_effects")
+    @patch("musicvid.pipeline.assembler.vfx")
+    @patch("musicvid.pipeline.assembler.VideoFileClip")
+    @patch("musicvid.pipeline.assembler.ImageClip")
+    @patch("musicvid.pipeline.assembler.AudioFileClip")
+    @patch("musicvid.pipeline.assembler.TextClip")
+    @patch("musicvid.pipeline.assembler.CompositeVideoClip")
+    @patch("musicvid.pipeline.assembler.concatenate_videoclips")
+    def test_minimal_effects_applied(
+        self, mock_concat, mock_composite, mock_text, mock_audio,
+        mock_image, mock_video, mock_vfx, mock_apply_effects,
+        mock_light_leak, mock_bars,
+        sample_analysis, sample_scene_plan, tmp_output
+    ):
+        mock_clip = MagicMock()
+        mock_clip.duration = 5.0
+        mock_clip.size = (1920, 1080)
+        mock_clip.w = 1920
+        mock_clip.h = 1080
+        mock_clip.resized.return_value = mock_clip
+        mock_clip.subclipped.return_value = mock_clip
+        mock_clip.with_duration.return_value = mock_clip
+        mock_clip.with_position.return_value = mock_clip
+        mock_clip.with_start.return_value = mock_clip
+        mock_clip.with_effects.return_value = mock_clip
+        mock_clip.transform.return_value = mock_clip
+        mock_clip.with_audio.return_value = mock_clip
+
+        mock_video.return_value = mock_clip
+        mock_image.return_value = mock_clip
+        mock_audio.return_value = mock_clip
+        mock_text.return_value = mock_clip
+        mock_concat.return_value = mock_clip
+        mock_composite.return_value = mock_clip
+        mock_apply_effects.return_value = mock_clip
+        mock_bars.return_value = [mock_clip, mock_clip]
+
+        fetch_manifest = [
+            {"scene_index": 0, "video_path": "/fake/scene_000.mp4", "search_query": "test"},
+            {"scene_index": 1, "video_path": "/fake/scene_001.mp4", "search_query": "test"},
+            {"scene_index": 2, "video_path": "/fake/scene_002.png", "search_query": "test"},
+        ]
+
+        output_file = str(tmp_output / "output.mp4")
+
+        assemble_video(
+            analysis=sample_analysis,
+            scene_plan=sample_scene_plan,
+            fetch_manifest=fetch_manifest,
+            audio_path="/fake/audio.mp3",
+            output_path=output_file,
+            resolution="1080p",
+            effects_level="minimal",
+        )
+
+        mock_apply_effects.assert_called()
+        mock_bars.assert_called_once()
+
+    @patch("musicvid.pipeline.assembler.create_cinematic_bars")
+    @patch("musicvid.pipeline.assembler.create_light_leak")
+    @patch("musicvid.pipeline.assembler.apply_effects")
+    @patch("musicvid.pipeline.assembler.vfx")
+    @patch("musicvid.pipeline.assembler.VideoFileClip")
+    @patch("musicvid.pipeline.assembler.ImageClip")
+    @patch("musicvid.pipeline.assembler.AudioFileClip")
+    @patch("musicvid.pipeline.assembler.TextClip")
+    @patch("musicvid.pipeline.assembler.CompositeVideoClip")
+    @patch("musicvid.pipeline.assembler.concatenate_videoclips")
+    def test_none_effects_skip_all(
+        self, mock_concat, mock_composite, mock_text, mock_audio,
+        mock_image, mock_video, mock_vfx, mock_apply_effects,
+        mock_light_leak, mock_bars,
+        sample_analysis, sample_scene_plan, tmp_output
+    ):
+        mock_clip = MagicMock()
+        mock_clip.duration = 5.0
+        mock_clip.size = (1920, 1080)
+        mock_clip.w = 1920
+        mock_clip.h = 1080
+        mock_clip.resized.return_value = mock_clip
+        mock_clip.subclipped.return_value = mock_clip
+        mock_clip.with_duration.return_value = mock_clip
+        mock_clip.with_position.return_value = mock_clip
+        mock_clip.with_start.return_value = mock_clip
+        mock_clip.with_effects.return_value = mock_clip
+        mock_clip.transform.return_value = mock_clip
+        mock_clip.with_audio.return_value = mock_clip
+
+        mock_video.return_value = mock_clip
+        mock_image.return_value = mock_clip
+        mock_audio.return_value = mock_clip
+        mock_text.return_value = mock_clip
+        mock_concat.return_value = mock_clip
+        mock_composite.return_value = mock_clip
+        mock_apply_effects.return_value = mock_clip
+
+        fetch_manifest = [
+            {"scene_index": 0, "video_path": "/fake/scene_000.mp4", "search_query": "test"},
+            {"scene_index": 1, "video_path": "/fake/scene_001.mp4", "search_query": "test"},
+            {"scene_index": 2, "video_path": "/fake/scene_002.png", "search_query": "test"},
+        ]
+
+        output_file = str(tmp_output / "output.mp4")
+
+        assemble_video(
+            analysis=sample_analysis,
+            scene_plan=sample_scene_plan,
+            fetch_manifest=fetch_manifest,
+            audio_path="/fake/audio.mp3",
+            output_path=output_file,
+            resolution="1080p",
+            effects_level="none",
+        )
+
+        mock_apply_effects.assert_called()
+        # Verify "none" was passed
+        first_call_args = mock_apply_effects.call_args_list[0]
+        assert first_call_args[1]["level"] == "none"
+        mock_bars.assert_not_called()
+        mock_light_leak.assert_not_called()

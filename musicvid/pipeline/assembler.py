@@ -12,6 +12,8 @@ from moviepy import (
     vfx,
 )
 
+from musicvid.pipeline.effects import apply_effects, create_cinematic_bars, create_light_leak
+
 
 RESOLUTION_MAP = {
     "720p": (1280, 720),
@@ -146,7 +148,7 @@ def _load_scene_clip(video_path, scene, target_size):
     return _create_ken_burns_clip(clip, duration, scene.get("motion", "static"), target_size)
 
 
-def assemble_video(analysis, scene_plan, fetch_manifest, audio_path, output_path, resolution="1080p", font_path=None):
+def assemble_video(analysis, scene_plan, fetch_manifest, audio_path, output_path, resolution="1080p", font_path=None, effects_level="minimal"):
     """Assemble the final music video.
 
     Args:
@@ -166,6 +168,7 @@ def assemble_video(analysis, scene_plan, fetch_manifest, audio_path, output_path
         idx = manifest_entry["scene_index"]
         scene = scenes[idx]
         clip = _load_scene_clip(manifest_entry["video_path"], scene, target_size)
+        clip = apply_effects(clip, level=effects_level)
         scene_clips.append(clip)
 
     video = concatenate_videoclips(scene_clips, method="compose")
@@ -177,7 +180,23 @@ def assemble_video(analysis, scene_plan, fetch_manifest, audio_path, output_path
         font_path=font_path,
     )
 
-    final = CompositeVideoClip([video] + subtitle_clips, size=target_size)
+    layers = [video] + subtitle_clips
+
+    if effects_level in ("minimal", "full"):
+        bars = create_cinematic_bars(target_size[0], target_size[1], video.duration)
+        layers.extend(bars)
+
+    if effects_level == "full":
+        for manifest_entry in fetch_manifest:
+            idx = manifest_entry["scene_index"]
+            scene = scenes[idx]
+            scene_duration = scene["end"] - scene["start"]
+            leak = create_light_leak(scene_duration, target_size)
+            leak = leak.with_start(leak.start + scene["start"])
+            leak = leak.with_end(leak.end + scene["start"])
+            layers.append(leak)
+
+    final = CompositeVideoClip(layers, size=target_size)
 
     audio = AudioFileClip(audio_path)
     final = final.with_audio(audio)

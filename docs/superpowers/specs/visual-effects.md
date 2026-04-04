@@ -1,5 +1,3 @@
-# Idea
-
 # Spec: Efekty wizualne dla obrazów AI
 
 ## Cel

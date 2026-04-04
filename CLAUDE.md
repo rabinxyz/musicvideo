@@ -4,7 +4,7 @@
 CLI tool that generates synchronized MP4 music videos from audio files using stock footage, beat-synced cuts, and whisper-based subtitles.
 
 ## Commands
-- `python3 -m pytest tests/ -v` - run all tests (80 tests)
+- `python3 -m pytest tests/ -v` - run all tests (99 tests)
 - `python3 -m musicvid.musicvid song.mp3` - run the CLI (uses cache by default)
 - `python3 -m musicvid.musicvid song.mp3 --new` - force recalculation, ignore cache
 - `python3 -c "import musicvid; print(musicvid.__version__)"` - check version
@@ -16,7 +16,9 @@ CLI tool that generates synchronized MP4 music videos from audio files using sto
 - `--provider [flux-dev|flux-pro|flux-schnell]` (default: flux-dev): selects BFL model for `--mode ai`
 - `--font PATH`: custom .ttf font for subtitles (optional, defaults to auto-downloaded Montserrat Light)
 - `--lyrics PATH`: custom .txt lyrics file (optional, skips Whisper); auto-detects single .txt in audio dir
+- `--effects [none|minimal|full]` (default: minimal): visual effects level — none (Ken Burns only), minimal (warm grade + vignette + cinematic bars), full (+ film grain + light leak)
 - Lyrics parser: `musicvid/pipeline/lyrics_parser.py` — variant A (plain text, even distribution) and B (MM:SS/HH:MM:SS timestamps)
+- Visual effects: `musicvid/pipeline/effects.py` — `apply_effects(clip, level)` orchestrates per-frame transforms (warm grade, vignette, film grain) and overlay effects (cinematic bars, light leak)
 
 ## Caching
 - Content-addressed cache in `output/tmp/{audio_hash}/` (MD5 of first 64KB, 12 chars)
@@ -43,6 +45,8 @@ CLI tool that generates synchronized MP4 music videos from audio files using sto
 - Image generator retry tests must patch tenacity wait to `wait_none()` to avoid slow tests
 - Font loader: `musicvid/pipeline/font_loader.py` auto-downloads Montserrat from Google Fonts ZIP, falls back to system DejaVuSans
 - CLI tests that run the full pipeline must mock `get_font_path` via `@patch("musicvid.musicvid.get_font_path", return_value="/fake/font.ttf")`
+- Assembler tests must mock effects imports: `@patch("musicvid.pipeline.assembler.apply_effects")`, `@patch("musicvid.pipeline.assembler.create_cinematic_bars")`, `@patch("musicvid.pipeline.assembler.create_light_leak")`
+- Effects per-frame transforms use `clip.transform(fn)` where `fn(get_frame, t)` returns numpy array; test by extracting transform_fn from `mock_clip.transform.call_args[0][0]`
 - Use `python3` not `python` on this macOS system
 
 ## Environment

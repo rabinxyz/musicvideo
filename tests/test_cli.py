@@ -1,6 +1,7 @@
 """Tests for the CLI entry point."""
 
 import json
+import os
 from unittest.mock import patch, MagicMock
 from pathlib import Path
 
@@ -1151,3 +1152,113 @@ class TestAILyricsAlignment:
         assert result.exit_code == 0
         assert "Whisper timing + AI dopasowanie" in result.output
         assert "3 linii" in result.output
+
+
+class TestAnimateCLI:
+    """Tests for the --animate CLI flag."""
+
+    def _make_scene_plan_with_animated(self):
+        return {
+            "overall_style": "contemplative",
+            "master_style": "Warm grade",
+            "color_palette": ["#aaa"],
+            "subtitle_style": {"font_size": 48, "color": "#FFF",
+                               "outline_color": "#000", "position": "center-bottom",
+                               "animation": "fade"},
+            "scenes": [
+                {"section": "verse", "start": 0.0, "end": 4.0,
+                 "visual_prompt": "meadow", "motion": "slow_zoom_in",
+                 "transition": "crossfade", "overlay": "none",
+                 "animate": True, "motion_prompt": "Camera rises slowly"},
+                {"section": "chorus", "start": 4.0, "end": 7.0,
+                 "visual_prompt": "mountain", "motion": "static",
+                 "transition": "cut", "overlay": "none",
+                 "animate": False, "motion_prompt": ""},
+                {"section": "outro", "start": 7.0, "end": 10.0,
+                 "visual_prompt": "sunset", "motion": "pan_left",
+                 "transition": "fade_black", "overlay": "none",
+                 "animate": False, "motion_prompt": ""},
+            ],
+        }
+
+    def _make_analysis(self):
+        return {
+            "lyrics": [], "beats": [], "bpm": 120.0, "duration": 10.0,
+            "sections": [{"label": "verse", "start": 0.0, "end": 10.0}],
+            "mood_energy": "contemplative", "language": "en",
+        }
+
+    @patch("musicvid.musicvid.animate_image")
+    @patch("musicvid.musicvid.get_font_path", return_value="/fake/font.ttf")
+    @patch("musicvid.musicvid.assemble_video")
+    @patch("musicvid.musicvid.generate_images", return_value=["/fake/s0.jpg", "/fake/s1.jpg", "/fake/s2.jpg"])
+    @patch("musicvid.musicvid.create_scene_plan")
+    @patch("musicvid.musicvid.analyze_audio")
+    def test_animate_never_does_not_call_animate_image(
+        self, mock_analyze, mock_plan, mock_gen, mock_assemble, mock_font, mock_animate, tmp_path
+    ):
+        from musicvid.musicvid import cli
+
+        mock_analyze.return_value = self._make_analysis()
+        mock_plan.return_value = self._make_scene_plan_with_animated()
+
+        audio = tmp_path / "song.mp3"
+        audio.write_bytes(b"fake audio")
+
+        runner = CliRunner()
+        result = runner.invoke(cli, [str(audio), "--mode", "ai", "--animate", "never"])
+
+        mock_animate.assert_not_called()
+        assert result.exit_code == 0
+
+    @patch("musicvid.musicvid.animate_image", return_value="/fake/animated.mp4")
+    @patch("musicvid.musicvid.get_font_path", return_value="/fake/font.ttf")
+    @patch("musicvid.musicvid.assemble_video")
+    @patch("musicvid.musicvid.generate_images", return_value=["/fake/s0.jpg", "/fake/s1.jpg", "/fake/s2.jpg"])
+    @patch("musicvid.musicvid.create_scene_plan")
+    @patch("musicvid.musicvid.analyze_audio")
+    def test_animate_auto_with_runway_key_calls_animator(
+        self, mock_analyze, mock_plan, mock_gen, mock_assemble, mock_font, mock_animate, tmp_path
+    ):
+        from musicvid.musicvid import cli
+
+        mock_analyze.return_value = self._make_analysis()
+        mock_plan.return_value = self._make_scene_plan_with_animated()
+
+        audio = tmp_path / "song.mp3"
+        audio.write_bytes(b"fake audio")
+
+        runner = CliRunner()
+        with patch.dict(os.environ, {"RUNWAY_API_KEY": "test-key", "BFL_API_KEY": "test-bfl"}):
+            result = runner.invoke(cli, [str(audio), "--mode", "ai", "--animate", "auto"])
+
+        # Should be called once (only scene 0 has animate=True)
+        mock_animate.assert_called_once()
+        assert result.exit_code == 0
+
+    @patch("musicvid.musicvid.animate_image")
+    @patch("musicvid.musicvid.get_font_path", return_value="/fake/font.ttf")
+    @patch("musicvid.musicvid.assemble_video")
+    @patch("musicvid.musicvid.generate_images", return_value=["/fake/s0.jpg", "/fake/s1.jpg", "/fake/s2.jpg"])
+    @patch("musicvid.musicvid.create_scene_plan")
+    @patch("musicvid.musicvid.analyze_audio")
+    def test_animate_fallback_when_no_runway_key(
+        self, mock_analyze, mock_plan, mock_gen, mock_assemble, mock_font, mock_animate, tmp_path
+    ):
+        from musicvid.musicvid import cli
+
+        mock_analyze.return_value = self._make_analysis()
+        mock_plan.return_value = self._make_scene_plan_with_animated()
+
+        audio = tmp_path / "song.mp3"
+        audio.write_bytes(b"fake audio")
+
+        runner = CliRunner()
+        # Remove RUNWAY_API_KEY so the fallback path is triggered
+        env = {k: v for k, v in os.environ.items() if k != "RUNWAY_API_KEY"}
+        env["BFL_API_KEY"] = "test-bfl"
+        with patch.dict(os.environ, env, clear=True):
+            result = runner.invoke(cli, [str(audio), "--mode", "ai", "--animate", "auto"])
+
+        mock_animate.assert_not_called()
+        assert result.exit_code == 0

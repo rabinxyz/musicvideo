@@ -1,6 +1,7 @@
 """MusicVid CLI — Christian Music Video Generator."""
 
 import hashlib
+import os
 import shutil
 from pathlib import Path
 
@@ -16,6 +17,7 @@ from musicvid.pipeline.image_generator import generate_images
 from musicvid.pipeline.assembler import assemble_video
 from musicvid.pipeline.font_loader import get_font_path
 from musicvid.pipeline.lyrics_parser import align_with_claude
+from musicvid.pipeline.video_animator import animate_image
 
 
 load_dotenv()
@@ -84,7 +86,8 @@ def _filter_analysis_to_clip(analysis, clip_start, clip_end):
 @click.option("--clip", "clip_duration", type=click.Choice(["15", "20", "25", "30"]), default=None, help="Clip duration in seconds for social media (selects best fragment).")
 @click.option("--platform", type=click.Choice(["reels", "shorts", "tiktok"]), default=None, help="Social media platform (sets portrait 9:16 resolution).")
 @click.option("--title-card", is_flag=True, default=False, help="Add 2-second title card with song name at start of clip.")
-def cli(audio_file, mode, provider, style, output, resolution, lang, new, font_path, lyrics_path, effects, clip_duration, platform, title_card):
+@click.option("--animate", "animate_mode", type=click.Choice(["auto", "always", "never"]), default="auto", help="Animated video via Runway Gen-4 (auto: director decides, always: all scenes, never: off). Only with --mode ai.")
+def cli(audio_file, mode, provider, style, output, resolution, lang, new, font_path, lyrics_path, effects, clip_duration, platform, title_card, animate_mode):
     """Generate a music video from AUDIO_FILE."""
     audio_path = Path(audio_file).resolve()
     output_dir = Path(output).resolve()
@@ -196,6 +199,42 @@ def cli(audio_file, mode, provider, style, output, resolution, lang, new, font_p
             ]
             save_cache(str(cache_dir), image_cache_name, fetch_manifest)
         click.echo(f"  Generated: {len(fetch_manifest)} images")
+
+        # Apply --animate overrides to scene plan
+        if animate_mode == "always":
+            for scene in scene_plan["scenes"]:
+                scene["animate"] = True
+                if not scene.get("motion_prompt"):
+                    scene["motion_prompt"] = "Slow camera push forward, gentle atmospheric movement"
+        elif animate_mode == "never":
+            for scene in scene_plan["scenes"]:
+                scene["animate"] = False
+
+        # Stage 3.5: Animate scenes with Runway Gen-4
+        if animate_mode != "never":
+            runway_key = os.environ.get("RUNWAY_API_KEY")
+            for entry in fetch_manifest:
+                idx = entry["scene_index"]
+                scene = scene_plan["scenes"][idx]
+                if not scene.get("animate", False):
+                    continue
+                if not runway_key:
+                    click.echo(f"  \u26a0 RUNWAY_API_KEY not set \u2014 Ken Burns fallback for scene {idx + 1}")
+                    scene["animate"] = False
+                    continue
+                animated_path = str(cache_dir / f"animated_scene_{idx:03d}.mp4")
+                click.echo(f"  Animating scene {idx + 1}/{len(scene_plan['scenes'])}...")
+                try:
+                    result_path = animate_image(
+                        entry["video_path"],
+                        scene.get("motion_prompt", "Slow camera push forward"),
+                        duration=5,
+                        output_path=animated_path,
+                    )
+                    entry["video_path"] = result_path
+                except Exception as exc:
+                    click.echo(f"  \u26a0 Animation failed for scene {idx + 1}: {exc} \u2014 Ken Burns fallback")
+                    scene["animate"] = False
     else:
         video_cache_name = f"video_manifest{manifest_suffix}.json"
         fetch_manifest = load_cache(str(cache_dir), video_cache_name) if not new else None

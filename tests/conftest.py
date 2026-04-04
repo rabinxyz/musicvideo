@@ -45,6 +45,7 @@ def sample_scene_plan():
     """Sample director output for testing downstream stages."""
     return {
         "overall_style": "contemplative",
+        "master_style": "Consistent warm cinematic grade, golden amber tones",
         "color_palette": ["#1a1a2e", "#16213e", "#e2e2e2"],
         "subtitle_style": {
             "font_size": 48,
@@ -62,6 +63,8 @@ def sample_scene_plan():
                 "motion": "slow_zoom_in",
                 "transition": "fade_black",
                 "overlay": "none",
+                "animate": False,
+                "motion_prompt": "",
             },
             {
                 "section": "verse",
@@ -71,6 +74,8 @@ def sample_scene_plan():
                 "motion": "slow_zoom_out",
                 "transition": "crossfade",
                 "overlay": "light_rays",
+                "animate": False,
+                "motion_prompt": "",
             },
             {
                 "section": "outro",
@@ -80,6 +85,8 @@ def sample_scene_plan():
                 "motion": "pan_left",
                 "transition": "fade_black",
                 "overlay": "particles",
+                "animate": False,
+                "motion_prompt": "",
             },
         ],
     }

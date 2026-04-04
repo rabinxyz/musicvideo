@@ -1,150 +1,108 @@
 # Idea
 
-# Spec: LUT (Look Up Table) — cinematyczny color grade
+# Spec: Animacje napisów — karaoke style i slide up (format ASS)
 
 ## Cel
-Dodać profesjonalną korektę kolorów przez LUT do każdego wideo.
-LUT to plik .cube który mapuje kolory wejściowe na wyjściowe —
-ten sam standard używany w Hollywood i przez profesjonalnych
-twórców teledysków.
+Dodać nowe style animacji napisów jako opcję obok istniejącego fade.
+Obecna implementacja MoviePy TextClip zostaje jako domyślna i fallback.
+Nowe style używają formatu ASS + FFmpeg dla lepszej jakości i wydajności.
 
 ## Nowa flaga CLI
---lut PATH   Ścieżka do pliku .cube z LUT (opcjonalna)
---lut-style [warm|cold|cinematic|natural|faded]  (domyślnie: warm)
-             Wbudowany LUT gdy --lut nie podane
+--subtitle-style [fade|karaoke|slide-up|word-pop]  (domyślnie: fade)
 
-## Wbudowane LUT style
+### fade (domyślny — obecna implementacja, BEZ ZMIAN)
+Zachowaj dokładnie obecny kod MoviePy TextClip jako domyślne zachowanie.
+Nie ruszaj istniejącej implementacji.
 
-Gdy --lut nie podane, użyj wbudowanego LUT generowanego przez kod:
+### karaoke (nowy — format ASS)
+Słowa podświetlane jedno po drugim zsynchronizowane z muzyką.
+Tekst przed aktywnym słowem: biały opacity 60%
+Aktywne słowo: biały pełny, lekko powiększony
+Tekst po aktywnym słowie: biały opacity 30%
+Wymaga word-level timestamps z Whisper.
+Gdy word timestamps niedostępne: podziel czas segmentu równomiernie
+przez liczbę słów (karaoke działa, ale mniej precyzyjnie).
 
-### warm (domyślny — rekomendowany dla worship music)
-Shadows: lekki shift w kierunku amber/brąz
-Midtones: ocieplenie, boost żółtego i pomarańczowego
-Highlights: delikatny cream/ivory zamiast czystej bieli
-Kontrast: lekko podniesiony (+10%)
-Nasycenie: lekko obniżone (-8%) — bardziej filmowy look
-Efekt: ciepły, intymny, jak filmy A24
+### slide-up (nowy — format ASS)
+Cała linijka wylatuje płynnie z dołu do pozycji docelowej.
+Czas animacji wejścia: 0.3s ease-out
+Czas animacji wyjścia: 0.2s ease-in (znika w górę)
 
-### cinematic
-Shadows: lift do ciemnoszarego (nie czarny — typowy dla kina)
-Midtones: lekka desaturacja, shift w chłodny kierunek
-Highlights: rolloff — nie przepalone, miękkie przejście
-Kontrast: S-curve — głębsze cienie, jaśniejsze środki
-Nasycenie: -15% dla filmowego, mniej nasycenia look
-Efekt: jak współczesny film fabularny
+### word-pop (nowy — format ASS)
+Każde słowo pojawia się osobno z efektem pop (scale 0→110%→100%).
+Słowa budują linijkę jedno po drugim w tempie mowy.
 
-### cold
-Shadows: shift w niebieski
-Midtones: chłodny, niebieskoszary
-Highlights: biały z lekkim błękitem
-Efekt: nowoczesny, kontemplacyjny
+## Dlaczego ASS dla nowych stylów
 
-### natural
-Minimalne zmiany — tylko łagodny kontrast i lekki lift cieni
-Zachowuje naturalne kolory bez wyraźnego grade
-Efekt: czyste, realistyczne
+Format ASS (Advanced SubStation Alpha) to standard branżowy:
+- FFmpeg renderuje go natywnie — szybciej niż Python frame-by-frame
+- Natywna obsługa karaoke (tag {\k} per słowo)
+- Natywna obsługa animacji pozycji (tag {\move})
+- Pełna obsługa UTF-8 z polskimi znakami — zero problemów z ą ę ó
+- Ten sam format co YouTube, Netflix, profesjonalne narzędzia
 
-### faded
-Klasyczny faded film look
-Lift czarnych (cienie nie są czarne, tylko ciemnoszare)
-Obniżone nasycenie -20%
-Delikatne ocieplenie
-Efekt: vintage, artystyczny
+## Implementacja
 
-## Jak zaimplementować LUT
-
-### Opcja A — plik .cube (gdy --lut podane)
-Format .cube to standard branżowy — tekstowy plik z tabelą 3D mapowania RGB.
-Wczytaj przez bibliotekę colour-science lub własny parser.
-Zastosuj na każdej klatce przez numpy interpolację 3D.
-
-### Opcja B — wbudowany LUT (gdy --lut-style)
-Generuj LUT programowo przez numpy jako tablicę 3D (33x33x33 punkty).
-Zastosuj transformacje kolorów matematycznie na tablicy LUT.
-Aplikuj przez trilinear interpolation na każdej klatce.
-
-### Implementacja przez FFmpeg (rekomendowana — szybsza)
-Zamiast przetwarzać przez Python frame-by-frame (wolno),
-przekaż LUT do FFmpeg jako filter przy eksporcie:
-
-Dla pliku .cube:
-  ffmpeg_params=["-vf", f"lut3d={lut_path}"]
-
-Dla wbudowanego LUT: zapisz tymczasowo do pliku .cube w tmp/
-i przekaż do FFmpeg tak samo.
-
-FFmpeg obsługuje lut3d natively — to najszybsze podejście.
-
-## Kolejność zastosowania
-
-LUT aplikowany jest jako ostatni krok korekty kolorów:
-1. Ken Burns / ruch
-2. Warm grade (podstawowe ocieplenie z efektów)
-3. Vignette
-4. Napisy i logo
-5. Cinematic bars
-6. LUT ← na samym końcu przez FFmpeg przy eksporcie
-
-LUT powinien być stosowany PO wszystkich innych efektach —
-to standard w postprodukcji (grade na końcu pipeline'u).
-
-## Intensywność LUT
---lut-intensity FLOAT  (domyślnie: 0.85, zakres 0.0-1.0)
-Blend między oryginalnym kolorem (0.0) a pełnym LUT (1.0).
-0.85 daje subtelny profesjonalny efekt bez przesady.
-
-Implementacja przez FFmpeg:
-  f"lut3d={lut_path}:interp=trilinear,blend=all_opacity={intensity}"
-
-## Nowy moduł musicvid/pipeline/color_grade.py
+### Nowy moduł musicvid/pipeline/subtitle_ass.py
+Tylko dla trybów karaoke, slide-up, word-pop.
+Nie dotyka istniejącego kodu TextClip.
 
 Funkcje:
-- generate_builtin_lut(style, size=33) -> numpy.ndarray
-  Generuje tablicę LUT 33x33x33x3 dla danego stylu.
-  Zapisuje do tmp/ jako plik .cube.
-  Zwraca ścieżkę do pliku .cube.
+- generate_ass_file(lyrics, style, config, output_path) -> str
+  Główna funkcja — generuje plik .ass i zwraca ścieżkę.
+  style: "karaoke" | "slide-up" | "word-pop"
 
-- load_lut_file(path) -> str
-  Waliduje że plik istnieje i ma rozszerzenie .cube.
-  Zwraca ścieżkę (FFmpeg wczyta sam).
+- _generate_header(width, height, font_name, font_size) -> str
+  Sekcje [Script Info] i [V4+ Styles].
 
-- get_ffmpeg_lut_filter(lut_path, intensity) -> str
-  Zwraca string filtru FFmpeg dla lut3d.
+- _generate_karaoke_events(lyrics_with_words) -> str
+  Linie [Events] z tagami {\k} per słowo (czas w centisekundach).
+  Format linii: {\k50}Pan {\k40}jest {\k60}moim {\k45}pasterzem
 
-- apply_lut_to_export(clip, lut_path, intensity) -> ffmpeg_params
-  Zwraca parametry do przekazania MoviePy write_videofile jako
-  ffmpeg_params aby LUT był aplikowany przez FFmpeg przy eksporcie.
+- _generate_slide_up_events(lyrics) -> str
+  Linie [Events] z tagami {\move(x,y_start,x,y_end,0,300)}.
 
-## Gdzie użyć w pipeline
+- _generate_word_pop_events(lyrics_with_words) -> str
+  Osobne linie per słowo z tagiem {\t(\fscx110\fscy110\fscx100\fscy100)}.
 
-W assembler.py przy wywołaniu write_videofile:
-  Pobierz ffmpeg_params z color_grade.apply_lut_to_export()
-  Przekaż jako dodatkowy parametr do write_videofile()
+- burn_ass_subtitles(video_path, ass_path, output_path) -> str
+  FFmpeg: ffmpeg -i video.mp4 -vf "ass=subtitles.ass" output.mp4
+  Wywołuje po wygenerowaniu wideo przez MoviePy.
 
-## Gotowe darmowe pliki .cube dla użytkownika
+### Integracja w assembler.py
 
-Dodaj do README.md sekcję z linkami do darmowych LUT:
-- https://luts.iwltbap.com (darmowe kinowe LUT)
-- https://www.rocketstock.com/free-after-effects-templates/35-free-luts/
-- Filmic Pro LUT Pack (darmowy)
+Gdy --subtitle-style fade (domyślny):
+  Używaj obecnej implementacji MoviePy TextClip — BEZ ZMIAN.
 
-## requirements.txt — dodaj
-colour-science>=0.4.0   (opcjonalne — do parsowania .cube)
+Gdy --subtitle-style karaoke/slide-up/word-pop:
+  1. Wygeneruj wideo BEZ napisów przez MoviePy
+  2. Wygeneruj plik .ass przez subtitle_ass.py
+  3. Wywołaj burn_ass_subtitles() — FFmpeg wpal napisy
+  4. Usuń plik pośredni bez napisów
+
+## Styl wizualny ASS (spójny z obecnymi napisami)
+
+Font: Montserrat Light (ten sam co obecne napisy)
+Rozmiar: 58px dla 1080p
+Kolor tekstu: biały &H00FFFFFF
+Outline: 2px czarny &H00000000
+Shadow: 1px z opacity 60%
+Pozycja: bottom center, margines 80px od dołu (200px dla 9:16)
+Wyrównanie: center
 
 ## Testy
-- generate_builtin_lut("warm"): zwraca tablicę 33x33x33x3
-- generate_builtin_lut("cinematic"): wartości różne od "warm"
-- load_lut_file: waliduje rozszerzenie .cube
-- load_lut_file nieistniejący plik: FileNotFoundError
-- get_ffmpeg_lut_filter: zwraca string zawierający "lut3d"
-- --lut-intensity 0.5: intensity w filtrze FFmpeg == 0.5
+- --subtitle-style fade: używa obecnej implementacji TextClip (bez zmian)
+- generate_ass_file karaoke: plik .ass zawiera tagi {\k}
+- generate_ass_file slide-up: plik .ass zawiera tagi {\move}
+- Polski tekst "ąęółźżćńś": plik .ass zakodowany UTF-8
+- burn_ass_subtitles: mockuj FFmpeg, sprawdź komendę z "ass="
+- Brak word timestamps: karaoke działa z równomiernym podziałem czasu
 
 ## Acceptance Criteria
-- --lut-style warm generuje wideo z ciepłym cinematycznym grade
-- --lut-style cinematic generuje wideo z filmowym look
-- --lut plik.cube stosuje zewnętrzny LUT
-- --lut-intensity 0.5 zmniejsza intensywność efektu
-- LUT aplikowany przez FFmpeg (nie frame-by-frame Python)
-- Czas generowania nie wzrasta o więcej niż 10% (FFmpeg jest szybki)
-- Działa dla wszystkich platform: youtube, reels, square
+- --subtitle-style fade: zachowanie identyczne jak przed zmianą
+- --subtitle-style karaoke: słowa podświetlane jedno po drugim
+- --subtitle-style slide-up: linijki wylatują z dołu
+- --subtitle-style word-pop: słowa pojawiają się z efektem pop
+- Polskie znaki poprawne we wszystkich stylach
+- Styl domyślny (fade) nie wymaga FFmpeg — MoviePy jak dotychczas
 - python3 -m pytest tests/ -v przechodzi

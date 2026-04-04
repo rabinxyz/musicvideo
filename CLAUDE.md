@@ -4,7 +4,7 @@
 CLI tool that generates synchronized MP4 music videos from audio files using stock footage, beat-synced cuts, and whisper-based subtitles.
 
 ## Commands
-- `python3 -m pytest tests/ -v` - run all tests (127 tests)
+- `python3 -m pytest tests/ -v` - run all tests (150 tests)
 - `python3 -m musicvid.musicvid song.mp3` - run the CLI (uses cache by default)
 - `python3 -m musicvid.musicvid song.mp3 --new` - force recalculation, ignore cache
 - `python3 -c "import musicvid; print(musicvid.__version__)"` - check version
@@ -20,6 +20,11 @@ CLI tool that generates synchronized MP4 music videos from audio files using sto
 - `--clip [15|20|25|30]`: generate short social-media clip — Claude selects best fragment (chorus preferred); clips analysis to window before director; output named `{stem}_{N}s.mp4`
 - `--platform [reels|shorts|tiktok]`: forces portrait 9:16 resolution (1080×1920) and adds platform name to output filename; use with `--clip`
 - `--title-card`: prepends 2s black title card with song name; only active when used with `--clip`
+- `--animate [auto|always|never]` (default: auto): Runway Gen-4 image-to-video for scenes marked animate=true by director; `never` skips all animation; `always` forces all scenes animated; fallback to Ken Burns when RUNWAY_API_KEY absent
+- Director scene plan: now includes `master_style` (top-level string appended to all BFL prompts), `animate` (bool per scene), `motion_prompt` (str per scene); `_validate_scene_plan` defaults missing fields
+- Runway animator: `musicvid/pipeline/video_animator.py` — `animate_image(image_path, motion_prompt, duration, output_path)` calls Runway Gen-4; POLL_INTERVAL=3s, POLL_TIMEOUT=300s; cache check via output_path exists; mock target: `@patch("musicvid.pipeline.video_animator.requests")` + `@patch("musicvid.pipeline.video_animator.time")`
+- CLI tests for `--animate` must mock `@patch("musicvid.musicvid.animate_image")` since animate_image is imported at module level
+- Assembler `_load_scene_clip`: skips Ken Burns for scenes with `animate=True` and `.mp4` suffix — just resizes to target_size
 - Clip selector: `musicvid/pipeline/clip_selector.py` — `select_clip(analysis, clip_duration)` calls Claude API; manual 2-attempt retry loop with fallback to song center; mock target: `@patch("musicvid.pipeline.clip_selector.anthropic")`
 - Clip analysis filter: `_filter_analysis_to_clip(analysis, clip_start, clip_end)` in `musicvid.py` — offsets lyrics/beats/sections to clip-relative t=0 before passing to director
 - Lyrics parser: `musicvid/pipeline/lyrics_parser.py` — `align_with_claude(whisper_segments, file_lines)` for AI alignment via Claude API; also has `parse()` with variant A (plain text, even distribution) and B (MM:SS/HH:MM:SS timestamps)
@@ -63,4 +68,4 @@ CLI tool that generates synchronized MP4 music videos from audio files using sto
 
 ## Environment
 - macOS, Python 3.14, requires `ffmpeg` and `imagemagick` via Homebrew
-- API keys: ANTHROPIC_API_KEY, PEXELS_API_KEY, BFL_API_KEY (in `.env`)
+- API keys: ANTHROPIC_API_KEY, PEXELS_API_KEY, BFL_API_KEY, RUNWAY_API_KEY (optional, for --animate) in `.env`

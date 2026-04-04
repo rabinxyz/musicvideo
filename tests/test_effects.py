@@ -2,10 +2,11 @@
 
 import numpy as np
 import pytest
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 from musicvid.pipeline.effects import apply_warm_grade
 from musicvid.pipeline.effects import apply_vignette
+from musicvid.pipeline.effects import create_cinematic_bars
 
 
 class TestApplyWarmGrade:
@@ -77,3 +78,32 @@ class TestApplyVignette:
 
         center_val = output[100, 100, 0]
         assert center_val >= 190, f"Center {center_val} should be close to original 200"
+
+
+class TestCreateCinematicBars:
+    """Tests for cinematic letterbox bars."""
+
+    @patch("musicvid.pipeline.effects.ColorClip")
+    def test_returns_two_bar_clips(self, mock_color_clip):
+        mock_bar = MagicMock()
+        mock_bar.with_duration.return_value = mock_bar
+        mock_bar.with_position.return_value = mock_bar
+        mock_color_clip.return_value = mock_bar
+
+        bars = create_cinematic_bars(1920, 1080, 10.0)
+
+        assert len(bars) == 2
+
+    @patch("musicvid.pipeline.effects.ColorClip")
+    def test_bar_height_is_12_percent(self, mock_color_clip):
+        mock_bar = MagicMock()
+        mock_bar.with_duration.return_value = mock_bar
+        mock_bar.with_position.return_value = mock_bar
+        mock_color_clip.return_value = mock_bar
+
+        bars = create_cinematic_bars(1920, 1080, 10.0)
+
+        # Bar height = 12% of 1080 = 129 (int)
+        call_args_list = mock_color_clip.call_args_list
+        size_arg = call_args_list[0][1]["size"]
+        assert size_arg == (1920, 129)

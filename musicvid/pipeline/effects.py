@@ -1,6 +1,7 @@
 """Visual effects for music video clips."""
 
 import numpy as np
+from moviepy import ColorClip
 
 
 def apply_warm_grade(clip):
@@ -35,3 +36,17 @@ def apply_vignette(clip):
             _vignette_cache[key] = mask[:, :, np.newaxis].astype(np.float32)
         return (frame * _vignette_cache[key]).astype(np.uint8)
     return clip.transform(_vignette)
+
+
+def create_cinematic_bars(width, height, duration):
+    """Create top and bottom black cinematic bars (12% height each)."""
+    bar_h = int(height * 0.12)
+    top = ColorClip(size=(width, bar_h), color=(0, 0, 0))
+    top = top.with_duration(duration)
+    top = top.with_position(("center", 0))
+
+    bottom = ColorClip(size=(width, bar_h), color=(0, 0, 0))
+    bottom = bottom.with_duration(duration)
+    bottom = bottom.with_position(("center", height - bar_h))
+
+    return [top, bottom]

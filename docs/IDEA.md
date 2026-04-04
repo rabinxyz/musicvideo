@@ -1,181 +1,215 @@
 # Idea
 
-# Spec: Re-render pojedynczej sceny
+# Spec: Batch processing — folder z piosenkami
 
 ## Cel
-Możliwość podmiany jednej sceny bez generowania całego teledysku od nowa.
-Oszczędza czas i koszt API gdy jedna scena nie pasuje wizualnie.
+Przetwarzanie całego folderu z piosenkami w jednym uruchomieniu.
+Wrzucasz folder przed snem, rano masz gotowe teledyski do wszystkich pieśni.
 
-## Nowe komendy CLI
+## Nowa komenda CLI
+python3 -m musicvid.musicvid --batch /sciezka/do/folderu
 
-### Podgląd planu scen
-python3 -m musicvid.musicvid song.mp3 --list-scenes
+Przykłady:
+python3 -m musicvid.musicvid --batch ~/Pulpit/piesni/
+python3 -m musicvid.musicvid --batch ~/Pulpit/piesni/ --preset all
+python3 -m musicvid.musicvid --batch ~/Pulpit/piesni/ --mode ai --provider flux-pro
+python3 -m musicvid.musicvid --batch ~/Pulpit/piesni/ --preset all --effects minimal
 
-Wyświetla tabelę wszystkich scen z cache:
-  Nr  Sekcja    Start    Koniec   Prompt (pierwsze 60 znaków)
-  ─────────────────────────────────────────────────────────────
-  0   intro     0:00     0:12     Golden sunrise over mountain peaks...
-  1   verse     0:12     0:44     Ancient forest with light filtering...
-  2   chorus    0:44     1:16     Silhouette of person with hands raised...
-  3   verse     1:16     1:48     Calm lake reflecting blue sky and clouds...
+Wszystkie pozostałe flagi działają tak samo jak dla pojedynczego pliku
+i są stosowane do każdej piosenki w folderze.
 
-Wymaga istnienia cache (output/tmp/{hash}/).
-Jeśli brak cache: "Najpierw wygeneruj teledysk bez --list-scenes"
+## Struktura folderu wejściowego
 
-### Re-render sceny z nowym promptem
-python3 -m musicvid.musicvid song.mp3 --rerender-scene 2
+Obsłuż dwa warianty automatycznie:
 
-Generuje nowy obraz dla sceny nr 2 z tym samym promptem co poprzednio.
-Użyteczne gdy obraz nie pasuje jakościowo ale prompt był dobry.
+Wariant A — luźne pliki (auto-parowanie MP3 + TXT o tej samej nazwie):
+  piesni/
+    Tylko w Bogu.mp3
+    Tylko w Bogu.txt
+    Pan jest moca moja.mp3
+    Pan jest moca moja.txt
+    Badz uwielbiony.mp3     (brak .txt — Whisper jako fallback)
 
-### Re-render z własnym promptem
-python3 -m musicvid.musicvid song.mp3 --rerender-scene 2 \
-  --scene-prompt "Vast wheat fields at golden hour, wind rippling through grain"
+Wariant B — podfoldery per piosenka:
+  piesni/
+    Tylko w Bogu/
+      Tylko w Bogu (Cover).mp3
+      tekst.txt
+      logo.svg              (opcjonalne logo specyficzne dla piosenki)
+    Pan jest moca moja/
+      Pan jest moca moja.mp3
+      tekst.txt
 
-Generuje nowy obraz dla sceny nr 2 z podanym promptem.
-Style suffix z Visual Bible jest doklejany automatycznie.
+Wykryj wariant automatycznie po strukturze folderu.
+Parowanie lyrics: szukaj .txt o tej samej nazwie co .mp3 (wariant A)
+lub dowolnego .txt w tym samym podfolderze (wariant B).
 
-### Re-render z nowym promptem przez Claude
-python3 -m musicvid.musicvid song.mp3 --rerender-scene 2 --reprompt
+## Obsługiwane formaty audio
+MP3, WAV, FLAC, M4A, OGG
 
-Claude generuje nowy prompt dla tej sceny na podstawie:
-- tekstu linijek które pojawiają się w tej scenie
-- Visual Bible (styl, paleta)
-- informacji że poprzedni prompt był niesatysfakcjonujący
-Użyteczne gdy chcesz żeby AI zaproponowała coś innego.
+## Struktura folderu wyjściowego
 
-### Rebuild wideo po re-renderze
-python3 -m musicvid.musicvid song.mp3 --rebuild
+piesni/
+  output/
+    Tylko w Bogu/
+      pelny/
+        Tylko_w_Bogu_youtube.mp4
+        Tylko_w_Bogu_youtube_metadata.txt
+      social/
+        Tylko_w_Bogu_rolka_A_15s.mp4
+        Tylko_w_Bogu_rolka_B_15s.mp4
+        Tylko_w_Bogu_rolka_C_15s.mp4
+    Pan jest moca moja/
+      pelny/
+        ...
+      social/
+        ...
+    batch_report.html
 
-Ponownie montuje wideo z istniejących assetów w cache.
-Używa gdy zmieniłeś dowolny plik w cache (obraz, plan scen).
-Pomija Stage 1-3 (analiza, reżyseria, generowanie) — tylko montaż.
+## Kolejność przetwarzania
 
-## Typowy workflow
+Flaga --batch-order [alpha|random|size-asc|size-desc] (domyślnie: alpha)
+alpha      — alfabetycznie
+random     — losowo
+size-asc   — od najkrótszej piosenki
+size-desc  — od najdłuższej
 
-1. Wygeneruj teledysk normalnie
-   python3 -m musicvid.musicvid song.mp3 --mode ai --preset all
+## Obsługa błędów
 
-2. Obejrzyj wynik — scena 2 nie pasuje
+Gdy piosenka X się nie powiedzie:
+- Zaloguj błąd do batch_report.html
+- Przejdź do następnej piosenki
+- Po zakończeniu: "Gotowe 8/10 — sprawdź batch_report.html"
 
-3. Sprawdź listę scen
-   python3 -m musicvid.musicvid song.mp3 --list-scenes
+Wyjątek: błąd 402 (brak kredytów API) — zatrzymaj cały batch natychmiast.
 
-4a. Wygeneruj nowy obraz z tym samym promptem (losowość BFL)
-    python3 -m musicvid.musicvid song.mp3 --rerender-scene 2
+## Równoległość
 
-4b. Lub z własnym promptem
-    python3 -m musicvid.musicvid song.mp3 --rerender-scene 2 \
-      --scene-prompt "Open Bible on wooden table with warm window light"
+Flaga --batch-parallel INT (domyślnie: 1)
+1 — sekwencyjnie (bezpieczne, domyślne)
+2 — dwie piosenki naraz (szybciej, większe ryzyko rate limit)
+Zalecane max 2-3.
 
-4c. Lub poproś Claude o nowy pomysł
-    python3 -m musicvid.musicvid song.mp3 --rerender-scene 2 --reprompt
+## Pomijanie już przetworzonych
 
-5. Zmontuj ponownie
-   python3 -m musicvid.musicvid song.mp3 --rebuild
+Jeśli piosenka ma już gotowy MP4 w output/ — pomiń ją.
+Wyświetl: "Pomijam: Tylko w Bogu (juz przetworzona, uzyj --batch-force aby powtorzyc)"
 
-## Jak działa re-render
+Flaga --batch-force: pomiń sprawdzanie, przetwórz wszystkie od nowa.
 
-Wczytaj scene_plan.json z cache.
-Znajdź scenę o podanym indeksie.
-Wygeneruj nowy obraz przez BFL API (jeden obraz, nie wszystkie).
-Zapisz jako scene_NNN.jpg w cache — nadpisz poprzedni.
-Jeśli --animate i scena była animowana: uruchom Runway ponownie.
-Wyświetl: "Scena 2 wygenerowana → output/tmp/{hash}/scene_002.jpg"
-Przypomnij: "Uruchom --rebuild żeby złożyć nowe wideo"
+## Logowanie postępu
 
-## Zachowanie scene_plan.json przy --scene-prompt
+Wyświetlaj prefix z numerem i nazwą piosenki:
+  BATCH [1/10] Tylko w Bogu
+  [1/4] Analiza audio...
+  [2/4] Rezyseria (Claude)...
+  [3/4] Generowanie obrazow...
+  [4/4] Montaz...
+  Gotowe — output/Tylko w Bogu/ (8m 32s)
 
-Gdy podano własny prompt:
-Zaktualizuj pole visual_prompt dla tej sceny w scene_plan.json.
-Zapisz zaktualizowany plan — następne --rebuild użyje nowego promptu.
-Wyświetl: "Plan scen zaktualizowany: scena 2 ma nowy prompt"
+  BATCH [2/10] Pan jest moca moja
+  ...
 
-## Nowy moduł musicvid/pipeline/scene_rerender.py
+Szacowany czas do końca po każdej piosence:
+"Szacowany czas do konca: ~42 minuty (5 piosenek x ~8.5 min)"
+
+## Szacowanie kosztu przed startem
+
+Przed uruchomieniem wyświetl szacunek i pytaj o potwierdzenie:
+
+  Znaleziono 10 piosenek.
+  Szacowany koszt (--mode ai --preset all):
+    BFL flux-pro: ~10 x 8 scen x $0.05 = ~$4.00
+    Claude API:   ~10 x 4 wywolania x $0.01 = ~$0.40
+    Lacznie: ~$4.40
+  Szacowany czas: ~10 x 9 minut = ~90 minut
+  Kontynuowac? [T/n]:
+
+Flaga --batch-yes: pomiń potwierdzenie (dla automatyzacji nocnej).
+
+## Plik konfiguracyjny batcha (opcjonalnie)
+
+Obsłuż plik batch.yaml w folderze wejściowym:
+
+  default:
+    mode: ai
+    provider: flux-pro
+    preset: all
+    effects: minimal
+    logo: ~/logo.svg
+
+  overrides:
+    "Pan jest moca moja":
+      style: powerful
+    "Tylko w Bogu":
+      provider: flux-dev
+      clip_duration: 30
+
+Gdy batch.yaml istnieje: użyj ustawień z pliku zamiast flag CLI.
+Overrides per piosenka nadpisują ustawienia domyślne.
+
+## Raport HTML — batch_report.html
+
+Generuj po zakończeniu całego batcha.
+Zawiera:
+- Tabelę: nazwa, status, czas generowania, szacowany koszt API
+- Miniatury pierwszej klatki każdego teledysku
+- Linki do wygenerowanych plików MP4
+- Podsumowanie: łączny czas, łączny koszt, liczba plików
+- Błędy z opisem dla nieudanych piosenek
+
+## Nowy moduł musicvid/pipeline/batch_processor.py
 
 Funkcje:
-- list_scenes(cache_dir) -> list[dict]
-  Wczytuje scene_plan.json, zwraca listę scen z indeksem i skrótem promptu.
+- discover_songs(folder_path) -> list[SongJob]
+  Wykrywa piosenki i paruje z lyrics/logo.
+  SongJob zawiera: audio_path, lyrics_path, logo_path, output_dir, config
 
-- print_scenes_table(scenes)
-  Wyświetla tabelę w terminalu (tabulate lub ręczne formatowanie).
+- estimate_cost(songs, config) -> dict
+  Szacuje koszt i czas dla całego batcha.
+  Zwraca dict z polami: bfl, claude, runway, total, minutes
 
-- rerender_scene(cache_dir, scene_idx, new_prompt=None, provider="flux-pro") -> str
-  Generuje nowy obraz dla sceny scene_idx.
-  Gdy new_prompt: aktualizuje scene_plan.json.
-  Gdy brak new_prompt: używa istniejącego promptu + style_suffix.
-  Zwraca ścieżkę do nowego pliku obrazu.
+- run_batch(songs, config, parallel=1) -> BatchReport
+  Przetwarza piosenki sekwencyjnie lub równolegle.
+  Błąd jednej piosenki nie zatrzymuje pozostałych.
+  Błąd 402 zatrzymuje cały batch natychmiast.
 
-- reprompt_scene(cache_dir, scene_idx, analysis, visual_bible) -> str
-  Wywołuje Claude API żeby wygenerować nowy prompt dla sceny.
-  Kontekst dla Claude: tekst sceny + visual_bible + info że poprzedni nie pasował.
-  Zapisuje nowy prompt w scene_plan.json.
-  Zwraca nowy prompt.
+- generate_html_report(report, output_path)
+  Generuje batch_report.html z miniaturami i podsumowaniem.
 
-- rebuild_video(audio_path, cache_dir, output_dir, platform_config, effects_config)
-  Wczytuje wszystkie assety z cache i montuje wideo od nowa.
-  Odpowiednik Stage 4 bez Stage 1-3.
-  Identyczny wynik co pełny pipeline dla tych samych assetów.
+- load_batch_config(folder_path) -> dict
+  Wczytuje batch.yaml jeśli istnieje, zwraca pusty dict jeśli nie ma.
 
 ## Integracja w musicvid.py
 
-Dodaj obsługę flag w CLI:
-  --list-scenes: wywołaj list_scenes() + print_scenes_table() i exit
-  --rerender-scene INT: wywołaj rerender_scene() i exit
-  --scene-prompt TEXT: używane razem z --rerender-scene
-  --reprompt: używane razem z --rerender-scene
-  --rebuild: wywołaj rebuild_video() bez Stage 1-3
-
-Walidacja:
-  --rerender-scene bez istniejącego cache: czytelny błąd
-  --rerender-scene N gdy N >= liczba scen: błąd z listą dostępnych
-  --scene-prompt bez --rerender-scene: błąd "--scene-prompt wymaga --rerender-scene"
-  --reprompt bez --rerender-scene: błąd analogiczny
-  --rebuild bez cache: błąd "Najpierw wygeneruj teledysk"
-
-## Cache — co jest zachowane między re-renderami
-
-Zachowuje się:
-  audio_analysis.json
-  scene_plan.json (aktualizowany przez --scene-prompt)
-  visual_bible.json
-  scene_NNN.jpg (nadpisywany przez --rerender-scene)
-  animated_scene_NNN.mp4 (nadpisywany jeśli --animate)
-
-Nie nadpisuje się automatycznie:
-  Poprzedni scene_NNN.jpg — rozważ backup do scene_NNN_backup.jpg
-  przed nadpisaniem żeby umożliwić powrót do poprzedniej wersji
-
-## Backup poprzedniej sceny
-
-Przed nadpisaniem scene_NNN.jpg stwórz kopię:
-  scene_002.jpg → scene_002_v1.jpg (jeśli v1 nie istnieje)
-  scene_002.jpg → scene_002_v2.jpg (przy kolejnym re-renderze)
-  itd. do maksymalnie 5 wersji
-
-Dodaj komendę --restore-scene N [--version V]:
-  python3 -m musicvid.musicvid song.mp3 --restore-scene 2
-  Przywraca ostatnią wersję backup (scene_002_v1.jpg → scene_002.jpg)
-  python3 -m musicvid.musicvid song.mp3 --restore-scene 2 --version 1
-  Przywraca konkretną wersję
+Dodaj obsługę flag:
+  --batch PATH: wywołaj discover_songs() + run_batch() zamiast standardowego pipeline
+  --batch-order: przekaż do discover_songs()
+  --batch-parallel INT: przekaż do run_batch()
+  --batch-force: pomiń sprawdzanie gotowych plików
+  --batch-yes: pomiń potwierdzenie kosztu
 
 ## Testy
-- list_scenes: zwraca listę z poprawnymi indeksami i sekcjami
-- rerender_scene: generuje plik scene_NNN.jpg w cache (mockuj BFL)
-- rerender_scene z new_prompt: aktualizuje scene_plan.json
-- reprompt_scene: mockuj Claude API, zwraca niepusty string
-- rebuild_video: montuje wideo (mockuj MoviePy), nie wywołuje Whisper ani BFL
-- Backup: scene_002_v1.jpg istnieje po pierwszym re-renderze
-- restore-scene: scene_002.jpg zastąpiony przez scene_002_v1.jpg
-- --rerender-scene bez cache: FileNotFoundError z komunikatem
-- --rerender-scene poza zakresem: ValueError z listą dostępnych
+- discover_songs wariant A: paruje MP3 z TXT o tej samej nazwie
+- discover_songs wariant B: wykrywa podfoldery i paruje pliki
+- discover_songs brak TXT: lyrics_path=None (Whisper jako fallback)
+- estimate_cost: zwraca dict z polami bfl, claude, total, minutes
+- run_batch: błąd jednej piosenki nie zatrzymuje kolejnych
+- run_batch: błąd 402 zatrzymuje batch natychmiast
+- Pomijanie: piosenka z gotowym MP4 pomijana bez --batch-force
+- --batch-force: wszystkie piosenki przetwarzane nawet z gotowym MP4
+- generate_html_report: plik HTML zawiera tabelę i linki
+- load_batch_config: wczytuje overrides per piosenka
 
 ## Acceptance Criteria
-- --list-scenes wyświetla tabelę scen z cache
-- --rerender-scene 2 generuje nowy obraz tylko dla sceny 2
-- --rerender-scene 2 --scene-prompt "..." używa podanego promptu
-- --rerender-scene 2 --reprompt pyta Claude o nowy prompt
-- --rebuild montuje wideo bez Stage 1-3
-- Backup poprzedniej wersji sceny przed nadpisaniem
-- --restore-scene przywraca poprzednią wersję
+- --batch folder/ przetwarza wszystkie piosenki w folderze
+- Parowanie MP3+TXT działa dla obu wariantów struktury folderu
+- Brak TXT: Whisper jako fallback bez błędu
+- Błąd jednej piosenki nie zatrzymuje pozostałych
+- Błąd 402 zatrzymuje cały batch natychmiast z komunikatem
+- Piosenki z gotowym MP4 pomijane (chyba że --batch-force)
+- Szacunek kosztu wyświetlany przed startem z potwierdzeniem
+- --batch-yes pomija potwierdzenie
+- batch_report.html generowany po zakończeniu
+- batch.yaml obsługiwany gdy istnieje w folderze
 - python3 -m pytest tests/ -v przechodzi

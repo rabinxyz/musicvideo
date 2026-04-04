@@ -1,5 +1,3 @@
-# Idea
-
 # Spec: AI dopasowanie tekstu z pliku do timingu Whisper
 
 ## Koncepcja

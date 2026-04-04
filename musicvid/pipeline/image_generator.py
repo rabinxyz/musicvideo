@@ -11,8 +11,8 @@ BFL_BASE_URL = "https://api.bfl.ai"
 
 BFL_MODELS = {
     "flux-dev": "flux-dev",
-    "flux-pro": "flux-pro1.1",
-    "flux-schnell": "flux-schnell",
+    "flux-pro": "flux-pro-1.1",
+    "flux-schnell": "flux-2-klein-4b",
 }
 
 POLL_INTERVAL = 1.5
@@ -53,32 +53,31 @@ def _get_headers():
     retry=retry_if_exception(_is_retryable),
 )
 def _submit_task(model_name, prompt):
-    """Submit an image generation task to BFL API. Returns task ID."""
+    """Submit an image generation task to BFL API. Returns (task_id, polling_url)."""
     url = f"{BFL_BASE_URL}/v1/{model_name}"
     payload = {
         "prompt": prompt,
         "width": 1280,
         "height": 720,
-        "output_format": "jpeg",
     }
     resp = requests.post(url, json=payload, headers=_get_headers())
     resp.raise_for_status()
-    return resp.json()["id"]
+    data = resp.json()
+    return data["id"], data["polling_url"]
 
 
-def _poll_result(task_id):
+def _poll_result(polling_url):
     """Poll BFL API until task is Ready or timeout (120s)."""
-    url = f"{BFL_BASE_URL}/v1/get_result"
     start = time.monotonic()
     while time.monotonic() - start < POLL_TIMEOUT:
-        resp = requests.get(url, params={"id": task_id}, headers=_get_headers())
+        resp = requests.get(polling_url, headers=_get_headers())
         resp.raise_for_status()
         data = resp.json()
         if data["status"] == "Ready":
             return data["result"]["sample"]
         time.sleep(POLL_INTERVAL)
     raise TimeoutError(
-        f"BFL task {task_id} did not complete within {POLL_TIMEOUT} seconds."
+        f"BFL task did not complete within {POLL_TIMEOUT} seconds."
     )
 
 
@@ -114,8 +113,8 @@ def generate_images(scene_plan, output_dir, provider="flux-dev"):
         visual_prompt = scene.get("visual_prompt", "nature landscape")
         full_prompt = f"{visual_prompt}, cinematic 16:9, photorealistic, high quality"
 
-        task_id = _submit_task(model_name, full_prompt)
-        image_url = _poll_result(task_id)
+        task_id, polling_url = _submit_task(model_name, full_prompt)
+        image_url = _poll_result(polling_url)
 
         dest = output_path / f"scene_{i:03d}.jpg"
         _download_image(image_url, str(dest))

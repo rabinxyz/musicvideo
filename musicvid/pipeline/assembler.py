@@ -91,10 +91,10 @@ def _create_ken_burns_clip(clip, duration, motion="slow_zoom_in", target_size=(1
         return clip
 
 
-def _create_subtitle_clips(lyrics, subtitle_style, size):
+def _create_subtitle_clips(lyrics, subtitle_style, size, font_path=None):
     """Create subtitle TextClips from lyrics with word-level timing."""
     clips = []
-    font_size = subtitle_style.get("font_size", 48)
+    font_size = subtitle_style.get("font_size", 58)
     color = subtitle_style.get("color", "#FFFFFF")
     outline_color = subtitle_style.get("outline_color", "#000000")
     margin_bottom = 80
@@ -110,7 +110,7 @@ def _create_subtitle_clips(lyrics, subtitle_style, size):
             color=color,
             stroke_color=outline_color,
             stroke_width=2,
-            font="/System/Library/Fonts/Geneva.ttf",
+            font=font_path,
             method="caption",
             size=(size[0] - 100, None),
         )
@@ -146,7 +146,7 @@ def _load_scene_clip(video_path, scene, target_size):
     return _create_ken_burns_clip(clip, duration, scene.get("motion", "static"), target_size)
 
 
-def assemble_video(analysis, scene_plan, fetch_manifest, audio_path, output_path, resolution="1080p"):
+def assemble_video(analysis, scene_plan, fetch_manifest, audio_path, output_path, resolution="1080p", font_path=None):
     """Assemble the final music video.
 
     Args:
@@ -156,6 +156,7 @@ def assemble_video(analysis, scene_plan, fetch_manifest, audio_path, output_path
         audio_path: Path to the original audio file.
         output_path: Path for the output MP4 file.
         resolution: Output resolution string (720p, 1080p, 4k).
+        font_path: Path to a font file for subtitles.
     """
     target_size = _get_resolution(resolution)
     scenes = scene_plan["scenes"]
@@ -173,6 +174,7 @@ def assemble_video(analysis, scene_plan, fetch_manifest, audio_path, output_path
         analysis.get("lyrics", []),
         scene_plan.get("subtitle_style", {}),
         target_size,
+        font_path=font_path,
     )
 
     final = CompositeVideoClip([video] + subtitle_clips, size=target_size)

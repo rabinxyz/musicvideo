@@ -58,6 +58,27 @@ class TestCreateSubtitleClips:
         clips = _create_subtitle_clips([], subtitle_style, (1920, 1080))
         assert len(clips) == 0
 
+    @patch("musicvid.pipeline.assembler.vfx")
+    @patch("musicvid.pipeline.assembler.TextClip")
+    def test_uses_provided_font_path(self, mock_text_clip, mock_vfx, sample_analysis, sample_scene_plan):
+        mock_clip = MagicMock()
+        mock_clip.with_duration.return_value = mock_clip
+        mock_clip.with_start.return_value = mock_clip
+        mock_clip.with_position.return_value = mock_clip
+        mock_clip.with_effects.return_value = mock_clip
+        mock_text_clip.return_value = mock_clip
+
+        subtitle_style = sample_scene_plan["subtitle_style"]
+        _create_subtitle_clips(
+            sample_analysis["lyrics"],
+            subtitle_style,
+            (1920, 1080),
+            font_path="/custom/font.ttf",
+        )
+
+        call_kwargs = mock_text_clip.call_args[1]
+        assert call_kwargs["font"] == "/custom/font.ttf"
+
 
 class TestAssembleVideo:
     """Tests for the main assemble_video function."""
@@ -114,3 +135,56 @@ class TestAssembleVideo:
         mock_clip.write_videofile.assert_called_once()
         call_args = mock_clip.write_videofile.call_args
         assert output_file in str(call_args)
+
+    @patch("musicvid.pipeline.assembler.vfx")
+    @patch("musicvid.pipeline.assembler.VideoFileClip")
+    @patch("musicvid.pipeline.assembler.ImageClip")
+    @patch("musicvid.pipeline.assembler.AudioFileClip")
+    @patch("musicvid.pipeline.assembler.TextClip")
+    @patch("musicvid.pipeline.assembler.CompositeVideoClip")
+    @patch("musicvid.pipeline.assembler.concatenate_videoclips")
+    def test_passes_font_path_to_subtitles(
+        self, mock_concat, mock_composite, mock_text, mock_audio,
+        mock_image, mock_video, mock_vfx, sample_analysis, sample_scene_plan, tmp_output
+    ):
+        mock_clip = MagicMock()
+        mock_clip.duration = 5.0
+        mock_clip.size = (1920, 1080)
+        mock_clip.w = 1920
+        mock_clip.h = 1080
+        mock_clip.resized.return_value = mock_clip
+        mock_clip.subclipped.return_value = mock_clip
+        mock_clip.with_duration.return_value = mock_clip
+        mock_clip.with_position.return_value = mock_clip
+        mock_clip.with_start.return_value = mock_clip
+        mock_clip.with_effects.return_value = mock_clip
+        mock_clip.transform.return_value = mock_clip
+        mock_clip.with_audio.return_value = mock_clip
+
+        mock_video.return_value = mock_clip
+        mock_image.return_value = mock_clip
+        mock_audio.return_value = mock_clip
+        mock_text.return_value = mock_clip
+        mock_concat.return_value = mock_clip
+        mock_composite.return_value = mock_clip
+
+        fetch_manifest = [
+            {"scene_index": 0, "video_path": "/fake/scene_000.mp4", "search_query": "test"},
+            {"scene_index": 1, "video_path": "/fake/scene_001.mp4", "search_query": "test"},
+            {"scene_index": 2, "video_path": "/fake/scene_002.png", "search_query": "test"},
+        ]
+
+        output_file = str(tmp_output / "output.mp4")
+
+        assemble_video(
+            analysis=sample_analysis,
+            scene_plan=sample_scene_plan,
+            fetch_manifest=fetch_manifest,
+            audio_path="/fake/audio.mp3",
+            output_path=output_file,
+            resolution="1080p",
+            font_path="/custom/font.ttf",
+        )
+
+        call_kwargs = mock_text.call_args[1]
+        assert call_kwargs["font"] == "/custom/font.ttf"

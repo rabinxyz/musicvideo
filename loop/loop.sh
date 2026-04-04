@@ -1,0 +1,1 @@
+../../ai-devcontainer-sync-pub/src/scripts/loop.sh

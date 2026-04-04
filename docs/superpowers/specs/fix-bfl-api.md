@@ -1,5 +1,3 @@
-# Idea
-
 # Spec: Naprawa wywołania BFL API (błąd 422)
 
 ## Problem

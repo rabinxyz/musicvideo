@@ -12,7 +12,7 @@ CLI tool that generates synchronized MP4 music videos from audio files using sto
 ## Architecture
 4-stage pipeline: audio_analyzer → director → stock_fetcher/image_generator → assembler, orchestrated by Click CLI in `musicvid/musicvid.py`.
 - `--mode stock` (default): Stage 3 uses `stock_fetcher` (Pexels API)
-- `--mode ai`: Stage 3 uses `image_generator` (BFL API: flux-dev/flux-pro/flux-schnell), caches to `image_manifest.json`
+- `--mode ai`: Stage 3 uses `image_generator` (BFL API: flux-dev/flux-pro-1.1/flux-2-klein-4b), caches to `image_manifest.json`
 - `--provider [flux-dev|flux-pro|flux-schnell]` (default: flux-dev): selects BFL model for `--mode ai`
 - `--font PATH`: custom .ttf font for subtitles (optional, defaults to auto-downloaded Montserrat Light)
 - `--lyrics PATH`: custom .txt lyrics file (optional, skips Whisper); auto-detects single .txt in audio dir
@@ -37,6 +37,8 @@ CLI tool that generates synchronized MP4 music videos from audio files using sto
 - `librosa` must be mocked at module level (`musicvid.pipeline.audio_analyzer.librosa`) since `_detect_sections` calls multiple librosa functions
 - Stock fetcher tests need `PEXELS_API_KEY` env var set via `@patch.dict(os.environ)` to exercise API code path
 - Image generator BFL tests need `BFL_API_KEY` env var via `@patch.dict(os.environ)` and mock `requests` at module level
+- BFL API flow: `_submit_task` returns `(task_id, polling_url)` tuple; `_poll_result` takes `polling_url` (not task_id)
+- BFL API payload: only `prompt`, `width`, `height` — no `output_format`, `safety_tolerance`, or `prompt_upsampling`
 - Image generator polling tests mock `time.monotonic` and `time.sleep` to control timing
 - Image generator retry tests must patch tenacity wait to `wait_none()` to avoid slow tests
 - Font loader: `musicvid/pipeline/font_loader.py` auto-downloads Montserrat from Google Fonts ZIP, falls back to system DejaVuSans

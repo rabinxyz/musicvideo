@@ -1,5 +1,3 @@
-# Idea
-
 # Spec: Flaga --lyrics z automatycznym wykrywaniem pliku tekstowego
 
 ## Kontekst

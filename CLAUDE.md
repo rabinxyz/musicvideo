@@ -4,7 +4,7 @@
 CLI tool that generates synchronized MP4 music videos from audio files using stock footage, beat-synced cuts, and whisper-based subtitles.
 
 ## Commands
-- `python3 -m pytest tests/ -v` - run all tests (65 tests)
+- `python3 -m pytest tests/ -v` - run all tests (80 tests)
 - `python3 -m musicvid.musicvid song.mp3` - run the CLI (uses cache by default)
 - `python3 -m musicvid.musicvid song.mp3 --new` - force recalculation, ignore cache
 - `python3 -c "import musicvid; print(musicvid.__version__)"` - check version
@@ -15,10 +15,12 @@ CLI tool that generates synchronized MP4 music videos from audio files using sto
 - `--mode ai`: Stage 3 uses `image_generator` (BFL API: flux-dev/flux-pro/flux-schnell), caches to `image_manifest.json`
 - `--provider [flux-dev|flux-pro|flux-schnell]` (default: flux-dev): selects BFL model for `--mode ai`
 - `--font PATH`: custom .ttf font for subtitles (optional, defaults to auto-downloaded Montserrat Light)
+- `--lyrics PATH`: custom .txt lyrics file (optional, skips Whisper); auto-detects single .txt in audio dir
+- Lyrics parser: `musicvid/pipeline/lyrics_parser.py` — variant A (plain text, even distribution) and B (MM:SS/HH:MM:SS timestamps)
 
 ## Caching
 - Content-addressed cache in `output/tmp/{audio_hash}/` (MD5 of first 64KB, 12 chars)
-- Cached files: `audio_analysis.json`, `scene_plan.json`, `video_manifest.json`, `image_manifest.json` (ai mode)
+- Cached files: `audio_analysis.json` (or `audio_analysis_{lyrics_hash}.json` when --lyrics used), `scene_plan.json`, `video_manifest.json`, `image_manifest.json` (ai mode)
 - Stages 1-3 skip if cached; stage 3 also verifies video files exist on disk
 - `--new` flag forces full recalculation (deletes cache dir)
 - Cache utilities in `musicvid/pipeline/cache.py` (`get_audio_hash`, `load_cache`, `save_cache`)

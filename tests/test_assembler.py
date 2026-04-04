@@ -773,3 +773,117 @@ class TestAssembleVideoLogo:
         )
 
         mock_apply_logo.assert_not_called()
+
+class TestAssembleVideoLut:
+    @patch("musicvid.pipeline.assembler.apply_logo")
+    @patch("musicvid.pipeline.assembler.create_cinematic_bars")
+    @patch("musicvid.pipeline.assembler.create_light_leak")
+    @patch("musicvid.pipeline.assembler.apply_effects")
+    @patch("musicvid.pipeline.assembler.vfx")
+    @patch("musicvid.pipeline.assembler.VideoFileClip")
+    @patch("musicvid.pipeline.assembler.ImageClip")
+    @patch("musicvid.pipeline.assembler.AudioFileClip")
+    @patch("musicvid.pipeline.assembler.TextClip")
+    @patch("musicvid.pipeline.assembler.CompositeVideoClip")
+    @patch("musicvid.pipeline.assembler.concatenate_videoclips")
+    @patch("musicvid.pipeline.assembler.prepare_lut_ffmpeg_params")
+    def test_lut_params_passed_to_write_videofile(
+        self, mock_prepare_lut, mock_concat, mock_composite, mock_text, mock_audio,
+        mock_image, mock_video, mock_vfx, mock_apply_effects,
+        mock_light_leak, mock_bars, mock_apply_logo,
+        sample_analysis, sample_scene_plan, tmp_output
+    ):
+        mock_clip = MagicMock()
+        mock_clip.duration = 5.0
+        mock_clip.size = (1920, 1080)
+        mock_clip.resized.return_value = mock_clip
+        mock_clip.with_duration.return_value = mock_clip
+        mock_clip.with_effects.return_value = mock_clip
+        mock_clip.transform.return_value = mock_clip
+        mock_clip.with_audio.return_value = mock_clip
+        mock_clip.with_start.return_value = mock_clip
+        mock_clip.with_end.return_value = mock_clip
+        mock_clip.with_position.return_value = mock_clip
+        mock_concat.return_value = mock_clip
+        mock_composite.return_value = mock_clip
+        mock_audio.return_value = mock_clip
+        mock_text.return_value = mock_clip
+        mock_image.return_value = mock_clip
+        mock_video.return_value = mock_clip
+        mock_apply_effects.return_value = mock_clip
+        mock_bars.return_value = []
+        mock_prepare_lut.return_value = ["-vf", "lut3d='/tmp/test.cube':interp=trilinear"]
+
+        output_file = str(tmp_output / "test_lut.mp4")
+        manifest = [{"scene_index": 0, "video_path": "/fake/vid.mp4", "search_query": "test"}]
+
+        assemble_video(
+            analysis=sample_analysis,
+            scene_plan=sample_scene_plan,
+            fetch_manifest=manifest,
+            audio_path="/fake/audio.mp3",
+            output_path=output_file,
+            lut_style="warm",
+            lut_intensity=0.85,
+        )
+
+        mock_prepare_lut.assert_called_once_with(
+            lut_path=None, lut_style="warm", intensity=0.85
+        )
+        call_kwargs = mock_clip.write_videofile.call_args[1]
+        assert "ffmpeg_params" in call_kwargs
+        assert "lut3d" in str(call_kwargs["ffmpeg_params"])
+
+    @patch("musicvid.pipeline.assembler.apply_logo")
+    @patch("musicvid.pipeline.assembler.create_cinematic_bars")
+    @patch("musicvid.pipeline.assembler.create_light_leak")
+    @patch("musicvid.pipeline.assembler.apply_effects")
+    @patch("musicvid.pipeline.assembler.vfx")
+    @patch("musicvid.pipeline.assembler.VideoFileClip")
+    @patch("musicvid.pipeline.assembler.ImageClip")
+    @patch("musicvid.pipeline.assembler.AudioFileClip")
+    @patch("musicvid.pipeline.assembler.TextClip")
+    @patch("musicvid.pipeline.assembler.CompositeVideoClip")
+    @patch("musicvid.pipeline.assembler.concatenate_videoclips")
+    @patch("musicvid.pipeline.assembler.prepare_lut_ffmpeg_params")
+    def test_no_lut_means_no_ffmpeg_params(
+        self, mock_prepare_lut, mock_concat, mock_composite, mock_text, mock_audio,
+        mock_image, mock_video, mock_vfx, mock_apply_effects,
+        mock_light_leak, mock_bars, mock_apply_logo,
+        sample_analysis, sample_scene_plan, tmp_output
+    ):
+        mock_clip = MagicMock()
+        mock_clip.duration = 5.0
+        mock_clip.size = (1920, 1080)
+        mock_clip.resized.return_value = mock_clip
+        mock_clip.with_duration.return_value = mock_clip
+        mock_clip.with_effects.return_value = mock_clip
+        mock_clip.transform.return_value = mock_clip
+        mock_clip.with_audio.return_value = mock_clip
+        mock_clip.with_start.return_value = mock_clip
+        mock_clip.with_end.return_value = mock_clip
+        mock_clip.with_position.return_value = mock_clip
+        mock_concat.return_value = mock_clip
+        mock_composite.return_value = mock_clip
+        mock_audio.return_value = mock_clip
+        mock_text.return_value = mock_clip
+        mock_image.return_value = mock_clip
+        mock_video.return_value = mock_clip
+        mock_apply_effects.return_value = mock_clip
+        mock_bars.return_value = []
+        mock_prepare_lut.return_value = []
+
+        output_file = str(tmp_output / "test_no_lut.mp4")
+        manifest = [{"scene_index": 0, "video_path": "/fake/vid.mp4", "search_query": "test"}]
+
+        assemble_video(
+            analysis=sample_analysis,
+            scene_plan=sample_scene_plan,
+            fetch_manifest=manifest,
+            audio_path="/fake/audio.mp3",
+            output_path=output_file,
+        )
+
+        call_kwargs = mock_clip.write_videofile.call_args[1]
+        if "ffmpeg_params" in call_kwargs:
+            assert "lut3d" not in str(call_kwargs["ffmpeg_params"])

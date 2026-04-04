@@ -16,6 +16,7 @@ from moviepy import (
 
 from musicvid.pipeline.effects import apply_effects, create_cinematic_bars, create_light_leak
 from musicvid.pipeline.logo_overlay import apply_logo
+from musicvid.pipeline.color_grade import prepare_lut_ffmpeg_params
 
 
 RESOLUTION_MAP = {
@@ -198,7 +199,7 @@ def _load_scene_clip(video_path, scene, target_size):
     return _create_ken_burns_clip(clip, duration, scene.get("motion", "static"), target_size)
 
 
-def assemble_video(analysis, scene_plan, fetch_manifest, audio_path, output_path, resolution="1080p", font_path=None, effects_level="minimal", clip_start=None, clip_end=None, title_card_text=None, audio_fade_out=1.0, subtitle_margin_bottom=80, cinematic_bars=True, logo_path=None, logo_position="top-left", logo_size=None, logo_opacity=0.85):
+def assemble_video(analysis, scene_plan, fetch_manifest, audio_path, output_path, resolution="1080p", font_path=None, effects_level="minimal", clip_start=None, clip_end=None, title_card_text=None, audio_fade_out=1.0, subtitle_margin_bottom=80, cinematic_bars=True, logo_path=None, logo_position="top-left", logo_size=None, logo_opacity=0.85, lut_path=None, lut_style=None, lut_intensity=0.85):
     """Assemble the final music video.
 
     Args:
@@ -270,10 +271,18 @@ def assemble_video(analysis, scene_plan, fetch_manifest, audio_path, output_path
     final = final.with_duration(min(final.duration, audio.duration))
 
     Path(output_path).parent.mkdir(parents=True, exist_ok=True)
-    final.write_videofile(
-        output_path,
+
+    lut_ffmpeg_params = prepare_lut_ffmpeg_params(
+        lut_path=lut_path, lut_style=lut_style, intensity=lut_intensity
+    )
+
+    write_kwargs = dict(
         codec="libx264",
         audio_codec="aac",
         bitrate="8000k",
         fps=30,
     )
+    if lut_ffmpeg_params:
+        write_kwargs["ffmpeg_params"] = lut_ffmpeg_params
+
+    final.write_videofile(output_path, **write_kwargs)

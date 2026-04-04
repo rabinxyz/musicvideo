@@ -1,6 +1,8 @@
 """LUT (Look Up Table) color grading for cinematic video output."""
 
 import numpy as np
+import tempfile
+import os
 
 
 def _identity_lut(size=33):
@@ -140,3 +142,40 @@ def get_ffmpeg_lut_filter(lut_path, intensity):
         f"[b]lut3d='{lut_path}':interp=trilinear[graded];"
         f"[a][graded]blend=all_mode=normal:all_opacity={intensity:.2f}"
     )
+
+
+def prepare_lut_ffmpeg_params(lut_path=None, lut_style=None, intensity=0.85):
+    """Prepare FFmpeg params for LUT color grading.
+
+    Priority: lut_path (custom .cube file) > lut_style (built-in).
+    If neither is provided, returns empty list (no LUT).
+
+    Args:
+        lut_path: Path to custom .cube file (optional).
+        lut_style: Built-in style name (optional).
+        intensity: LUT intensity 0.0-1.0 (default 0.85).
+
+    Returns:
+        List of FFmpeg params, e.g. ["-vf", "lut3d='...'"] or [].
+    """
+    if intensity <= 0.0:
+        return []
+
+    cube_path = None
+
+    if lut_path:
+        cube_path = load_lut_file(lut_path)
+    elif lut_style:
+        lut = generate_builtin_lut(lut_style)
+        tmp_dir = tempfile.gettempdir()
+        cube_path = os.path.join(tmp_dir, f"musicvid_lut_{lut_style}.cube")
+        save_lut_as_cube(lut, cube_path)
+
+    if not cube_path:
+        return []
+
+    vf_filter = get_ffmpeg_lut_filter(cube_path, intensity)
+    if vf_filter is None:
+        return []
+
+    return ["-vf", vf_filter]

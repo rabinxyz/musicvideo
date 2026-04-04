@@ -6,6 +6,7 @@ import pytest
 
 from musicvid.pipeline.color_grade import generate_builtin_lut, save_lut_as_cube, load_lut_file
 from musicvid.pipeline.color_grade import get_ffmpeg_lut_filter
+from musicvid.pipeline.color_grade import prepare_lut_ffmpeg_params
 
 
 class TestGenerateBuiltinLut:
@@ -139,3 +140,44 @@ class TestGetFfmpegLutFilter:
     def test_zero_intensity_returns_none(self):
         result = get_ffmpeg_lut_filter("/tmp/test.cube", 0.0)
         assert result is None
+
+
+class TestPrepareLutFfmpegParams:
+    def test_builtin_style_returns_ffmpeg_params(self):
+        params = prepare_lut_ffmpeg_params(lut_style="warm", intensity=0.85)
+        assert isinstance(params, list)
+        assert "-vf" in params
+        assert any("lut3d" in p for p in params)
+
+    def test_custom_lut_file(self, tmp_path):
+        cube_file = tmp_path / "custom.cube"
+        cube_file.write_text("TITLE \"Test\"\nLUT_3D_SIZE 2\n0 0 0\n1 0 0\n0 1 0\n1 1 0\n0 0 1\n1 0 1\n0 1 1\n1 1 1\n")
+        params = prepare_lut_ffmpeg_params(lut_path=str(cube_file), intensity=1.0)
+        assert "-vf" in params
+        assert any(str(cube_file) in p for p in params)
+
+    def test_custom_lut_overrides_style(self, tmp_path):
+        """When both --lut and --lut-style given, --lut wins."""
+        cube_file = tmp_path / "custom.cube"
+        cube_file.write_text("TITLE \"Test\"\nLUT_3D_SIZE 2\n0 0 0\n1 0 0\n0 1 0\n1 1 0\n0 0 1\n1 0 1\n0 1 1\n1 1 1\n")
+        params = prepare_lut_ffmpeg_params(lut_path=str(cube_file), lut_style="warm", intensity=0.85)
+        assert any(str(cube_file) in p for p in params)
+
+    def test_zero_intensity_returns_empty(self):
+        params = prepare_lut_ffmpeg_params(lut_style="warm", intensity=0.0)
+        assert params == []
+
+    def test_no_lut_no_style_returns_empty(self):
+        params = prepare_lut_ffmpeg_params(intensity=0.85)
+        assert params == []
+
+    def test_all_styles_produce_valid_params(self):
+        for style in ["warm", "cold", "cinematic", "natural", "faded"]:
+            params = prepare_lut_ffmpeg_params(lut_style=style, intensity=0.85)
+            assert "-vf" in params, f"Style '{style}' should produce valid ffmpeg params"
+
+    def test_intensity_value_in_params(self):
+        params = prepare_lut_ffmpeg_params(lut_style="warm", intensity=0.5)
+        vf_idx = params.index("-vf")
+        filter_str = params[vf_idx + 1]
+        assert "0.50" in filter_str

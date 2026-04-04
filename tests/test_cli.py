@@ -260,3 +260,99 @@ class TestCLI:
         # Stage 3 should run because video file is missing
         mock_fetch.assert_called_once()
         mock_assemble.assert_called_once()
+
+    @patch("musicvid.musicvid.assemble_video")
+    @patch("musicvid.musicvid.generate_images")
+    @patch("musicvid.musicvid.create_scene_plan")
+    @patch("musicvid.musicvid.analyze_audio")
+    def test_mode_ai_calls_image_generator(
+        self, mock_analyze, mock_direct, mock_gen_images, mock_assemble, runner, tmp_path
+    ):
+        audio_file = tmp_path / "test.mp3"
+        audio_file.write_bytes(b"fake audio")
+
+        mock_analyze.return_value = {
+            "lyrics": [], "beats": [0.0, 0.5], "bpm": 120.0,
+            "duration": 10.0, "sections": [{"label": "verse", "start": 0.0, "end": 10.0}],
+            "mood_energy": "contemplative", "language": "en",
+        }
+        mock_direct.return_value = {
+            "overall_style": "contemplative",
+            "color_palette": ["#aaa"],
+            "subtitle_style": {"font_size": 48, "color": "#FFF", "outline_color": "#000",
+                               "position": "center-bottom", "animation": "fade"},
+            "scenes": [{"section": "verse", "start": 0.0, "end": 10.0,
+                         "visual_prompt": "test", "motion": "static",
+                         "transition": "cut", "overlay": "none"}],
+        }
+        mock_gen_images.return_value = [str(tmp_path / "scene_000.png")]
+
+        output_dir = tmp_path / "output"
+        result = runner.invoke(cli, [
+            str(audio_file),
+            "--output", str(output_dir),
+            "--mode", "ai",
+        ])
+
+        assert result.exit_code == 0
+        mock_gen_images.assert_called_once()
+        mock_assemble.assert_called_once()
+
+        # Check that fetch_manifest passed to assembler uses image paths
+        call_kwargs = mock_assemble.call_args[1]
+        manifest = call_kwargs["fetch_manifest"]
+        assert manifest[0]["video_path"].endswith(".png")
+
+    @patch("musicvid.musicvid.assemble_video")
+    @patch("musicvid.musicvid.generate_images")
+    @patch("musicvid.musicvid.create_scene_plan")
+    @patch("musicvid.musicvid.analyze_audio")
+    def test_mode_ai_cache_skips_generation(
+        self, mock_analyze, mock_direct, mock_gen_images, mock_assemble, runner, tmp_path
+    ):
+        """When cached image_manifest.json exists with valid files, skip generation."""
+        audio_file = tmp_path / "test.mp3"
+        audio_file.write_bytes(b"fake audio")
+
+        from musicvid.pipeline.cache import get_audio_hash
+        audio_hash = get_audio_hash(str(audio_file))
+
+        output_dir = tmp_path / "output"
+        cache_dir = output_dir / "tmp" / audio_hash
+        cache_dir.mkdir(parents=True)
+
+        analysis_data = {
+            "lyrics": [], "beats": [0.0], "bpm": 120.0,
+            "duration": 10.0, "sections": [{"label": "verse", "start": 0.0, "end": 10.0}],
+            "mood_energy": "contemplative", "language": "en",
+        }
+        scene_plan_data = {
+            "overall_style": "contemplative",
+            "color_palette": ["#aaa"],
+            "subtitle_style": {"font_size": 48, "color": "#FFF", "outline_color": "#000",
+                               "position": "center-bottom", "animation": "fade"},
+            "scenes": [{"section": "verse", "start": 0.0, "end": 10.0,
+                         "visual_prompt": "test", "motion": "static",
+                         "transition": "cut", "overlay": "none"}],
+        }
+
+        # Create the cached image file
+        image_path = cache_dir / "scene_000.png"
+        image_path.write_bytes(b"fake png")
+
+        manifest_data = [
+            {"scene_index": 0, "video_path": str(image_path), "search_query": "test"},
+        ]
+
+        (cache_dir / "audio_analysis.json").write_text(json.dumps(analysis_data))
+        (cache_dir / "scene_plan.json").write_text(json.dumps(scene_plan_data))
+        (cache_dir / "image_manifest.json").write_text(json.dumps(manifest_data))
+
+        result = runner.invoke(cli, [
+            str(audio_file), "--output", str(output_dir), "--mode", "ai",
+        ])
+
+        assert result.exit_code == 0
+        mock_gen_images.assert_not_called()
+        mock_assemble.assert_called_once()
+        assert "CACHED" in result.output

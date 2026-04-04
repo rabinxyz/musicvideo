@@ -10,6 +10,7 @@ from musicvid.pipeline.audio_analyzer import analyze_audio
 from musicvid.pipeline.cache import get_audio_hash, load_cache, save_cache
 from musicvid.pipeline.director import create_scene_plan
 from musicvid.pipeline.stock_fetcher import fetch_videos
+from musicvid.pipeline.image_generator import generate_images
 from musicvid.pipeline.assembler import assemble_video
 
 
@@ -18,6 +19,11 @@ load_dotenv()
 
 def _video_files_exist(manifest):
     """Check that all video files referenced in the manifest exist on disk."""
+    return all(Path(entry["video_path"]).exists() for entry in manifest)
+
+
+def _image_files_exist(manifest):
+    """Check that all image files referenced in the manifest exist on disk."""
     return all(Path(entry["video_path"]).exists() for entry in manifest)
 
 
@@ -65,16 +71,31 @@ def cli(audio_file, mode, style, output, resolution, lang, new):
         save_cache(str(cache_dir), "scene_plan.json", scene_plan)
     click.echo(f"  Style: {scene_plan['overall_style']}, Scenes: {len(scene_plan['scenes'])}")
 
-    # Stage 3: Fetch Videos
-    fetch_manifest = load_cache(str(cache_dir), "video_manifest.json") if not new else None
-    if fetch_manifest and _video_files_exist(fetch_manifest):
-        click.echo("[3/4] Fetching videos... CACHED (skipped)")
+    # Stage 3: Fetch Videos or Generate Images
+    if mode == "ai":
+        image_manifest = load_cache(str(cache_dir), "image_manifest.json") if not new else None
+        if image_manifest and _image_files_exist(image_manifest):
+            click.echo("[3/4] Generating images... CACHED (skipped)")
+            fetch_manifest = image_manifest
+        else:
+            click.echo("[3/4] Generating AI images...")
+            image_paths = generate_images(scene_plan, str(cache_dir))
+            fetch_manifest = [
+                {"scene_index": i, "video_path": path, "search_query": scene["visual_prompt"]}
+                for i, (path, scene) in enumerate(zip(image_paths, scene_plan["scenes"]))
+            ]
+            save_cache(str(cache_dir), "image_manifest.json", fetch_manifest)
+        click.echo(f"  Generated: {len(fetch_manifest)} images")
     else:
-        click.echo("[3/4] Fetching stock videos...")
-        fetch_manifest = fetch_videos(scene_plan, output_dir=str(cache_dir))
-        save_cache(str(cache_dir), "video_manifest.json", fetch_manifest)
-    fetched = sum(1 for f in fetch_manifest if f["video_path"].endswith(".mp4"))
-    click.echo(f"  Fetched: {fetched}/{len(fetch_manifest)} videos")
+        fetch_manifest = load_cache(str(cache_dir), "video_manifest.json") if not new else None
+        if fetch_manifest and _video_files_exist(fetch_manifest):
+            click.echo("[3/4] Fetching videos... CACHED (skipped)")
+        else:
+            click.echo("[3/4] Fetching stock videos...")
+            fetch_manifest = fetch_videos(scene_plan, output_dir=str(cache_dir))
+            save_cache(str(cache_dir), "video_manifest.json", fetch_manifest)
+        fetched = sum(1 for f in fetch_manifest if f["video_path"].endswith(".mp4"))
+        click.echo(f"  Fetched: {fetched}/{len(fetch_manifest)} videos")
 
     # Stage 4: Assemble Video
     click.echo("[4/4] Assembling video...")

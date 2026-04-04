@@ -7,6 +7,7 @@ from unittest.mock import MagicMock, patch
 from musicvid.pipeline.effects import apply_warm_grade
 from musicvid.pipeline.effects import apply_vignette
 from musicvid.pipeline.effects import create_cinematic_bars
+from musicvid.pipeline.effects import apply_film_grain
 
 
 class TestApplyWarmGrade:
@@ -107,3 +108,41 @@ class TestCreateCinematicBars:
         call_args_list = mock_color_clip.call_args_list
         size_arg = call_args_list[0][1]["size"]
         assert size_arg == (1920, 129)
+
+
+class TestApplyFilmGrain:
+    """Tests for film grain (animated noise) effect."""
+
+    def test_adds_noise_to_frame(self):
+        """Frame should differ from original after grain is applied."""
+        frame = np.full((100, 100, 3), 128, dtype=np.uint8)
+        mock_clip = MagicMock()
+        mock_clip.transform.return_value = mock_clip
+
+        apply_film_grain(mock_clip)
+
+        transform_fn = mock_clip.transform.call_args[0][0]
+        get_frame = lambda t: frame.copy()
+
+        np.random.seed(42)
+        output = transform_fn(get_frame, 0)
+
+        # Grain adds noise, so output should not be identical to input
+        assert not np.array_equal(output, frame)
+
+    def test_grain_is_subtle(self):
+        """Mean pixel difference should be small (opacity 0.15, sigma 8)."""
+        frame = np.full((100, 100, 3), 128, dtype=np.uint8)
+        mock_clip = MagicMock()
+        mock_clip.transform.return_value = mock_clip
+
+        apply_film_grain(mock_clip)
+
+        transform_fn = mock_clip.transform.call_args[0][0]
+        get_frame = lambda t: frame.copy()
+
+        np.random.seed(42)
+        output = transform_fn(get_frame, 0)
+
+        diff = np.abs(output.astype(int) - frame.astype(int))
+        assert diff.mean() < 5, f"Grain too strong: mean diff {diff.mean()}"

@@ -38,6 +38,16 @@ def apply_vignette(clip):
     return clip.transform(_vignette)
 
 
+def apply_film_grain(clip):
+    """Apply animated film grain: Gaussian noise sigma=8, opacity 0.15."""
+    def _grain(get_frame, t):
+        frame = get_frame(t).astype(np.float32)
+        noise = np.random.normal(0, 8, frame.shape).astype(np.float32)
+        result = frame + noise * 0.15
+        return np.clip(result, 0, 255).astype(np.uint8)
+    return clip.transform(_grain)
+
+
 def create_cinematic_bars(width, height, duration):
     """Create top and bottom black cinematic bars (12% height each)."""
     bar_h = int(height * 0.12)

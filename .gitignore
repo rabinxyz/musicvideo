@@ -1,3 +1,4 @@
+.DS_Store
 loop/logs/
 output/
 *.mp4

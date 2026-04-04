@@ -1,9 +1,10 @@
 """Tests for musicvid.pipeline.color_grade module."""
 
+import os
 import numpy as np
 import pytest
 
-from musicvid.pipeline.color_grade import generate_builtin_lut
+from musicvid.pipeline.color_grade import generate_builtin_lut, save_lut_as_cube, load_lut_file
 
 
 class TestGenerateBuiltinLut:
@@ -59,3 +60,59 @@ class TestGenerateBuiltinLut:
         lut = generate_builtin_lut("faded")
         black = lut[0, 0, 0]
         assert black.min() > 0.02, "Faded LUT should lift blacks above zero"
+
+
+class TestSaveLutAsCube:
+    def test_creates_cube_file(self, tmp_path):
+        lut = generate_builtin_lut("warm")
+        path = save_lut_as_cube(lut, str(tmp_path / "test.cube"))
+        assert os.path.exists(path)
+        assert path.endswith(".cube")
+
+    def test_cube_file_has_correct_header(self, tmp_path):
+        lut = generate_builtin_lut("warm", size=5)
+        path = save_lut_as_cube(lut, str(tmp_path / "test.cube"))
+        with open(path) as f:
+            lines = f.readlines()
+        assert any("LUT_3D_SIZE 5" in line for line in lines)
+        assert any("TITLE" in line for line in lines)
+
+    def test_cube_file_has_correct_data_count(self, tmp_path):
+        size = 5
+        lut = generate_builtin_lut("warm", size=size)
+        path = save_lut_as_cube(lut, str(tmp_path / "test.cube"))
+        with open(path) as f:
+            lines = f.readlines()
+        data_lines = [l for l in lines if l.strip() and not l.startswith("#") and not l.startswith("TITLE") and not l.startswith("LUT_3D_SIZE") and not l.startswith("DOMAIN")]
+        assert len(data_lines) == size ** 3
+
+    def test_values_in_0_to_1_range(self, tmp_path):
+        lut = generate_builtin_lut("warm", size=5)
+        path = save_lut_as_cube(lut, str(tmp_path / "test.cube"))
+        with open(path) as f:
+            for line in f:
+                line = line.strip()
+                if not line or line.startswith("#") or line.startswith("TITLE") or line.startswith("LUT_3D_SIZE") or line.startswith("DOMAIN"):
+                    continue
+                values = [float(v) for v in line.split()]
+                assert len(values) == 3
+                for v in values:
+                    assert 0.0 <= v <= 1.0
+
+
+class TestLoadLutFile:
+    def test_valid_cube_file(self, tmp_path):
+        cube_file = tmp_path / "grade.cube"
+        cube_file.write_text("# dummy\nLUT_3D_SIZE 2\n0 0 0\n1 0 0\n0 1 0\n1 1 0\n0 0 1\n1 0 1\n0 1 1\n1 1 1\n")
+        result = load_lut_file(str(cube_file))
+        assert result == str(cube_file)
+
+    def test_nonexistent_file_raises(self):
+        with pytest.raises(FileNotFoundError):
+            load_lut_file("/nonexistent/path/grade.cube")
+
+    def test_wrong_extension_raises(self, tmp_path):
+        bad_file = tmp_path / "grade.txt"
+        bad_file.write_text("not a lut")
+        with pytest.raises(ValueError, match=".cube"):
+            load_lut_file(str(bad_file))

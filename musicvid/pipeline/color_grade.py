@@ -101,3 +101,29 @@ def generate_builtin_lut(style, size=33):
     lut = _identity_lut(size)
     lut = STYLES[style](lut)
     return lut
+
+
+def save_lut_as_cube(lut, path):
+    """Save a numpy LUT array as a .cube file."""
+    size = lut.shape[0]
+    with open(path, "w") as f:
+        f.write(f"TITLE \"MusicVid LUT\"\n")
+        f.write(f"LUT_3D_SIZE {size}\n")
+        f.write("DOMAIN_MIN 0.0 0.0 0.0\n")
+        f.write("DOMAIN_MAX 1.0 1.0 1.0\n")
+        for b in range(size):
+            for g in range(size):
+                for r in range(size):
+                    rgb = lut[r, g, b]
+                    f.write(f"{rgb[0]:.6f} {rgb[1]:.6f} {rgb[2]:.6f}\n")
+    return path
+
+
+def load_lut_file(path):
+    """Validate and return path to a .cube LUT file."""
+    import os
+    if not os.path.exists(path):
+        raise FileNotFoundError(f"LUT file not found: {path}")
+    if not path.endswith(".cube"):
+        raise ValueError(f"LUT file must have .cube extension, got: {path}")
+    return path

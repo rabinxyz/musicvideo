@@ -4,7 +4,7 @@
 CLI tool that generates synchronized MP4 music videos from audio files using stock footage, beat-synced cuts, and whisper-based subtitles.
 
 ## Commands
-- `python3 -m pytest tests/ -v` - run all tests (~176 tests)
+- `python3 -m pytest tests/ -v` - run all tests (~209 tests)
 - `python3 -m musicvid.musicvid song.mp3` - run the CLI (uses cache by default)
 - `python3 -m musicvid.musicvid song.mp3 --new` - force recalculation, ignore cache
 - `python3 -c "import musicvid; print(musicvid.__version__)"` - check version
@@ -36,6 +36,14 @@ CLI tool that generates synchronized MP4 music videos from audio files using sto
 - Clip analysis filter: `_filter_analysis_to_clip(analysis, clip_start, clip_end)` in `musicvid.py` — offsets lyrics/beats/sections to clip-relative t=0 before passing to director
 - Lyrics parser: `musicvid/pipeline/lyrics_parser.py` — `align_with_claude(whisper_segments, file_lines)` for AI alignment via Claude API; also has `parse()` with variant A (plain text, even distribution) and B (MM:SS/HH:MM:SS timestamps)
 - Visual effects: `musicvid/pipeline/effects.py` — `apply_effects(clip, level)` orchestrates per-frame transforms (warm grade, vignette, film grain) and overlay effects (cinematic bars, light leak)
+- `--logo PATH`: overlay logo (SVG/PNG/JPG) on video as topmost layer with broadcast safe-zone margin (5% of shorter dimension)
+- `--logo-position [top-left|top-right|bottom-left|bottom-right]` (default: top-left): logo placement corner
+- `--logo-size INT`: logo width in px (default: auto 12% of frame width)
+- `--logo-opacity FLOAT` (default: 0.85): logo transparency
+- Logo overlay: `musicvid/pipeline/logo_overlay.py` — `compute_margin`, `compute_logo_size`, `get_logo_position`, `load_logo`, `apply_logo`; SVG via `cairosvg` at 2x retina resolution; PNG/JPG via Pillow; opacity applied by scaling alpha channel
+- Assembler `assemble_video` accepts `logo_path`, `logo_position`, `logo_size`, `logo_opacity` kwargs; logo composited as last layer (above cinematic bars, light leaks, subtitles)
+- Assembler tests for logo must mock `@patch("musicvid.pipeline.assembler.apply_logo")`
+- Logo overlay tests mock `@patch("musicvid.pipeline.logo_overlay.ImageClip")` and `@patch("musicvid.pipeline.logo_overlay.cairosvg")` for SVG tests
 
 ## Caching
 - Content-addressed cache in `output/tmp/{audio_hash}/` (MD5 of first 64KB, 12 chars)
@@ -77,3 +85,4 @@ CLI tool that generates synchronized MP4 music videos from audio files using sto
 ## Environment
 - macOS, Python 3.14, requires `ffmpeg` and `imagemagick` via Homebrew
 - API keys: ANTHROPIC_API_KEY, PEXELS_API_KEY, BFL_API_KEY, RUNWAY_API_KEY (optional, for --animate) in `.env`
+- `cairosvg` required for SVG logo files (optional dependency, only needed when `--logo` points to .svg)

@@ -1,159 +1,138 @@
 # Idea
 
-# Spec: Tryb preset — pełna pieśń + 3 rolki z różnych fragmentów
+# Spec: Nakładka logo na wideo (SVG/PNG) — rynkowy standard pozycjonowania
 
 ## Cel
-Jedno uruchomienie generuje komplet materiałów:
-- pełny teledysk YouTube 16:9
-- 3 rolki po 15s z różnych fragmentów piosenki w formacie 9:16
+Dodać możliwość nałożenia logo na wideo z profesjonalnym marginesem
+opartym na proporcji do rozdzielczości (standard Netflix, YouTube, BBC).
 
-## Nowa flaga CLI
---preset [full|social|all]  (domyślnie: brak — zachowanie bez zmian)
+## Nowe flagi CLI
+--logo PATH                                                     (opcjonalna)
+--logo-position [top-left|top-right|bottom-left|bottom-right]   (domyślnie: top-left)
+--logo-size INT       szerokość w px, domyślnie: auto (12% szerokości kadru)
+--logo-opacity FLOAT  domyślnie: 0.85
 
-### --preset full
-Tylko pełny teledysk YouTube 16:9. Identyczne z dotychczasowym zachowaniem.
+## Standard rynkowy — safe zone margin
 
-### --preset social
-Tylko 3 rolki po 15s z różnych fragmentów, format 9:16. Bez pełnego teledysku.
+Margines = 5% krótszego wymiaru kadru (broadcast action safe zone):
+  margin = int(min(frame_width, frame_height) * 0.05)
 
-### --preset all
-Wszystko naraz:
-- Pełny teledysk YouTube 16:9
-- Rolka 1 z 15s (fragment A)
-- Rolka 2 z 15s (fragment B)
-- Rolka 3 z 15s (fragment C)
+Przykłady:
+  1920x1080 → margin = 54px
+  1080x1920 → margin = 54px
+  1080x1080 → margin = 54px
+  3840x2160 → margin = 108px
 
-## Wybór 3 różnych fragmentów przez Claude
+Margines jest identyczny ze wszystkich stron i dla wszystkich orientacji.
+Skaluje się automatycznie dla każdej rozdzielczości.
 
-Wyślij do Claude jedną prośbę o wybranie 3 fragmentów po 15s.
+## Rozmiar logo — auto skalowanie
 
-Zasady dla Claude przy wyborze:
-- Fragmenty nie mogą się nakładać ani stykać (minimum 5s przerwy między nimi)
-- Każdy fragment pochodzi z innej sekcji piosenki (intro/verse/chorus/bridge/outro)
-- Preferuj fragmenty z mocnym tekstem i wyraźną melodią
-- Każdy fragment zaczyna się na początku frazy — nie w środku słowa
-- Każdy fragment kończy się na końcu linii tekstu
-- Opisz krótko dlaczego wybrałeś każdy fragment (pole "reason")
+Gdy --logo-size nie podane (tryb auto):
+  logo_width = int(frame_width * 0.12)
 
-Claude zwraca JSON:
-{
-  "clips": [
-    {
-      "id": "A",
-      "start": float,
-      "end": float,
-      "section": "chorus",
-      "reason": "Refren — najbardziej rozpoznawalny fragment"
-    },
-    {
-      "id": "B",
-      "start": float,
-      "end": float,
-      "section": "verse",
-      "reason": "Pierwsza zwrotka — dobry hook na początku"
-    },
-    {
-      "id": "C",
-      "start": float,
-      "end": float,
-      "section": "bridge",
-      "reason": "Bridge — emocjonalny szczyt piosenki"
-    }
-  ]
-}
+Przykłady trybu auto:
+  1920x1080 → logo 230px szeroki
+  1080x1920 → logo 130px szeroki
+  1080x1080 → logo 130px szeroki
 
-Cachuj w output/tmp/{hash}/social_clips.json.
+Gdy --logo-size podane: użyj wartości bezwzględnej w px.
+Wysokość zawsze skalowana proporcjonalnie do szerokości.
 
-## Logika wykonania — optymalizacja
+## Pozycjonowanie (lewy górny róg logo)
 
-Stage 1 — analiza audio: tylko raz
-Stage 2 — reżyseria Claude: tylko raz (pełny plan scen)
-Stage 3 — generowanie obrazów: tylko raz (cache współdzielony)
-Stage 4 — montaż: osobno dla każdego wariantu
+top-left     → x=margin,                       y=margin
+top-right    → x=width - logo_width - margin,  y=margin
+bottom-left  → x=margin,                       y=height - logo_height - margin
+bottom-right → x=width - logo_width - margin,  y=height - logo_height - margin
 
-Kolejność montażu:
-1. Pełny teledysk (jeśli --preset full lub all)
-2. Rolka A 15s
-3. Rolka B 15s
-4. Rolka C 15s
+Domyślnie: top-left
 
-## Struktura folderów wyjściowych
+## Obsługa formatów
 
-output/
-  pelny/
-    Tylko_w_Bogu_youtube.mp4
-  social/
-    Tylko_w_Bogu_rolka_A_15s.mp4
-    Tylko_w_Bogu_rolka_B_15s.mp4
-    Tylko_w_Bogu_rolka_C_15s.mp4
+SVG:
+Konwertuj przez cairosvg do PNG przed użyciem.
+Renderuj w rozmiarze logo_width × logo_height × 2 (retina DPI),
+potem skaluj w dół — zapewnia ostrość krawędzi wektorowych.
+Zachowaj przezroczyste tło RGBA.
 
-## Format rolek 9:16
+PNG/JPG:
+Wczytaj przez Pillow, przeskaluj do logo_width zachowując proporcje.
+Zachowaj kanał alpha jeśli istnieje.
 
-Rozdzielczość: 1080x1920
-FPS: 30
-Napisy: margines od dołu 200px (UI platform przykrywa dół ekranu)
-Cinematic bars: wyłączone
-Ken Burns: tylko zoom in/out i pan_up/pan_down (bez poziomego)
-Fade in audio: 0.5s
-Fade out audio: 1.5s
-Fade in video: 0.5s
-Fade out video: 1.0s
+Wykryj format po rozszerzeniu pliku (.svg vs .png/.jpg).
+Jeśli SVG i brak cairosvg: spróbuj svglib, jeśli oba niedostępne
+rzuć błąd z instrukcją: "pip install cairosvg"
 
-Konwersja obrazów 16:9 → 9:16:
-Smart crop środkowej części + rozmyte tło (blur całego obrazu
-skalowanego do 9:16 z ostrym centrum jako overlay).
-Wygląda profesjonalnie i nie deformuje głównego motywu.
+## Opacity
 
-## Logowanie postępu
+Zastosuj przez Pillow putalpha przed przekazaniem do MoviePy:
+  alpha = int(255 * logo_opacity)
+  image.putalpha(alpha)
 
-[1/4] Analiza audio...
-[2/4] Reżyseria (Claude)...
-[3/4] Generowanie obrazów...
-[4/4] Montaż:
-  → Pełny teledysk YouTube (1/4)... ✅
-  → Rolka A — chorus (2/4)...       ✅
-  → Rolka B — verse (3/4)...        ✅
-  → Rolka C — bridge (4/4)...       ✅
+Domyślna opacity 0.85 — logo widoczne ale nie dominuje nad treścią.
 
-Gotowe! Wygenerowano 4 pliki:
-  output/pelny/Tylko_w_Bogu_youtube.mp4
-  output/social/Tylko_w_Bogu_rolka_A_15s.mp4
-  output/social/Tylko_w_Bogu_rolka_B_15s.mp4
-  output/social/Tylko_w_Bogu_rolka_C_15s.mp4
+## Kolejność warstw
 
-## Opcja --reel-duration
---reel-duration [15|20|30]  (domyślnie: 15)
-Zmienia długość wszystkich 3 rolek.
+Logo nakładane jako ostatnia warstwa — nad wszystkim:
+1. Obraz/video z Ken Burns
+2. Efekty (warm grade, vignette, film grain)
+3. Napisy
+4. Cinematic bars
+5. Logo ← na samym wierzchu
 
-Użycie:
-python3 -m musicvid.musicvid song.mp3 --preset social --reel-duration 30
-→ generuje 3 rolki po 30s z różnych fragmentów
+Logo widoczne przez cały czas trwania klipu.
 
-## Cache
+## Nowy moduł musicvid/pipeline/logo_overlay.py
 
-Współdzielone między wariantami:
-- audio_analysis.json
-- scene_plan.json
-- scene_NNN.jpg
-- social_clips.json (wybrane fragmenty — invalidowany przez --reel-duration)
+Funkcje:
+- compute_margin(frame_width, frame_height) -> int
+  Zwraca int(min(w, h) * 0.05)
 
-Nie cachuj gotowych MP4 — montaż jest szybki gdy obrazy już istnieją.
+- compute_logo_size(frame_width, frame_height, requested_size=None) -> (int, int)
+  Gdy requested_size None: logo_width = int(frame_width * 0.12)
+  Wysokość skalowana proporcjonalnie z oryginalnego obrazu.
+  Zwraca (logo_width, logo_height).
+
+- load_logo(path, logo_width, logo_height, opacity) -> PIL.Image (RGBA)
+  Obsługuje SVG i PNG/JPG.
+  Stosuje opacity przez putalpha.
+  Zwraca obraz gotowy do nałożenia.
+
+- get_logo_position(position, logo_size, frame_size) -> (x, y)
+  Oblicza współrzędne używając compute_margin.
+  position: "top-left" | "top-right" | "bottom-left" | "bottom-right"
+
+- apply_logo(clip, logo_path, position, size, opacity) -> clip
+  Główna funkcja łącząca powyższe.
+  Zwraca MoviePy clip z logo nałożonym przez ImageClip + with_position().
+
+## requirements.txt — dodaj
+cairosvg>=2.7.0
 
 ## Testy
-- --preset all: generuje 4 pliki (1 youtube + 3 rolki)
-- --preset social: generuje tylko 3 rolki, brak folderu pelny/
-- --preset full: generuje tylko pełny teledysk, brak folderu social/
-- 3 fragmenty nie nakładają się czasowo
-- Każdy fragment pochodzi z innej sekcji
-- Rolki mają format 1080x1920
-- --reel-duration 30: rolki po 30s
-- Stage 1-3 wykonywane tylko raz przy --preset all
+- compute_margin(1920, 1080) == 54
+- compute_margin(1080, 1920) == 54
+- compute_margin(3840, 2160) == 108
+- compute_logo_size(1920, 1080, None) == (230, proporcjonalna_wysokość)
+- compute_logo_size(1920, 1080, 200) == (200, proporcjonalna_wysokość)
+- get_logo_position("top-left", ...) → x==54, y==54 dla 1920x1080
+- get_logo_position("top-right", ...) → x==width-logo_width-54, y==54
+- get_logo_position("bottom-right", ...) → poprawne współrzędne
+- load_logo SVG: zwraca PIL Image RGBA
+- load_logo PNG: zwraca PIL Image RGBA
+- opacity 0.85 → alpha channel == 216
+- Brak pliku logo: FileNotFoundError z czytelnym komunikatem
+- Brak cairosvg dla SVG: ImportError z instrukcją instalacji
 
 ## Acceptance Criteria
-- python3 -m musicvid.musicvid song.mp3 --preset all
-  generuje pełny teledysk + 3 rolki w jednym uruchomieniu
-- 3 rolki pokazują 3 różne fragmenty piosenki
-- Rolki mają format 9:16 gotowy na FB/Instagram Reels
-- Obrazy generowane tylko raz, montaż 4x
-- --reel-duration zmienia długość rolek
+- --logo logo.svg nakłada logo w lewym górnym rogu z marginesem 54px dla 1920x1080
+- Margines 5% skaluje się automatycznie dla każdej rozdzielczości
+- Logo auto-skaluje się do 12% szerokości kadru gdy --logo-size nie podane
+- --logo-position zmienia pozycję
+- --logo-size nadpisuje auto skalowanie
+- --logo-opacity zmienia przezroczystość
+- SVG i PNG obsługiwane
+- Logo nad wszystkimi warstwami przez cały czas klipu
+- Działa dla wszystkich platform: youtube, reels, square
 - python3 -m pytest tests/ -v przechodzi

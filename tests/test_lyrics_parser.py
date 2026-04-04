@@ -44,3 +44,39 @@ class TestVariantA:
         lyrics_file.write_text("   \n  \n")
         with pytest.raises(ValueError, match="empty"):
             parse(str(lyrics_file), 60.0)
+
+
+class TestVariantB:
+    """Variant B: lines with MM:SS or HH:MM:SS timestamps."""
+
+    def test_mm_ss_format(self, tmp_path):
+        lyrics_file = tmp_path / "lyrics.txt"
+        lyrics_file.write_text("0:00 First line\n0:30 Second line\n1:00 Third line\n")
+        result = parse(str(lyrics_file), 90.0)
+        assert len(result) == 3
+        assert result[0] == {"start": 0.0, "end": 29.7, "text": "First line"}
+        assert result[1] == {"start": 30.0, "end": 59.7, "text": "Second line"}
+        assert result[2] == {"start": 60.0, "end": 89.0, "text": "Third line"}
+
+    def test_hh_mm_ss_format(self, tmp_path):
+        lyrics_file = tmp_path / "lyrics.txt"
+        lyrics_file.write_text("0:00:00 Opening\n0:01:30 Middle\n0:03:00 End\n")
+        result = parse(str(lyrics_file), 240.0)
+        assert len(result) == 3
+        assert result[0] == {"start": 0.0, "end": 89.7, "text": "Opening"}
+        assert result[1] == {"start": 90.0, "end": 179.7, "text": "Middle"}
+        assert result[2] == {"start": 180.0, "end": 239.0, "text": "End"}
+
+    def test_last_line_ends_at_duration_minus_one(self, tmp_path):
+        lyrics_file = tmp_path / "lyrics.txt"
+        lyrics_file.write_text("0:00 Only line\n")
+        result = parse(str(lyrics_file), 60.0)
+        assert len(result) == 1
+        assert result[0]["end"] == 59.0
+
+    def test_two_digit_minutes(self, tmp_path):
+        lyrics_file = tmp_path / "lyrics.txt"
+        lyrics_file.write_text("00:00 Start\n12:30 Later\n")
+        result = parse(str(lyrics_file), 800.0)
+        assert result[0]["start"] == 0.0
+        assert result[1]["start"] == 750.0

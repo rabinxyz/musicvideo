@@ -4,12 +4,20 @@
 CLI tool that generates synchronized MP4 music videos from audio files using stock footage, beat-synced cuts, and whisper-based subtitles.
 
 ## Commands
-- `python3 -m pytest tests/ -v` - run all tests (27 tests)
-- `python3 -m musicvid.musicvid song.mp3` - run the CLI
+- `python3 -m pytest tests/ -v` - run all tests (39 tests)
+- `python3 -m musicvid.musicvid song.mp3` - run the CLI (uses cache by default)
+- `python3 -m musicvid.musicvid song.mp3 --new` - force recalculation, ignore cache
 - `python3 -c "import musicvid; print(musicvid.__version__)"` - check version
 
 ## Architecture
 4-stage pipeline: audio_analyzer → director → stock_fetcher → assembler, orchestrated by Click CLI in `musicvid/musicvid.py`.
+
+## Caching
+- Content-addressed cache in `output/tmp/{audio_hash}/` (MD5 of first 64KB, 12 chars)
+- Cached files: `audio_analysis.json`, `scene_plan.json`, `video_manifest.json`
+- Stages 1-3 skip if cached; stage 3 also verifies video files exist on disk
+- `--new` flag forces full recalculation (deletes cache dir)
+- Cache utilities in `musicvid/pipeline/cache.py` (`get_audio_hash`, `load_cache`, `save_cache`)
 
 ## Code Style
 - Python 3.11+, no type annotations in existing code

@@ -110,7 +110,7 @@ def _create_subtitle_clips(lyrics, subtitle_style, size):
             color=color,
             stroke_color=outline_color,
             stroke_width=2,
-            font="Arial-Bold",
+            font="/System/Library/Fonts/Geneva.ttf",
             method="caption",
             size=(size[0] - 100, None),
         )

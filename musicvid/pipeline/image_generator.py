@@ -12,7 +12,7 @@ BFL_BASE_URL = "https://api.bfl.ai"
 BFL_MODELS = {
     "flux-dev": "flux-dev",
     "flux-pro": "flux-pro1.1",
-    "schnell": "flux-schnell",
+    "flux-schnell": "flux-schnell",
 }
 
 POLL_INTERVAL = 1.5
@@ -95,7 +95,7 @@ def generate_images(scene_plan, output_dir, provider="flux-dev"):
     Args:
         scene_plan: Scene plan dict from Stage 2.
         output_dir: Directory to save generated images.
-        provider: One of flux-dev, flux-pro, schnell.
+        provider: One of flux-dev, flux-pro, flux-schnell.
 
     Returns:
         list of image file paths in scene order.

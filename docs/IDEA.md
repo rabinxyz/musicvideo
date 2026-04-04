@@ -1,90 +1,181 @@
 # Idea
 
-# Spec: Skrócone wideo na social media (15/20/25/30 sekund)
+# Spec: Lepsza jakość zdjęć + dopasowanie do tekstu + ożywione video (1/3 scen)
 
-## Cel
-Dodać opcję generowania krótkiego klipu z piosenki zamiast pełnego teledysku.
-Przydatne do promowania na FB Reels, Instagram, YouTube Shorts, TikTok.
+## Trzy ulepszenia w jednym spec
 
-## Nowa flaga CLI
---clip [15|20|25|30]  (domyślnie: brak — pełny utwór)
+---
 
-Użycie:
-python3 -m musicvid.musicvid song.mp3 --clip 15
-python3 -m musicvid.musicvid song.mp3 --clip 30 --platform reels
-python3 -m musicvid.musicvid song.mp3 --clip 20 --platform shorts --effects full
+## Ulepszenie 1 — lepsza jakość i trafność zdjęć
 
-## Logika wyboru fragmentu
+### Problem
+Prompty generowane przez Claude-reżysera są zbyt ogólne — nie nawiązują
+konkretnie do treści danej linijki tekstu piosenki.
 
-Gdy --clip podane, Claude API wybiera najlepszy fragment piosenki.
+### Rozwiązanie — prompty kontekstowe
 
-Wyślij do Claude:
-- Pełną listę segmentów Whisper z timestampami i tekstem
-- Żądaną długość klipu w sekundach
-- Informację o sekcjach (intro/verse/chorus/outro z librosa)
+Claude-reżyser przy planowaniu każdej sceny dostaje:
+- tekst linijek które pojawią się w tej scenie
+- nastrój i energię całej piosenki
+- styl wizualny ustalony dla całości
+- tekst linijek poprzedniej i następnej sceny (kontekst)
 
-Claude zwraca JSON:
-{
-  "start": float,  — czas początku klipu w sekundach
-  "end": float,    — czas końca klipu w sekundach
-  "reason": string — krótkie uzasadnienie wyboru
-}
+Prompt dla Claude-reżysera musi generować visual_prompt który:
+1. Nawiązuje bezpośrednio do metafory lub obrazu z tekstu danej sceny
+2. Zachowuje spójność kolorystyczną z całym teledyskiem (master palette)
+3. Jest bardzo szczegółowy i opisowy — minimum 3 zdania
+4. Zawiera: główny motyw + światło + nastrój + kompozycja kadru + głębia
 
-Zasady dla Claude przy wyborze fragmentu:
-- Preferuj refren (chorus) — najbardziej rozpoznawalny fragment
-- Unikaj początku intro (pierwsze 5 sekund) chyba że to jedyna opcja
-- Unikaj urwania w połowie słowa lub linii tekstu
-- Jeśli możliwe zacznij na początku frazy muzycznej (po biciu)
-- Kończ na końcu linii tekstu, nie w środku słowa
-- Długość end-start musi być dokładnie równa żądanej długości +/- 2s
+Przykład dobrego promptu dla linijki "Tylko w Bogu jest moja dusza":
+"A lone silhouette of a person standing on a vast rocky cliff overlooking
+an infinite ocean at golden hour. Warm amber and deep orange light bathes
+the entire scene, with rays of sunlight breaking through scattered clouds
+above. The composition uses rule of thirds with the figure small against
+the immense landscape, conveying human smallness before the divine.
+Shallow depth of field, cinematic 16:9, photorealistic, high quality."
 
-## Przetwarzanie pipeline dla trybu clip
+### Model BFL — użyj flux-pro-1.1 zamiast flux-dev
+flux-pro-1.1 daje znacząco lepszą jakość detali i realizm.
+Zmień domyślny model dla trybu ai na flux-pro-1.1.
+Endpoint BFL: /v1/flux-pro-1.1
 
-Stage 1 — analiza audio: pełna (Whisper + librosa na całości)
-Stage 2 — Claude reżyser: generuje plan scen tylko dla wybranego fragmentu
-  (start do end, nie dla całej piosenki)
-Stage 3 — generowanie obrazów: tylko dla scen w oknie start-end
-Stage 4 — montaż: tylko fragment start-end z audio
+### Master style prompt
+Claude-reżyser na początku generuje jeden master_style który
+jest dołączany do KAŻDEGO visual_prompt:
+Przykład: "Consistent cinematic color grade, warm golden tones,
+soft atmospheric haze, photorealistic photography style"
+To zapewnia spójność wizualną między scenami.
 
-Przytnij audio do fragmentu: audio.subclipped(start, end)
-Przytnij lyrics do fragmentu: tylko segmenty gdzie start >= clip_start
-  i end <= clip_end, dostosuj start/end względem clip_start (odejmij offset)
+### Prompt director_system.txt — dodaj zasady jakości
+- Każdy visual_prompt musi opisywać konkretny obraz nawiązujący do tekstu
+- Minimum 2 zdania opisu
+- Zawsze opisz kompozycję kadru (close-up / medium / wide shot)
+- Zawsze opisz kierunek i jakość światła
+- Zawsze opisz głębię i atmosferę sceny
+- Dołącz master_style na końcu każdego promptu
 
-## Efekty specjalne dla klipu
+---
 
-Fade in audio: 0.5s na początku klipu
-Fade out audio: 1.0s na końcu klipu
-Fade in video: 0.5s
-Fade out video: 1.0s
+## Ulepszenie 2 — ożywione video dla 1/3 scen (Runway Gen-4)
 
-Opcjonalnie dodaj planszę na początku lub końcu (--title-card):
-Plansza 2s z tytułem piosenki i nazwą wykonawcy (czarny lub biały tekst
-na rozmytym ostatnim kadrze). Domyślnie wyłączona.
+### Koncepcja
+Zamiast Ken Burns na wszystkich scenach — co trzecia scena jest
+prawdziwym krótkim video wygenerowanym przez Runway Gen-4 (image-to-video).
+Pozostałe 2/3 scen to nadal zdjęcia z Ken Burns i efektami.
 
-## Nazewnictwo pliku wyjściowego
+Wybór które sceny animować:
+Claude-reżyser w planie scen dodaje pole "animate": true/false.
+Animuj sceny przy refrenie i kluczowych emocjonalnie momentach.
+Maksymalnie co trzecia scena ma "animate": true.
 
-piosenka_15s.mp4
-piosenka_30s_reels.mp4
-piosenka_20s_shorts.mp4
+### Provider video — Runway Gen-4
 
-## Cache
+API: https://api.dev.runwayml.com
+Dokumentacja: https://docs.dev.runwayml.com
+Klucz: RUNWAY_API_KEY w .env
 
-Wynik wyboru fragmentu przez Claude cachuj w:
-output/tmp/{hash}/clip_{duration}s.json
-Zmiana --clip invaliduje tylko ten plik, nie całą analizę audio.
+Przepływ image-to-video:
+1. Wygeneruj zdjęcie przez BFL API jak zwykle
+2. Wyślij zdjęcie do Runway Gen-4 image-to-video
+3. Parametry: duration=5s, ratio=1280:768 (16:9)
+4. Runway zwraca URL do video MP4
+5. Pobierz video i użyj zamiast ImageClip z Ken Burns
+
+Prompt dla Runway (motion prompt) — Claude generuje go w planie scen
+jako pole "motion_prompt":
+Opisuje RUCH który ma nastąpić w scenie — nie treść obrazu.
+Przykłady:
+- "Slow camera push forward, gentle wind moves the trees, golden light shifts"
+- "Camera slowly rises revealing the landscape below, clouds drift gently"
+- "Subtle zoom out, light rays move across the scene, peaceful stillness"
+Unikaj gwałtownych ruchów — muzyka uwielbienia wymaga spokojnego ruchu.
+
+### Nowy moduł musicvid/pipeline/video_animator.py
+Funkcja: animate_image(image_path, motion_prompt, duration, output_path) -> str
+- Wczytaj obraz z image_path
+- Wyślij do Runway Gen-4 API jako image-to-video
+- Polluj status aż gotowe (Runway też jest async)
+- Pobierz video MP4 do output_path
+- Zwróć output_path
+
+Runway API przepływ:
+POST /v1/image_to_video z body:
+  model: "gen4_turbo"
+  promptImage: base64 obrazu lub URL
+  promptText: motion_prompt
+  duration: 5
+  ratio: "1280:768"
+→ zwraca {id: task_id}
+GET /v1/tasks/{task_id}
+→ polluj co 3s aż status == "SUCCEEDED"
+→ output[0].url to URL do video MP4
+
+Timeout: 300 sekund (Runway jest wolniejszy niż BFL)
+Retry: max 2 próby na błędy sieciowe
+
+### Integracja w pipeline
+W director_plan każda scena ma pola:
+  "animate": bool
+  "motion_prompt": string (tylko gdy animate: true)
+
+W image_generator / assembler:
+Gdy scene["animate"] == True:
+  1. Wygeneruj zdjęcie przez BFL normalnie
+  2. Wyślij do Runway → pobierz video MP4
+  3. Użyj VideoFileClip zamiast ImageClip z Ken Burns
+  4. Przytnij video do długości sceny (subclipped)
+  Gdy Runway niedostępny (brak RUNWAY_API_KEY):
+  Fallback do Ken Burns na zdjęciu bez błędu
+
+Gdy scene["animate"] == False:
+  Zwykłe zdjęcie z Ken Burns jak dotychczas
+
+### Cachowanie video
+Cache animowanych klipów w: output/tmp/{hash}/animated_scene_NNN.mp4
+Nie generuj ponownie jeśli plik istnieje.
+
+### Koszt i czas
+BFL flux-pro-1.1: ~$0.05/obraz
+Runway Gen-4 turbo: ~$0.05 za 5s video
+Dla 8 scen z 1/3 animowanych (3 sceny):
+  5 zdjęć × $0.05 = $0.25
+  3 video × $0.05 = $0.15
+  Łącznie: ~$0.40 za teledysk
+
+Czas generowania: +2-3 minuty na animowane sceny.
+
+### Nowa flaga CLI
+--animate [auto|always|never]  (domyślnie: auto)
+auto   — Claude decyduje które sceny animować (co trzecia, przy refrenie)
+always — animuj wszystkie sceny (drożej, wolniej)
+never  — żadnych animacji, tylko Ken Burns (szybko, tanio)
+
+---
+
+## .env.example — dodaj
+RUNWAY_API_KEY=...   # klucz z app.runwayml.com → Settings → API Keys
+
+## requirements.txt — dodaj
+runwayml>=0.1.0  # oficjalna biblioteka Python Runway
+
+---
 
 ## Testy
-- Wybrany fragment ma długość zbliżoną do żądanej (+/- 2s)
-- audio.subclipped używa poprawnych czasów start/end
-- Lyrics przycinane i offsetowane względem clip_start
-- Fade in/out zastosowane na początku i końcu
-- Nazwa pliku zawiera sufiks z czasem trwania
-- Kombinacja --clip 30 --platform reels: plik 30s w formacie 9:16
+- visual_prompt zawiera konkretne nawiązanie do tekstu sceny
+- master_style dołączony do każdego promptu
+- animate_image: mockuj Runway API, sprawdź że zwraca ścieżkę MP4
+- Polling Runway: symuluj PENDING → SUCCEEDED
+- Timeout 300s: TimeoutError
+- Fallback gdy brak RUNWAY_API_KEY: Ken Burns bez błędu
+- Maksymalnie 1/3 scen ma animate=True gdy --animate auto
+- Cache: nie wywołuj Runway ponownie jeśli MP4 istnieje
 
 ## Acceptance Criteria
-- --clip 15 generuje wideo ~15 sekund z najlepszego fragmentu piosenki
-- --clip 30 --platform reels generuje 30s wideo w formacie 9:16
-- Klip zaczyna i kończy się na granicy frazy — nie urywa słów
-- Fade in/out audio i video zastosowane
-- Pełny utwór generowany gdy --clip nie podane (bez zmian)
+- Prompty zdjęć nawiązują do tekstu konkretnej sceny
+- Każdy prompt zawiera opis kompozycji i światła
+- Co trzecia scena to prawdziwe video z Runway (gdy --animate auto)
+- --animate never generuje tylko Ken Burns (bez Runway)
+- --animate always animuje każdą scenę
+- Animowane sceny cachowane w tmp/
+- Fallback do Ken Burns gdy brak RUNWAY_API_KEY
 - python3 -m pytest tests/ -v przechodzi

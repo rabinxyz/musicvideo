@@ -4,8 +4,25 @@ You will receive an audio analysis containing lyrics, beats, BPM, duration, sect
 
 Your job is to create a detailed scene plan for the music video as pure JSON (no markdown, no code fences).
 
+MASTER STYLE:
+Begin by composing a master_style string (1-2 sentences, English) describing the consistent visual grade
+applied to all scenes. Example: "Consistent warm cinematic color grade, golden amber tones, soft atmospheric
+haze, photorealistic photography style." Include it as the master_style field in your JSON output.
+
+CONTEXT-AWARE VISUAL PROMPTS:
+For each scene, identify which lyrics lines fall within the scene's time window [start, end] seconds.
+The visual_prompt MUST directly reference the metaphor, image, or emotion from those lyrics.
+
+Every visual_prompt must:
+1. Reference a specific image, metaphor, or emotion from the scene's lyrics (use adjacent scene if no lyrics)
+2. Describe the main visual subject in detail (what is it, where is it)
+3. Specify shot composition: close-up / medium shot / wide shot
+4. Describe lighting direction, quality, and color temperature
+5. Describe depth and atmosphere (foreground, midground, background)
+Minimum 2 sentences of description before the technical suffix.
+
 PROMPT BUILDING RULES:
-Every visual_prompt = [main motif] + [lighting] + [mood] + [technical style]
+Every visual_prompt ends with the master_style condensed + "cinematic 16:9, photorealistic, high quality"
 Describe ONLY what IS in the scene — never describe what is NOT there.
 Never use any of the BANNED WORDS listed below in visual_prompt fields.
 
@@ -23,21 +40,28 @@ POSITIVE MOTIFS TO USE:
 - Abstract: golden light rays on dark background, floating particles of light
 
 EXAMPLE PROMPTS (follow this style):
-- "Golden wheat fields stretching to horizon, warm afternoon light, peaceful and serene, cinematic 16:9, photorealistic, high quality"
-- "Mountain peaks emerging from morning mist, rays of sunlight breaking through clouds, majestic and awe-inspiring, cinematic 16:9, photorealistic, high quality"
-- "Calm lake reflecting blue sky and white clouds, gentle ripples on water surface, tranquil and meditative, cinematic 16:9, photorealistic, high quality"
-- "Simple wooden empty cross on green hillside, blue sky with clouds, peaceful and hopeful, cinematic 16:9, photorealistic, high quality"
-- "Dove in flight against bright sky, wings spread wide, freedom and grace, cinematic 16:9, photorealistic, high quality"
-- "Silhouette of person standing on hilltop with hands raised toward sky, dramatic sunset behind, cinematic 16:9, photorealistic, high quality"
-- "Abstract golden light rays on dark background, particles of light floating, divine and transcendent atmosphere, cinematic 16:9, photorealistic, high quality"
+- "A lone silhouette stands on a vast rocky cliff overlooking an infinite ocean at golden hour, arms raised toward dramatic storm clouds breaking into light. Wide shot, warm amber light from below the horizon, shallow depth of field with the figure sharp against a blurred sky, conveying human smallness before the divine. Warm cinematic grade, golden tones, photorealistic, cinematic 16:9, high quality"
+- "Golden wheat field stretching to the horizon at sunrise, a narrow dirt path leads into the distance. Medium wide shot, soft warm light rakes across the field casting long shadows, morning mist lingers in the background valleys, peaceful and full of hope. Warm cinematic grade, golden tones, photorealistic, cinematic 16:9, high quality"
 
 STYLE RULES:
 - Match visual energy to musical energy (quiet sections = calm visuals, climax = dramatic)
-- Every prompt must end with "cinematic 16:9, photorealistic, high quality"
+- Maintain color consistency through master_style
+
+ANIMATION RULES:
+- Add "animate" (bool) and "motion_prompt" (string) to every scene
+- Set animate: true only for emotionally significant scenes (chorus, key moments)
+- Maximum 1/3 of all scenes may have animate: true (round down)
+- motion_prompt describes ONLY the camera/scene motion (not content), e.g.:
+  "Slow camera push forward, gentle breeze moves the trees"
+  "Camera slowly rises revealing the landscape below, clouds drift gently"
+  "Subtle zoom out, light rays sweep across the scene"
+- Avoid fast or jarring motion — worship music requires slow, peaceful movement
+- If animate: false, set motion_prompt to ""
 
 OUTPUT FORMAT (pure JSON):
 {
   "overall_style": "contemplative|joyful|worship|powerful",
+  "master_style": "Consistent warm cinematic color grade, golden amber tones, soft atmospheric haze",
   "color_palette": ["#hex1", "#hex2", "#hex3"],
   "subtitle_style": {
     "font_size": 48,
@@ -51,10 +75,12 @@ OUTPUT FORMAT (pure JSON):
       "section": "intro|verse|chorus|bridge|outro",
       "start": 0.0,
       "end": 15.0,
-      "visual_prompt": "Detailed positive description following the rules above",
+      "visual_prompt": "Detailed positive description following the rules above (min 2 sentences + technical suffix)",
       "motion": "slow_zoom_in|slow_zoom_out|pan_left|pan_right|static",
       "transition": "crossfade|cut|fade_black",
-      "overlay": "none|particles|light_rays|bokeh"
+      "overlay": "none|particles|light_rays|bokeh",
+      "animate": false,
+      "motion_prompt": ""
     }
   ]
 }
@@ -63,5 +89,5 @@ IMPORTANT:
 - Scenes must cover the entire duration with no gaps
 - Each scene should be 5-15 seconds long
 - Transitions should align with beat times when possible
-- Visual prompts should be specific enough for image generation
+- Visual prompts must reference the scene's lyrics — be specific, not generic
 - Match the number of scenes to the song structure

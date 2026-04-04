@@ -42,6 +42,17 @@ def _validate_scene_plan(plan, duration):
     if not plan.get("scenes"):
         raise ValueError("Scene plan has no scenes")
 
+    # Default master_style if Claude omitted it
+    if "master_style" not in plan:
+        plan["master_style"] = ""
+
+    # Default animate/motion_prompt fields if Claude omitted them
+    for scene in plan["scenes"]:
+        if "animate" not in scene:
+            scene["animate"] = False
+        if "motion_prompt" not in scene:
+            scene["motion_prompt"] = ""
+
     plan["scenes"].sort(key=lambda s: s["start"])
     plan["scenes"][0]["start"] = 0.0
     plan["scenes"][-1]["end"] = duration

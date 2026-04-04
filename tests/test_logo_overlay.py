@@ -2,6 +2,7 @@ import numpy as np
 from PIL import Image
 from unittest.mock import patch, MagicMock
 from musicvid.pipeline.logo_overlay import compute_margin, compute_logo_size, get_logo_position, load_logo
+from musicvid.pipeline.logo_overlay import apply_logo
 
 
 class TestComputeMargin:
@@ -158,3 +159,80 @@ class TestLoadLogoSvg:
         with patch("musicvid.pipeline.logo_overlay.cairosvg", None):
             with pytest.raises(ImportError, match="cairosvg"):
                 load_logo(path, 200, 100, 1.0)
+
+
+class TestApplyLogo:
+    def _create_test_png(self, tmp_path, width=100, height=50):
+        img = Image.new("RGBA", (width, height), (255, 0, 0, 255))
+        path = tmp_path / "logo.png"
+        img.save(str(path))
+        return str(path)
+
+    @patch("musicvid.pipeline.logo_overlay.ImageClip")
+    def test_apply_logo_creates_image_clip(self, mock_image_clip, tmp_path):
+        logo_path = self._create_test_png(tmp_path)
+        mock_clip = MagicMock()
+        mock_clip.size = (1920, 1080)
+        mock_clip.duration = 30.0
+
+        mock_logo_clip = MagicMock()
+        mock_image_clip.return_value = mock_logo_clip
+        mock_logo_clip.with_duration.return_value = mock_logo_clip
+        mock_logo_clip.with_position.return_value = mock_logo_clip
+
+        result = apply_logo(mock_clip, logo_path, "top-left", None, 0.85)
+
+        mock_image_clip.assert_called_once()
+        mock_logo_clip.with_duration.assert_called_once_with(30.0)
+        mock_logo_clip.with_position.assert_called_once()
+
+    @patch("musicvid.pipeline.logo_overlay.ImageClip")
+    def test_apply_logo_position_top_right(self, mock_image_clip, tmp_path):
+        logo_path = self._create_test_png(tmp_path)
+        mock_clip = MagicMock()
+        mock_clip.size = (1920, 1080)
+        mock_clip.duration = 10.0
+
+        mock_logo_clip = MagicMock()
+        mock_image_clip.return_value = mock_logo_clip
+        mock_logo_clip.with_duration.return_value = mock_logo_clip
+        mock_logo_clip.with_position.return_value = mock_logo_clip
+
+        apply_logo(mock_clip, logo_path, "top-right", None, 0.85)
+
+        pos_call = mock_logo_clip.with_position.call_args[0][0]
+        # For 1080p with auto-size (12% of 1920 = 230): margin=54, x = 1920-230-54 = 1636
+        assert pos_call[0] == 1920 - 230 - 54
+
+    @patch("musicvid.pipeline.logo_overlay.ImageClip")
+    def test_apply_logo_explicit_size(self, mock_image_clip, tmp_path):
+        logo_path = self._create_test_png(tmp_path)
+        mock_clip = MagicMock()
+        mock_clip.size = (1920, 1080)
+        mock_clip.duration = 10.0
+
+        mock_logo_clip = MagicMock()
+        mock_image_clip.return_value = mock_logo_clip
+        mock_logo_clip.with_duration.return_value = mock_logo_clip
+        mock_logo_clip.with_position.return_value = mock_logo_clip
+
+        apply_logo(mock_clip, logo_path, "top-left", 200, 0.85)
+
+        # Verify ImageClip was created (the numpy array passed should be 200px wide)
+        arr = mock_image_clip.call_args[0][0]
+        assert arr.shape[1] == 200  # width
+
+    @patch("musicvid.pipeline.logo_overlay.ImageClip")
+    def test_apply_logo_returns_logo_clip(self, mock_image_clip, tmp_path):
+        logo_path = self._create_test_png(tmp_path)
+        mock_clip = MagicMock()
+        mock_clip.size = (1920, 1080)
+        mock_clip.duration = 10.0
+
+        mock_logo_clip = MagicMock()
+        mock_image_clip.return_value = mock_logo_clip
+        mock_logo_clip.with_duration.return_value = mock_logo_clip
+        mock_logo_clip.with_position.return_value = mock_logo_clip
+
+        result = apply_logo(mock_clip, logo_path, "top-left", None, 0.85)
+        assert result is mock_logo_clip

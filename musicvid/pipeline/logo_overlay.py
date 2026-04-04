@@ -1,8 +1,10 @@
 """Logo overlay utilities for compositing logos onto video frames."""
 
 import io
+import numpy as np
 from pathlib import Path
 from PIL import Image
+from moviepy import ImageClip
 
 try:
     import cairosvg
@@ -89,3 +91,40 @@ def get_logo_position(position, logo_size, frame_size):
         "bottom-right": (frame_w - logo_w - margin, frame_h - logo_h - margin),
     }
     return positions[position]
+
+
+def apply_logo(clip, logo_path, position, size, opacity):
+    """Create a logo ImageClip positioned over the video.
+
+    Args:
+        clip: The base MoviePy video clip (used for size/duration).
+        logo_path: Path to logo file (SVG, PNG, JPG).
+        position: "top-left" | "top-right" | "bottom-left" | "bottom-right"
+        size: Logo width in px, or None for auto (12% of frame width).
+        opacity: Float 0.0-1.0 for logo transparency.
+
+    Returns:
+        MoviePy ImageClip positioned and sized for compositing.
+    """
+    frame_w, frame_h = clip.size
+
+    # Get original image dimensions for aspect ratio calculation
+    logo_path_obj = Path(logo_path)
+    if logo_path_obj.suffix.lower() == ".svg":
+        # For SVG, use a nominal size — _load_svg will render at target resolution
+        orig_w, orig_h = 100, 100
+    else:
+        with Image.open(logo_path) as orig_img:
+            orig_w, orig_h = orig_img.size
+
+    logo_w, logo_h = compute_logo_size(frame_w, frame_h, orig_w, orig_h, requested_size=size)
+    logo_img = load_logo(logo_path, logo_w, logo_h, opacity)
+    logo_arr = np.array(logo_img)
+
+    logo_clip = ImageClip(logo_arr)
+    logo_clip = logo_clip.with_duration(clip.duration)
+
+    pos = get_logo_position(position, (logo_w, logo_h), (frame_w, frame_h))
+    logo_clip = logo_clip.with_position(pos)
+
+    return logo_clip

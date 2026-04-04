@@ -1,5 +1,3 @@
-# Idea
-
 # Spec: Generator obrazów z wyborem providera + naprawa strategii promptów
 
 ## Problem 1 — DALL-E generuje katolickie obrazy

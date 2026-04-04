@@ -18,7 +18,8 @@ CLI tool that generates synchronized MP4 music videos from audio files using sto
 - `tenacity` retry on all external API calls
 
 ## Key Gotchas
-- MoviePy v2 removed `moviepy.editor` — assembler uses try/except fallback import
+- MoviePy 2.1.2 is installed — assembler imports directly from `moviepy` (no `moviepy.editor`)
+- MoviePy 2.x API: use `transform()` not `fl()`, `with_position()` not `set_position()`, `with_effects([vfx.CrossFadeIn(d)])` not `crossfadein(d)`, `TextClip(text=..., font_size=...)` not `TextClip(txt, fontsize=...)`
 - `librosa` must be mocked at module level (`musicvid.pipeline.audio_analyzer.librosa`) since `_detect_sections` calls multiple librosa functions
 - Stock fetcher tests need `PEXELS_API_KEY` env var set via `@patch.dict(os.environ)` to exercise API code path
 - Use `python3` not `python` on this macOS system

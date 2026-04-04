@@ -34,14 +34,14 @@ class TestGetResolution:
 class TestCreateSubtitleClips:
     """Tests for subtitle clip generation."""
 
+    @patch("musicvid.pipeline.assembler.vfx")
     @patch("musicvid.pipeline.assembler.TextClip")
-    def test_creates_clips_for_lyrics(self, mock_text_clip, sample_analysis, sample_scene_plan):
+    def test_creates_clips_for_lyrics(self, mock_text_clip, mock_vfx, sample_analysis, sample_scene_plan):
         mock_clip = MagicMock()
-        mock_clip.set_duration.return_value = mock_clip
-        mock_clip.set_start.return_value = mock_clip
-        mock_clip.set_position.return_value = mock_clip
-        mock_clip.crossfadein.return_value = mock_clip
-        mock_clip.crossfadeout.return_value = mock_clip
+        mock_clip.with_duration.return_value = mock_clip
+        mock_clip.with_start.return_value = mock_clip
+        mock_clip.with_position.return_value = mock_clip
+        mock_clip.with_effects.return_value = mock_clip
         mock_text_clip.return_value = mock_clip
 
         subtitle_style = sample_scene_plan["subtitle_style"]
@@ -62,6 +62,7 @@ class TestCreateSubtitleClips:
 class TestAssembleVideo:
     """Tests for the main assemble_video function."""
 
+    @patch("musicvid.pipeline.assembler.vfx")
     @patch("musicvid.pipeline.assembler.VideoFileClip")
     @patch("musicvid.pipeline.assembler.ImageClip")
     @patch("musicvid.pipeline.assembler.AudioFileClip")
@@ -70,24 +71,21 @@ class TestAssembleVideo:
     @patch("musicvid.pipeline.assembler.concatenate_videoclips")
     def test_produces_output_file(
         self, mock_concat, mock_composite, mock_text, mock_audio,
-        mock_image, mock_video, sample_analysis, sample_scene_plan, tmp_output
+        mock_image, mock_video, mock_vfx, sample_analysis, sample_scene_plan, tmp_output
     ):
         mock_clip = MagicMock()
         mock_clip.duration = 5.0
         mock_clip.size = (1920, 1080)
         mock_clip.w = 1920
         mock_clip.h = 1080
-        mock_clip.resize.return_value = mock_clip
-        mock_clip.subclip.return_value = mock_clip
-        mock_clip.set_duration.return_value = mock_clip
-        mock_clip.set_position.return_value = mock_clip
-        mock_clip.set_start.return_value = mock_clip
-        mock_clip.crossfadein.return_value = mock_clip
-        mock_clip.crossfadeout.return_value = mock_clip
-        mock_clip.fadein.return_value = mock_clip
-        mock_clip.fadeout.return_value = mock_clip
-        mock_clip.fl.return_value = mock_clip
-        mock_clip.set_audio.return_value = mock_clip
+        mock_clip.resized.return_value = mock_clip
+        mock_clip.subclipped.return_value = mock_clip
+        mock_clip.with_duration.return_value = mock_clip
+        mock_clip.with_position.return_value = mock_clip
+        mock_clip.with_start.return_value = mock_clip
+        mock_clip.with_effects.return_value = mock_clip
+        mock_clip.transform.return_value = mock_clip
+        mock_clip.with_audio.return_value = mock_clip
 
         mock_video.return_value = mock_clip
         mock_image.return_value = mock_clip

@@ -118,8 +118,7 @@ def analyze_audio(audio_path, output_dir=None, whisper_model="base"):
     tempo, beat_frames = librosa.beat.beat_track(y=y, sr=sr)
     beat_times = librosa.frames_to_time(beat_frames, sr=sr)
     beats = [round(float(b), 2) for b in beat_times]
-    bpm = round(float(tempo), 1)
-
+    bpm = round(float(tempo[0] if hasattr(tempo, '__len__') else tempo), 1)
     sections = _detect_sections(y, sr, duration)
 
     S = librosa.feature.melspectrogram(y=y, sr=sr)

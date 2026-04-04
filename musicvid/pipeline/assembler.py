@@ -2,24 +2,15 @@
 
 from pathlib import Path
 
-try:
-    from moviepy.editor import (
-        VideoFileClip,
-        ImageClip,
-        AudioFileClip,
-        TextClip,
-        CompositeVideoClip,
-        concatenate_videoclips,
-    )
-except ImportError:
-    from moviepy import (
-        VideoFileClip,
-        ImageClip,
-        AudioFileClip,
-        TextClip,
-        CompositeVideoClip,
-        concatenate_videoclips,
-    )
+from moviepy import (
+    VideoFileClip,
+    ImageClip,
+    AudioFileClip,
+    TextClip,
+    CompositeVideoClip,
+    concatenate_videoclips,
+    vfx,
+)
 
 
 RESOLUTION_MAP = {
@@ -37,8 +28,8 @@ def _get_resolution(resolution_str):
 def _create_ken_burns_clip(clip, duration, motion="slow_zoom_in", target_size=(1920, 1080)):
     """Apply Ken Burns effect (zoom/pan) to a clip."""
     w, h = target_size
-    clip = clip.resize(newsize=(int(w * 1.15), int(h * 1.15)))
-    clip = clip.set_duration(duration)
+    clip = clip.resized(new_size=(int(w * 1.15), int(h * 1.15)))
+    clip = clip.with_duration(duration)
 
     if motion == "slow_zoom_in":
         def zoom_in(get_frame, t):
@@ -54,7 +45,7 @@ def _create_ken_burns_clip(clip, duration, motion="slow_zoom_in", target_size=(1
             import numpy as np
             img = Image.fromarray(cropped).resize((w, h), Image.LANCZOS)
             return np.array(img)
-        return clip.fl(zoom_in)
+        return clip.transform(zoom_in)
 
     elif motion == "slow_zoom_out":
         def zoom_out(get_frame, t):
@@ -70,7 +61,7 @@ def _create_ken_burns_clip(clip, duration, motion="slow_zoom_in", target_size=(1
             import numpy as np
             img = Image.fromarray(cropped).resize((w, h), Image.LANCZOS)
             return np.array(img)
-        return clip.fl(zoom_out)
+        return clip.transform(zoom_out)
 
     elif motion == "pan_left":
         def pan_l(get_frame, t):
@@ -81,7 +72,7 @@ def _create_ken_burns_clip(clip, duration, motion="slow_zoom_in", target_size=(1
             x = int(max_offset * (1 - progress))
             cropped = frame[0:h, x:x + w]
             return cropped
-        return clip.fl(pan_l)
+        return clip.transform(pan_l)
 
     elif motion == "pan_right":
         def pan_r(get_frame, t):
@@ -92,11 +83,11 @@ def _create_ken_burns_clip(clip, duration, motion="slow_zoom_in", target_size=(1
             x = int(max_offset * progress)
             cropped = frame[0:h, x:x + w]
             return cropped
-        return clip.fl(pan_r)
+        return clip.transform(pan_r)
 
     else:  # static
-        clip = clip.resize(newsize=(w, h))
-        clip = clip.set_duration(duration)
+        clip = clip.resized(new_size=(w, h))
+        clip = clip.with_duration(duration)
         return clip
 
 
@@ -114,8 +105,8 @@ def _create_subtitle_clips(lyrics, subtitle_style, size):
             continue
 
         txt_clip = TextClip(
-            segment["text"],
-            fontsize=font_size,
+            text=segment["text"],
+            font_size=font_size,
             color=color,
             stroke_color=outline_color,
             stroke_width=2,
@@ -123,12 +114,15 @@ def _create_subtitle_clips(lyrics, subtitle_style, size):
             method="caption",
             size=(size[0] - 100, None),
         )
-        txt_clip = txt_clip.set_duration(duration)
-        txt_clip = txt_clip.set_start(segment["start"])
-        txt_clip = txt_clip.set_position(("center", size[1] - margin_bottom - font_size))
+        txt_clip = txt_clip.with_duration(duration)
+        txt_clip = txt_clip.with_start(segment["start"])
+        txt_clip = txt_clip.with_position(("center", size[1] - margin_bottom - font_size))
 
         fade_duration = min(0.3, duration / 3)
-        txt_clip = txt_clip.crossfadein(fade_duration).crossfadeout(fade_duration)
+        txt_clip = txt_clip.with_effects([
+            vfx.CrossFadeIn(fade_duration),
+            vfx.CrossFadeOut(fade_duration),
+        ])
 
         clips.append(txt_clip)
 
@@ -147,7 +141,7 @@ def _load_scene_clip(video_path, scene, target_size):
         if clip.duration < duration:
             loops = int(duration / clip.duration) + 1
             clip = concatenate_videoclips([clip] * loops)
-        clip = clip.subclip(0, duration)
+        clip = clip.subclipped(0, duration)
 
     return _create_ken_burns_clip(clip, duration, scene.get("motion", "static"), target_size)
 
@@ -184,8 +178,8 @@ def assemble_video(analysis, scene_plan, fetch_manifest, audio_path, output_path
     final = CompositeVideoClip([video] + subtitle_clips, size=target_size)
 
     audio = AudioFileClip(audio_path)
-    final = final.set_audio(audio)
-    final = final.set_duration(min(final.duration, audio.duration))
+    final = final.with_audio(audio)
+    final = final.with_duration(min(final.duration, audio.duration))
 
     Path(output_path).parent.mkdir(parents=True, exist_ok=True)
     final.write_videofile(

@@ -13,7 +13,7 @@ CLI tool that generates synchronized MP4 music videos from audio files using sto
 4-stage pipeline: audio_analyzer → director → stock_fetcher/image_generator → assembler, orchestrated by Click CLI in `musicvid/musicvid.py`.
 - `--mode stock` (default): Stage 3 uses `stock_fetcher` (Pexels API)
 - `--mode ai`: Stage 3 uses `image_generator` (BFL API: flux-dev/flux-pro-1.1/flux-2-klein-4b), caches to `image_manifest.json`
-- `--provider [flux-dev|flux-pro|flux-schnell]` (default: flux-dev): selects BFL model for `--mode ai`
+- `--provider [flux-dev|flux-pro|flux-schnell]` (default: flux-pro): selects BFL model for `--mode ai`
 - `--font PATH`: custom .ttf font for subtitles (optional, defaults to auto-downloaded Montserrat Light)
 - `--lyrics PATH`: custom .txt lyrics file (optional, skips Whisper); auto-detects single .txt in audio dir
 - `--effects [none|minimal|full]` (default: minimal): visual effects level — none (Ken Burns only), minimal (warm grade + vignette + cinematic bars), full (+ film grain + light leak)

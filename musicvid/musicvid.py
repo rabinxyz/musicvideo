@@ -33,7 +33,7 @@ def _image_files_exist(manifest):
 @click.command()
 @click.argument("audio_file", type=click.Path(exists=True))
 @click.option("--mode", type=click.Choice(["stock", "ai", "hybrid"]), default="stock", help="Video source mode.")
-@click.option("--provider", type=click.Choice(["flux-dev", "flux-pro", "flux-schnell"]), default="flux-dev", help="Image provider for --mode ai.")
+@click.option("--provider", type=click.Choice(["flux-dev", "flux-pro", "flux-schnell"]), default="flux-pro", help="Image provider for --mode ai.")
 @click.option("--style", type=click.Choice(["auto", "contemplative", "joyful", "worship", "powerful"]), default="auto", help="Visual style.")
 @click.option("--output", type=click.Path(), default="./output/", help="Output directory.")
 @click.option("--resolution", type=click.Choice(["720p", "1080p", "4k"]), default="1080p", help="Output resolution.")

@@ -4,7 +4,7 @@
 CLI tool that generates synchronized MP4 music videos from audio files using stock footage, beat-synced cuts, and whisper-based subtitles.
 
 ## Commands
-- `python3 -m pytest tests/ -v` - run all tests (150 tests)
+- `python3 -m pytest tests/ -v` - run all tests (~176 tests)
 - `python3 -m musicvid.musicvid song.mp3` - run the CLI (uses cache by default)
 - `python3 -m musicvid.musicvid song.mp3 --new` - force recalculation, ignore cache
 - `python3 -c "import musicvid; print(musicvid.__version__)"` - check version
@@ -26,6 +26,13 @@ CLI tool that generates synchronized MP4 music videos from audio files using sto
 - CLI tests for `--animate` must mock `@patch("musicvid.musicvid.animate_image")` since animate_image is imported at module level
 - Assembler `_load_scene_clip`: skips Ken Burns for scenes with `animate=True` and `.mp4` suffix — just resizes to target_size
 - Clip selector: `musicvid/pipeline/clip_selector.py` — `select_clip(analysis, clip_duration)` calls Claude API; manual 2-attempt retry loop with fallback to song center; mock target: `@patch("musicvid.pipeline.clip_selector.anthropic")`
+- `--preset [full|social|all]`: preset mode — `full` generates YouTube 16:9 in `output/pelny/`, `social` generates 3 reels (9:16) from different sections in `output/social/`, `all` generates both. Stages 1-3 run once; stage 4 loops per variant. Uses `_run_preset_mode()` in `musicvid.py`
+- `--reel-duration [15|20|30]` (default: 15): duration of social reels; invalidates social clips cache
+- Social clip selector: `musicvid/pipeline/social_clip_selector.py` — `select_social_clips(analysis, clip_duration)` asks Claude for 3 non-overlapping clips from different sections; mock: `@patch("musicvid.pipeline.social_clip_selector.anthropic")`
+- CLI tests for `--preset` must mock `@patch("musicvid.musicvid.select_social_clips")` in addition to the usual pipeline mocks
+- Scene plan/manifest clip filters: `_filter_scene_plan_to_clip(scene_plan, clip_start, clip_end)` and `_filter_manifest_to_clip(manifest, scenes, clip_start, clip_end)` in `musicvid.py` — filter and offset scenes/manifest entries to a clip time window
+- Assembler social mode kwargs: `audio_fade_out=1.0` (social uses 1.5), `subtitle_margin_bottom=80` (social uses 200), `cinematic_bars=True` (social uses False)
+- Ken Burns `pan_up`/`pan_down` motions added; `_remap_motion_for_portrait(motion)` maps horizontal pans to vertical for 9:16
 - Clip analysis filter: `_filter_analysis_to_clip(analysis, clip_start, clip_end)` in `musicvid.py` — offsets lyrics/beats/sections to clip-relative t=0 before passing to director
 - Lyrics parser: `musicvid/pipeline/lyrics_parser.py` — `align_with_claude(whisper_segments, file_lines)` for AI alignment via Claude API; also has `parse()` with variant A (plain text, even distribution) and B (MM:SS/HH:MM:SS timestamps)
 - Visual effects: `musicvid/pipeline/effects.py` — `apply_effects(clip, level)` orchestrates per-frame transforms (warm grade, vignette, film grain) and overlay effects (cinematic bars, light leak)
@@ -34,6 +41,7 @@ CLI tool that generates synchronized MP4 music videos from audio files using sto
 - Content-addressed cache in `output/tmp/{audio_hash}/` (MD5 of first 64KB, 12 chars)
 - Cached files: `audio_analysis.json` (or `audio_analysis_{lyrics_hash}.json` when --lyrics used), `lyrics_aligned_{lyrics_hash}.json` (AI alignment result), `scene_plan.json`, `video_manifest.json`, `image_manifest.json` (ai mode)
 - Clip mode adds separate cache files: `clip_{N}s.json` (clip selection), `scene_plan_clip_{N}s.json`, `video_manifest_clip_{N}s.json` / `image_manifest_clip_{N}s.json` — changing `--clip` only invalidates `clip_{N}s.json`
+- Preset mode adds `social_clips_{N}s.json` (3-clip selection); cache key includes reel duration so `--reel-duration 30` creates a separate cache entry
 - Stages 1-3 skip if cached; stage 3 also verifies video files exist on disk
 - `--new` flag forces full recalculation (deletes cache dir)
 - Cache utilities in `musicvid/pipeline/cache.py` (`get_audio_hash`, `load_cache`, `save_cache`)

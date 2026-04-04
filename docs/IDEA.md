@@ -1,181 +1,159 @@
 # Idea
 
-# Spec: Lepsza jakość zdjęć + dopasowanie do tekstu + ożywione video (1/3 scen)
+# Spec: Tryb preset — pełna pieśń + 3 rolki z różnych fragmentów
 
-## Trzy ulepszenia w jednym spec
+## Cel
+Jedno uruchomienie generuje komplet materiałów:
+- pełny teledysk YouTube 16:9
+- 3 rolki po 15s z różnych fragmentów piosenki w formacie 9:16
 
----
+## Nowa flaga CLI
+--preset [full|social|all]  (domyślnie: brak — zachowanie bez zmian)
 
-## Ulepszenie 1 — lepsza jakość i trafność zdjęć
+### --preset full
+Tylko pełny teledysk YouTube 16:9. Identyczne z dotychczasowym zachowaniem.
 
-### Problem
-Prompty generowane przez Claude-reżysera są zbyt ogólne — nie nawiązują
-konkretnie do treści danej linijki tekstu piosenki.
+### --preset social
+Tylko 3 rolki po 15s z różnych fragmentów, format 9:16. Bez pełnego teledysku.
 
-### Rozwiązanie — prompty kontekstowe
+### --preset all
+Wszystko naraz:
+- Pełny teledysk YouTube 16:9
+- Rolka 1 z 15s (fragment A)
+- Rolka 2 z 15s (fragment B)
+- Rolka 3 z 15s (fragment C)
 
-Claude-reżyser przy planowaniu każdej sceny dostaje:
-- tekst linijek które pojawią się w tej scenie
-- nastrój i energię całej piosenki
-- styl wizualny ustalony dla całości
-- tekst linijek poprzedniej i następnej sceny (kontekst)
+## Wybór 3 różnych fragmentów przez Claude
 
-Prompt dla Claude-reżysera musi generować visual_prompt który:
-1. Nawiązuje bezpośrednio do metafory lub obrazu z tekstu danej sceny
-2. Zachowuje spójność kolorystyczną z całym teledyskiem (master palette)
-3. Jest bardzo szczegółowy i opisowy — minimum 3 zdania
-4. Zawiera: główny motyw + światło + nastrój + kompozycja kadru + głębia
+Wyślij do Claude jedną prośbę o wybranie 3 fragmentów po 15s.
 
-Przykład dobrego promptu dla linijki "Tylko w Bogu jest moja dusza":
-"A lone silhouette of a person standing on a vast rocky cliff overlooking
-an infinite ocean at golden hour. Warm amber and deep orange light bathes
-the entire scene, with rays of sunlight breaking through scattered clouds
-above. The composition uses rule of thirds with the figure small against
-the immense landscape, conveying human smallness before the divine.
-Shallow depth of field, cinematic 16:9, photorealistic, high quality."
+Zasady dla Claude przy wyborze:
+- Fragmenty nie mogą się nakładać ani stykać (minimum 5s przerwy między nimi)
+- Każdy fragment pochodzi z innej sekcji piosenki (intro/verse/chorus/bridge/outro)
+- Preferuj fragmenty z mocnym tekstem i wyraźną melodią
+- Każdy fragment zaczyna się na początku frazy — nie w środku słowa
+- Każdy fragment kończy się na końcu linii tekstu
+- Opisz krótko dlaczego wybrałeś każdy fragment (pole "reason")
 
-### Model BFL — użyj flux-pro-1.1 zamiast flux-dev
-flux-pro-1.1 daje znacząco lepszą jakość detali i realizm.
-Zmień domyślny model dla trybu ai na flux-pro-1.1.
-Endpoint BFL: /v1/flux-pro-1.1
+Claude zwraca JSON:
+{
+  "clips": [
+    {
+      "id": "A",
+      "start": float,
+      "end": float,
+      "section": "chorus",
+      "reason": "Refren — najbardziej rozpoznawalny fragment"
+    },
+    {
+      "id": "B",
+      "start": float,
+      "end": float,
+      "section": "verse",
+      "reason": "Pierwsza zwrotka — dobry hook na początku"
+    },
+    {
+      "id": "C",
+      "start": float,
+      "end": float,
+      "section": "bridge",
+      "reason": "Bridge — emocjonalny szczyt piosenki"
+    }
+  ]
+}
 
-### Master style prompt
-Claude-reżyser na początku generuje jeden master_style który
-jest dołączany do KAŻDEGO visual_prompt:
-Przykład: "Consistent cinematic color grade, warm golden tones,
-soft atmospheric haze, photorealistic photography style"
-To zapewnia spójność wizualną między scenami.
+Cachuj w output/tmp/{hash}/social_clips.json.
 
-### Prompt director_system.txt — dodaj zasady jakości
-- Każdy visual_prompt musi opisywać konkretny obraz nawiązujący do tekstu
-- Minimum 2 zdania opisu
-- Zawsze opisz kompozycję kadru (close-up / medium / wide shot)
-- Zawsze opisz kierunek i jakość światła
-- Zawsze opisz głębię i atmosferę sceny
-- Dołącz master_style na końcu każdego promptu
+## Logika wykonania — optymalizacja
 
----
+Stage 1 — analiza audio: tylko raz
+Stage 2 — reżyseria Claude: tylko raz (pełny plan scen)
+Stage 3 — generowanie obrazów: tylko raz (cache współdzielony)
+Stage 4 — montaż: osobno dla każdego wariantu
 
-## Ulepszenie 2 — ożywione video dla 1/3 scen (Runway Gen-4)
+Kolejność montażu:
+1. Pełny teledysk (jeśli --preset full lub all)
+2. Rolka A 15s
+3. Rolka B 15s
+4. Rolka C 15s
 
-### Koncepcja
-Zamiast Ken Burns na wszystkich scenach — co trzecia scena jest
-prawdziwym krótkim video wygenerowanym przez Runway Gen-4 (image-to-video).
-Pozostałe 2/3 scen to nadal zdjęcia z Ken Burns i efektami.
+## Struktura folderów wyjściowych
 
-Wybór które sceny animować:
-Claude-reżyser w planie scen dodaje pole "animate": true/false.
-Animuj sceny przy refrenie i kluczowych emocjonalnie momentach.
-Maksymalnie co trzecia scena ma "animate": true.
+output/
+  pelny/
+    Tylko_w_Bogu_youtube.mp4
+  social/
+    Tylko_w_Bogu_rolka_A_15s.mp4
+    Tylko_w_Bogu_rolka_B_15s.mp4
+    Tylko_w_Bogu_rolka_C_15s.mp4
 
-### Provider video — Runway Gen-4
+## Format rolek 9:16
 
-API: https://api.dev.runwayml.com
-Dokumentacja: https://docs.dev.runwayml.com
-Klucz: RUNWAY_API_KEY w .env
+Rozdzielczość: 1080x1920
+FPS: 30
+Napisy: margines od dołu 200px (UI platform przykrywa dół ekranu)
+Cinematic bars: wyłączone
+Ken Burns: tylko zoom in/out i pan_up/pan_down (bez poziomego)
+Fade in audio: 0.5s
+Fade out audio: 1.5s
+Fade in video: 0.5s
+Fade out video: 1.0s
 
-Przepływ image-to-video:
-1. Wygeneruj zdjęcie przez BFL API jak zwykle
-2. Wyślij zdjęcie do Runway Gen-4 image-to-video
-3. Parametry: duration=5s, ratio=1280:768 (16:9)
-4. Runway zwraca URL do video MP4
-5. Pobierz video i użyj zamiast ImageClip z Ken Burns
+Konwersja obrazów 16:9 → 9:16:
+Smart crop środkowej części + rozmyte tło (blur całego obrazu
+skalowanego do 9:16 z ostrym centrum jako overlay).
+Wygląda profesjonalnie i nie deformuje głównego motywu.
 
-Prompt dla Runway (motion prompt) — Claude generuje go w planie scen
-jako pole "motion_prompt":
-Opisuje RUCH który ma nastąpić w scenie — nie treść obrazu.
-Przykłady:
-- "Slow camera push forward, gentle wind moves the trees, golden light shifts"
-- "Camera slowly rises revealing the landscape below, clouds drift gently"
-- "Subtle zoom out, light rays move across the scene, peaceful stillness"
-Unikaj gwałtownych ruchów — muzyka uwielbienia wymaga spokojnego ruchu.
+## Logowanie postępu
 
-### Nowy moduł musicvid/pipeline/video_animator.py
-Funkcja: animate_image(image_path, motion_prompt, duration, output_path) -> str
-- Wczytaj obraz z image_path
-- Wyślij do Runway Gen-4 API jako image-to-video
-- Polluj status aż gotowe (Runway też jest async)
-- Pobierz video MP4 do output_path
-- Zwróć output_path
+[1/4] Analiza audio...
+[2/4] Reżyseria (Claude)...
+[3/4] Generowanie obrazów...
+[4/4] Montaż:
+  → Pełny teledysk YouTube (1/4)... ✅
+  → Rolka A — chorus (2/4)...       ✅
+  → Rolka B — verse (3/4)...        ✅
+  → Rolka C — bridge (4/4)...       ✅
 
-Runway API przepływ:
-POST /v1/image_to_video z body:
-  model: "gen4_turbo"
-  promptImage: base64 obrazu lub URL
-  promptText: motion_prompt
-  duration: 5
-  ratio: "1280:768"
-→ zwraca {id: task_id}
-GET /v1/tasks/{task_id}
-→ polluj co 3s aż status == "SUCCEEDED"
-→ output[0].url to URL do video MP4
+Gotowe! Wygenerowano 4 pliki:
+  output/pelny/Tylko_w_Bogu_youtube.mp4
+  output/social/Tylko_w_Bogu_rolka_A_15s.mp4
+  output/social/Tylko_w_Bogu_rolka_B_15s.mp4
+  output/social/Tylko_w_Bogu_rolka_C_15s.mp4
 
-Timeout: 300 sekund (Runway jest wolniejszy niż BFL)
-Retry: max 2 próby na błędy sieciowe
+## Opcja --reel-duration
+--reel-duration [15|20|30]  (domyślnie: 15)
+Zmienia długość wszystkich 3 rolek.
 
-### Integracja w pipeline
-W director_plan każda scena ma pola:
-  "animate": bool
-  "motion_prompt": string (tylko gdy animate: true)
+Użycie:
+python3 -m musicvid.musicvid song.mp3 --preset social --reel-duration 30
+→ generuje 3 rolki po 30s z różnych fragmentów
 
-W image_generator / assembler:
-Gdy scene["animate"] == True:
-  1. Wygeneruj zdjęcie przez BFL normalnie
-  2. Wyślij do Runway → pobierz video MP4
-  3. Użyj VideoFileClip zamiast ImageClip z Ken Burns
-  4. Przytnij video do długości sceny (subclipped)
-  Gdy Runway niedostępny (brak RUNWAY_API_KEY):
-  Fallback do Ken Burns na zdjęciu bez błędu
+## Cache
 
-Gdy scene["animate"] == False:
-  Zwykłe zdjęcie z Ken Burns jak dotychczas
+Współdzielone między wariantami:
+- audio_analysis.json
+- scene_plan.json
+- scene_NNN.jpg
+- social_clips.json (wybrane fragmenty — invalidowany przez --reel-duration)
 
-### Cachowanie video
-Cache animowanych klipów w: output/tmp/{hash}/animated_scene_NNN.mp4
-Nie generuj ponownie jeśli plik istnieje.
-
-### Koszt i czas
-BFL flux-pro-1.1: ~$0.05/obraz
-Runway Gen-4 turbo: ~$0.05 za 5s video
-Dla 8 scen z 1/3 animowanych (3 sceny):
-  5 zdjęć × $0.05 = $0.25
-  3 video × $0.05 = $0.15
-  Łącznie: ~$0.40 za teledysk
-
-Czas generowania: +2-3 minuty na animowane sceny.
-
-### Nowa flaga CLI
---animate [auto|always|never]  (domyślnie: auto)
-auto   — Claude decyduje które sceny animować (co trzecia, przy refrenie)
-always — animuj wszystkie sceny (drożej, wolniej)
-never  — żadnych animacji, tylko Ken Burns (szybko, tanio)
-
----
-
-## .env.example — dodaj
-RUNWAY_API_KEY=...   # klucz z app.runwayml.com → Settings → API Keys
-
-## requirements.txt — dodaj
-runwayml>=0.1.0  # oficjalna biblioteka Python Runway
-
----
+Nie cachuj gotowych MP4 — montaż jest szybki gdy obrazy już istnieją.
 
 ## Testy
-- visual_prompt zawiera konkretne nawiązanie do tekstu sceny
-- master_style dołączony do każdego promptu
-- animate_image: mockuj Runway API, sprawdź że zwraca ścieżkę MP4
-- Polling Runway: symuluj PENDING → SUCCEEDED
-- Timeout 300s: TimeoutError
-- Fallback gdy brak RUNWAY_API_KEY: Ken Burns bez błędu
-- Maksymalnie 1/3 scen ma animate=True gdy --animate auto
-- Cache: nie wywołuj Runway ponownie jeśli MP4 istnieje
+- --preset all: generuje 4 pliki (1 youtube + 3 rolki)
+- --preset social: generuje tylko 3 rolki, brak folderu pelny/
+- --preset full: generuje tylko pełny teledysk, brak folderu social/
+- 3 fragmenty nie nakładają się czasowo
+- Każdy fragment pochodzi z innej sekcji
+- Rolki mają format 1080x1920
+- --reel-duration 30: rolki po 30s
+- Stage 1-3 wykonywane tylko raz przy --preset all
 
 ## Acceptance Criteria
-- Prompty zdjęć nawiązują do tekstu konkretnej sceny
-- Każdy prompt zawiera opis kompozycji i światła
-- Co trzecia scena to prawdziwe video z Runway (gdy --animate auto)
-- --animate never generuje tylko Ken Burns (bez Runway)
-- --animate always animuje każdą scenę
-- Animowane sceny cachowane w tmp/
-- Fallback do Ken Burns gdy brak RUNWAY_API_KEY
+- python3 -m musicvid.musicvid song.mp3 --preset all
+  generuje pełny teledysk + 3 rolki w jednym uruchomieniu
+- 3 rolki pokazują 3 różne fragmenty piosenki
+- Rolki mają format 9:16 gotowy na FB/Instagram Reels
+- Obrazy generowane tylko raz, montaż 4x
+- --reel-duration zmienia długość rolek
 - python3 -m pytest tests/ -v przechodzi

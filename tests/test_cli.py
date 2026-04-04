@@ -1396,3 +1396,548 @@ class TestFilterManifestToClip:
         assert len(result) == 2
         assert result[0]["scene_index"] == 0
         assert result[1]["scene_index"] == 1
+
+
+class TestPresetMode:
+    """Tests for --preset and --reel-duration CLI flags."""
+
+    @pytest.fixture
+    def runner(self):
+        return CliRunner()
+
+    def test_preset_flag_accepted(self, runner, tmp_path):
+        audio_file = tmp_path / "test.mp3"
+        audio_file.write_bytes(b"fake audio")
+        result = runner.invoke(cli, [str(audio_file), "--preset", "all", "--help"])
+        assert result.exit_code == 0
+
+    def test_reel_duration_flag_accepted(self, runner, tmp_path):
+        audio_file = tmp_path / "test.mp3"
+        audio_file.write_bytes(b"fake audio")
+        result = runner.invoke(cli, [str(audio_file), "--reel-duration", "30", "--help"])
+        assert result.exit_code == 0
+
+    def test_preset_invalid_value_rejected(self, runner, tmp_path):
+        audio_file = tmp_path / "test.mp3"
+        audio_file.write_bytes(b"fake audio")
+        result = runner.invoke(cli, [str(audio_file), "--preset", "invalid"])
+        assert result.exit_code != 0
+
+    @patch("musicvid.musicvid.get_font_path", return_value="/fake/font.ttf")
+    @patch("musicvid.musicvid.assemble_video")
+    @patch("musicvid.musicvid.fetch_videos")
+    @patch("musicvid.musicvid.create_scene_plan")
+    @patch("musicvid.musicvid.analyze_audio")
+    def test_preset_full_assembles_one_video(
+        self, mock_analyze, mock_direct, mock_fetch, mock_assemble, mock_font,
+        runner, tmp_path
+    ):
+        audio_file = tmp_path / "mysong.mp3"
+        audio_file.write_bytes(b"fake audio")
+
+        mock_analyze.return_value = {
+            "lyrics": [{"start": 0.5, "end": 2.0, "text": "Test"}],
+            "beats": [0.0, 0.5, 1.0],
+            "bpm": 120.0,
+            "duration": 60.0,
+            "sections": [{"label": "verse", "start": 0.0, "end": 60.0}],
+            "mood_energy": "contemplative",
+            "language": "en",
+        }
+        mock_direct.return_value = {
+            "overall_style": "contemplative",
+            "color_palette": ["#aaa"],
+            "subtitle_style": {"font_size": 48, "color": "#FFF", "outline_color": "#000",
+                               "position": "center-bottom", "animation": "fade"},
+            "scenes": [{"section": "verse", "start": 0.0, "end": 60.0,
+                        "visual_prompt": "test", "motion": "static",
+                        "transition": "cut", "overlay": "none"}],
+        }
+        mock_fetch.return_value = [
+            {"scene_index": 0, "video_path": "/fake/v.mp4", "search_query": "test"},
+        ]
+
+        output_dir = tmp_path / "output"
+        result = runner.invoke(cli, [
+            str(audio_file),
+            "--output", str(output_dir),
+            "--preset", "full",
+        ])
+
+        assert result.exit_code == 0, result.output
+        assert mock_assemble.call_count == 1
+        call_kwargs = mock_assemble.call_args[1]
+        assert "pelny" in call_kwargs["output_path"]
+        assert call_kwargs["output_path"].endswith("_youtube.mp4")
+
+    @patch("musicvid.musicvid.get_font_path", return_value="/fake/font.ttf")
+    @patch("musicvid.musicvid.assemble_video")
+    @patch("musicvid.musicvid.fetch_videos")
+    @patch("musicvid.musicvid.create_scene_plan")
+    @patch("musicvid.musicvid.analyze_audio")
+    @patch("musicvid.musicvid.select_social_clips")
+    def test_preset_social_assembles_three_reels(
+        self, mock_social, mock_analyze, mock_direct, mock_fetch, mock_assemble, mock_font,
+        runner, tmp_path
+    ):
+        audio_file = tmp_path / "mysong.mp3"
+        audio_file.write_bytes(b"fake audio")
+
+        mock_analyze.return_value = {
+            "lyrics": [
+                {"start": 20.0, "end": 24.0, "text": "Verse line"},
+                {"start": 60.0, "end": 64.0, "text": "Chorus line"},
+                {"start": 90.0, "end": 94.0, "text": "Bridge line"},
+            ],
+            "beats": [0.0, 0.5, 1.0],
+            "bpm": 120.0,
+            "duration": 180.0,
+            "sections": [
+                {"label": "verse", "start": 0.0, "end": 60.0},
+                {"label": "chorus", "start": 60.0, "end": 90.0},
+                {"label": "bridge", "start": 90.0, "end": 120.0},
+            ],
+            "mood_energy": "contemplative",
+            "language": "en",
+        }
+        mock_social.return_value = {
+            "clips": [
+                {"id": "A", "start": 60.0, "end": 75.0, "section": "chorus", "reason": "Hook"},
+                {"id": "B", "start": 20.0, "end": 35.0, "section": "verse", "reason": "Opening"},
+                {"id": "C", "start": 90.0, "end": 105.0, "section": "bridge", "reason": "Peak"},
+            ]
+        }
+        mock_direct.return_value = {
+            "overall_style": "contemplative",
+            "color_palette": ["#aaa"],
+            "subtitle_style": {"font_size": 48, "color": "#FFF", "outline_color": "#000",
+                               "position": "center-bottom", "animation": "fade"},
+            "scenes": [
+                {"section": "verse", "start": 0.0, "end": 60.0,
+                 "visual_prompt": "test1", "motion": "static", "transition": "cut", "overlay": "none"},
+                {"section": "chorus", "start": 60.0, "end": 90.0,
+                 "visual_prompt": "test2", "motion": "slow_zoom_in", "transition": "cut", "overlay": "none"},
+                {"section": "bridge", "start": 90.0, "end": 120.0,
+                 "visual_prompt": "test3", "motion": "pan_left", "transition": "cut", "overlay": "none"},
+            ],
+        }
+        mock_fetch.return_value = [
+            {"scene_index": 0, "video_path": "/fake/v1.mp4", "search_query": "test1"},
+            {"scene_index": 1, "video_path": "/fake/v2.mp4", "search_query": "test2"},
+            {"scene_index": 2, "video_path": "/fake/v3.mp4", "search_query": "test3"},
+        ]
+
+        output_dir = tmp_path / "output"
+        result = runner.invoke(cli, [
+            str(audio_file),
+            "--output", str(output_dir),
+            "--preset", "social",
+        ])
+
+        assert result.exit_code == 0, result.output
+        assert mock_assemble.call_count == 3
+        mock_social.assert_called_once()
+
+        # All 3 calls should use portrait resolution
+        for call in mock_assemble.call_args_list:
+            assert call[1]["resolution"] == "portrait"
+
+        # Check output paths are in social/ subfolder
+        paths = [call[1]["output_path"] for call in mock_assemble.call_args_list]
+        assert all("social" in p for p in paths)
+        assert any("rolka_A" in p for p in paths)
+        assert any("rolka_B" in p for p in paths)
+        assert any("rolka_C" in p for p in paths)
+
+    @patch("musicvid.musicvid.get_font_path", return_value="/fake/font.ttf")
+    @patch("musicvid.musicvid.assemble_video")
+    @patch("musicvid.musicvid.fetch_videos")
+    @patch("musicvid.musicvid.create_scene_plan")
+    @patch("musicvid.musicvid.analyze_audio")
+    @patch("musicvid.musicvid.select_social_clips")
+    def test_preset_all_assembles_four_videos(
+        self, mock_social, mock_analyze, mock_direct, mock_fetch, mock_assemble, mock_font,
+        runner, tmp_path
+    ):
+        audio_file = tmp_path / "mysong.mp3"
+        audio_file.write_bytes(b"fake audio")
+
+        mock_analyze.return_value = {
+            "lyrics": [{"start": 20.0, "end": 24.0, "text": "Test"}],
+            "beats": [0.0, 0.5],
+            "bpm": 120.0,
+            "duration": 180.0,
+            "sections": [
+                {"label": "verse", "start": 0.0, "end": 60.0},
+                {"label": "chorus", "start": 60.0, "end": 90.0},
+                {"label": "bridge", "start": 90.0, "end": 120.0},
+            ],
+            "mood_energy": "contemplative",
+            "language": "en",
+        }
+        mock_social.return_value = {
+            "clips": [
+                {"id": "A", "start": 60.0, "end": 75.0, "section": "chorus", "reason": "Hook"},
+                {"id": "B", "start": 20.0, "end": 35.0, "section": "verse", "reason": "Opening"},
+                {"id": "C", "start": 90.0, "end": 105.0, "section": "bridge", "reason": "Peak"},
+            ]
+        }
+        mock_direct.return_value = {
+            "overall_style": "contemplative",
+            "color_palette": ["#aaa"],
+            "subtitle_style": {"font_size": 48, "color": "#FFF", "outline_color": "#000",
+                               "position": "center-bottom", "animation": "fade"},
+            "scenes": [
+                {"section": "verse", "start": 0.0, "end": 60.0,
+                 "visual_prompt": "test", "motion": "static", "transition": "cut", "overlay": "none"},
+                {"section": "chorus", "start": 60.0, "end": 90.0,
+                 "visual_prompt": "test", "motion": "static", "transition": "cut", "overlay": "none"},
+                {"section": "bridge", "start": 90.0, "end": 120.0,
+                 "visual_prompt": "test", "motion": "static", "transition": "cut", "overlay": "none"},
+            ],
+        }
+        mock_fetch.return_value = [
+            {"scene_index": 0, "video_path": "/fake/v1.mp4", "search_query": "test"},
+            {"scene_index": 1, "video_path": "/fake/v2.mp4", "search_query": "test"},
+            {"scene_index": 2, "video_path": "/fake/v3.mp4", "search_query": "test"},
+        ]
+
+        output_dir = tmp_path / "output"
+        result = runner.invoke(cli, [
+            str(audio_file),
+            "--output", str(output_dir),
+            "--preset", "all",
+        ])
+
+        assert result.exit_code == 0, result.output
+        assert mock_assemble.call_count == 4
+
+        # First call is full YouTube video
+        first_call = mock_assemble.call_args_list[0][1]
+        assert "pelny" in first_call["output_path"]
+
+        # Remaining 3 calls are social reels
+        for call in mock_assemble.call_args_list[1:]:
+            assert call[1]["resolution"] == "portrait"
+            assert "social" in call[1]["output_path"]
+
+    @patch("musicvid.musicvid.get_font_path", return_value="/fake/font.ttf")
+    @patch("musicvid.musicvid.assemble_video")
+    @patch("musicvid.musicvid.fetch_videos")
+    @patch("musicvid.musicvid.create_scene_plan")
+    @patch("musicvid.musicvid.analyze_audio")
+    @patch("musicvid.musicvid.select_social_clips")
+    def test_preset_all_stages_1_to_3_run_once(
+        self, mock_social, mock_analyze, mock_direct, mock_fetch, mock_assemble, mock_font,
+        runner, tmp_path
+    ):
+        audio_file = tmp_path / "mysong.mp3"
+        audio_file.write_bytes(b"fake audio")
+
+        mock_analyze.return_value = {
+            "lyrics": [{"start": 20.0, "end": 24.0, "text": "Test"}],
+            "beats": [0.0],
+            "bpm": 120.0,
+            "duration": 180.0,
+            "sections": [
+                {"label": "verse", "start": 0.0, "end": 60.0},
+                {"label": "chorus", "start": 60.0, "end": 90.0},
+                {"label": "bridge", "start": 90.0, "end": 120.0},
+            ],
+            "mood_energy": "contemplative",
+            "language": "en",
+        }
+        mock_social.return_value = {
+            "clips": [
+                {"id": "A", "start": 60.0, "end": 75.0, "section": "chorus", "reason": "Hook"},
+                {"id": "B", "start": 20.0, "end": 35.0, "section": "verse", "reason": "Opening"},
+                {"id": "C", "start": 90.0, "end": 105.0, "section": "bridge", "reason": "Peak"},
+            ]
+        }
+        mock_direct.return_value = {
+            "overall_style": "contemplative",
+            "color_palette": ["#aaa"],
+            "subtitle_style": {"font_size": 48, "color": "#FFF", "outline_color": "#000",
+                               "position": "center-bottom", "animation": "fade"},
+            "scenes": [
+                {"section": "verse", "start": 0.0, "end": 60.0,
+                 "visual_prompt": "t", "motion": "static", "transition": "cut", "overlay": "none"},
+            ],
+        }
+        mock_fetch.return_value = [
+            {"scene_index": 0, "video_path": "/fake/v.mp4", "search_query": "t"},
+        ]
+
+        output_dir = tmp_path / "output"
+        result = runner.invoke(cli, [
+            str(audio_file),
+            "--output", str(output_dir),
+            "--preset", "all",
+        ])
+
+        assert result.exit_code == 0, result.output
+        mock_analyze.assert_called_once()
+        mock_direct.assert_called_once()
+        mock_fetch.assert_called_once()
+        assert mock_assemble.call_count == 4
+
+    @patch("musicvid.musicvid.get_font_path", return_value="/fake/font.ttf")
+    @patch("musicvid.musicvid.assemble_video")
+    @patch("musicvid.musicvid.fetch_videos")
+    @patch("musicvid.musicvid.create_scene_plan")
+    @patch("musicvid.musicvid.analyze_audio")
+    @patch("musicvid.musicvid.select_social_clips")
+    def test_reel_duration_changes_clip_length(
+        self, mock_social, mock_analyze, mock_direct, mock_fetch, mock_assemble, mock_font,
+        runner, tmp_path
+    ):
+        audio_file = tmp_path / "mysong.mp3"
+        audio_file.write_bytes(b"fake audio")
+
+        mock_analyze.return_value = {
+            "lyrics": [],
+            "beats": [0.0],
+            "bpm": 120.0,
+            "duration": 180.0,
+            "sections": [{"label": "verse", "start": 0.0, "end": 180.0}],
+            "mood_energy": "contemplative",
+            "language": "en",
+        }
+        mock_social.return_value = {
+            "clips": [
+                {"id": "A", "start": 10.0, "end": 40.0, "section": "verse", "reason": "A"},
+                {"id": "B", "start": 60.0, "end": 90.0, "section": "verse", "reason": "B"},
+                {"id": "C", "start": 120.0, "end": 150.0, "section": "verse", "reason": "C"},
+            ]
+        }
+        mock_direct.return_value = {
+            "overall_style": "contemplative",
+            "color_palette": ["#aaa"],
+            "subtitle_style": {"font_size": 48, "color": "#FFF", "outline_color": "#000",
+                               "position": "center-bottom", "animation": "fade"},
+            "scenes": [{"section": "verse", "start": 0.0, "end": 180.0,
+                        "visual_prompt": "t", "motion": "static", "transition": "cut", "overlay": "none"}],
+        }
+        mock_fetch.return_value = [
+            {"scene_index": 0, "video_path": "/fake/v.mp4", "search_query": "t"},
+        ]
+
+        output_dir = tmp_path / "output"
+        result = runner.invoke(cli, [
+            str(audio_file),
+            "--output", str(output_dir),
+            "--preset", "social",
+            "--reel-duration", "30",
+        ])
+
+        assert result.exit_code == 0, result.output
+        mock_social.assert_called_once()
+        assert mock_social.call_args[0][1] == 30
+
+        paths = [call[1]["output_path"] for call in mock_assemble.call_args_list]
+        assert all("30s" in p for p in paths)
+
+    @patch("musicvid.musicvid.get_font_path", return_value="/fake/font.ttf")
+    @patch("musicvid.musicvid.assemble_video")
+    @patch("musicvid.musicvid.fetch_videos")
+    @patch("musicvid.musicvid.create_scene_plan")
+    @patch("musicvid.musicvid.analyze_audio")
+    @patch("musicvid.musicvid.select_social_clips")
+    def test_social_reels_use_correct_assembler_params(
+        self, mock_social, mock_analyze, mock_direct, mock_fetch, mock_assemble, mock_font,
+        runner, tmp_path
+    ):
+        audio_file = tmp_path / "mysong.mp3"
+        audio_file.write_bytes(b"fake audio")
+
+        mock_analyze.return_value = {
+            "lyrics": [],
+            "beats": [0.0],
+            "bpm": 120.0,
+            "duration": 180.0,
+            "sections": [{"label": "verse", "start": 0.0, "end": 180.0}],
+            "mood_energy": "contemplative",
+            "language": "en",
+        }
+        mock_social.return_value = {
+            "clips": [
+                {"id": "A", "start": 10.0, "end": 25.0, "section": "verse", "reason": "A"},
+                {"id": "B", "start": 60.0, "end": 75.0, "section": "verse", "reason": "B"},
+                {"id": "C", "start": 120.0, "end": 135.0, "section": "verse", "reason": "C"},
+            ]
+        }
+        mock_direct.return_value = {
+            "overall_style": "contemplative",
+            "color_palette": ["#aaa"],
+            "subtitle_style": {"font_size": 48, "color": "#FFF", "outline_color": "#000",
+                               "position": "center-bottom", "animation": "fade"},
+            "scenes": [{"section": "verse", "start": 0.0, "end": 180.0,
+                        "visual_prompt": "t", "motion": "static", "transition": "cut", "overlay": "none"}],
+        }
+        mock_fetch.return_value = [
+            {"scene_index": 0, "video_path": "/fake/v.mp4", "search_query": "t"},
+        ]
+
+        output_dir = tmp_path / "output"
+        result = runner.invoke(cli, [
+            str(audio_file), "--output", str(output_dir), "--preset", "social",
+        ])
+
+        assert result.exit_code == 0, result.output
+        for call in mock_assemble.call_args_list:
+            kwargs = call[1]
+            assert kwargs["resolution"] == "portrait"
+            assert kwargs["audio_fade_out"] == 1.5
+            assert kwargs["subtitle_margin_bottom"] == 200
+            assert kwargs["cinematic_bars"] == False
+            assert kwargs["clip_start"] is not None
+            assert kwargs["clip_end"] is not None
+
+    @patch("musicvid.musicvid.get_font_path", return_value="/fake/font.ttf")
+    @patch("musicvid.musicvid.assemble_video")
+    @patch("musicvid.musicvid.fetch_videos")
+    @patch("musicvid.musicvid.create_scene_plan")
+    @patch("musicvid.musicvid.analyze_audio")
+    def test_no_preset_flag_unchanged_behavior(
+        self, mock_analyze, mock_direct, mock_fetch, mock_assemble, mock_font,
+        runner, tmp_path
+    ):
+        """Without --preset, existing behavior is preserved exactly."""
+        audio_file = tmp_path / "test.mp3"
+        audio_file.write_bytes(b"fake audio")
+
+        mock_analyze.return_value = {
+            "lyrics": [],
+            "beats": [0.0],
+            "bpm": 120.0,
+            "duration": 60.0,
+            "sections": [{"label": "verse", "start": 0.0, "end": 60.0}],
+            "mood_energy": "contemplative",
+            "language": "en",
+        }
+        mock_direct.return_value = {
+            "overall_style": "contemplative",
+            "color_palette": ["#aaa"],
+            "subtitle_style": {"font_size": 48, "color": "#FFF", "outline_color": "#000",
+                               "position": "center-bottom", "animation": "fade"},
+            "scenes": [{"section": "verse", "start": 0.0, "end": 60.0,
+                        "visual_prompt": "t", "motion": "static", "transition": "cut", "overlay": "none"}],
+        }
+        mock_fetch.return_value = [
+            {"scene_index": 0, "video_path": "/fake/v.mp4", "search_query": "t"},
+        ]
+
+        output_dir = tmp_path / "output"
+        result = runner.invoke(cli, [str(audio_file), "--output", str(output_dir)])
+
+        assert result.exit_code == 0, result.output
+        assert mock_assemble.call_count == 1
+        call_kwargs = mock_assemble.call_args[1]
+        assert "_musicvideo.mp4" in call_kwargs["output_path"]
+        assert "pelny" not in call_kwargs["output_path"]
+        assert "social" not in call_kwargs["output_path"]
+
+    @patch("musicvid.musicvid.get_font_path", return_value="/fake/font.ttf")
+    @patch("musicvid.musicvid.assemble_video")
+    @patch("musicvid.musicvid.fetch_videos")
+    @patch("musicvid.musicvid.create_scene_plan")
+    @patch("musicvid.musicvid.analyze_audio")
+    @patch("musicvid.musicvid.select_social_clips")
+    def test_social_clips_cached_on_second_run(
+        self, mock_social, mock_analyze, mock_direct, mock_fetch, mock_assemble, mock_font,
+        runner, tmp_path
+    ):
+        audio_file = tmp_path / "mysong.mp3"
+        audio_file.write_bytes(b"fake audio")
+
+        base_analysis = {
+            "lyrics": [],
+            "beats": [0.0],
+            "bpm": 120.0,
+            "duration": 180.0,
+            "sections": [{"label": "verse", "start": 0.0, "end": 180.0}],
+            "mood_energy": "contemplative",
+            "language": "en",
+        }
+        mock_analyze.return_value = base_analysis
+        mock_social.return_value = {
+            "clips": [
+                {"id": "A", "start": 10.0, "end": 25.0, "section": "verse", "reason": "A"},
+                {"id": "B", "start": 60.0, "end": 75.0, "section": "verse", "reason": "B"},
+                {"id": "C", "start": 120.0, "end": 135.0, "section": "verse", "reason": "C"},
+            ]
+        }
+        mock_direct.return_value = {
+            "overall_style": "contemplative",
+            "color_palette": ["#aaa"],
+            "subtitle_style": {"font_size": 48, "color": "#FFF", "outline_color": "#000",
+                               "position": "center-bottom", "animation": "fade"},
+            "scenes": [{"section": "verse", "start": 0.0, "end": 180.0,
+                        "visual_prompt": "t", "motion": "static", "transition": "cut", "overlay": "none"}],
+        }
+        mock_fetch.return_value = [
+            {"scene_index": 0, "video_path": "/fake/v.mp4", "search_query": "t"},
+        ]
+
+        output_dir = tmp_path / "output"
+        args = [str(audio_file), "--output", str(output_dir), "--preset", "social"]
+
+        # First run
+        runner.invoke(cli, args)
+        assert mock_social.call_count == 1
+
+        # Second run — social clips should be cached
+        runner.invoke(cli, args)
+        assert mock_social.call_count == 1  # not called again
+
+    @patch("musicvid.musicvid.get_font_path", return_value="/fake/font.ttf")
+    @patch("musicvid.musicvid.assemble_video")
+    @patch("musicvid.musicvid.fetch_videos")
+    @patch("musicvid.musicvid.create_scene_plan")
+    @patch("musicvid.musicvid.analyze_audio")
+    @patch("musicvid.musicvid.select_social_clips")
+    def test_different_reel_duration_invalidates_cache(
+        self, mock_social, mock_analyze, mock_direct, mock_fetch, mock_assemble, mock_font,
+        runner, tmp_path
+    ):
+        audio_file = tmp_path / "mysong.mp3"
+        audio_file.write_bytes(b"fake audio")
+
+        base_analysis = {
+            "lyrics": [],
+            "beats": [0.0],
+            "bpm": 120.0,
+            "duration": 180.0,
+            "sections": [{"label": "verse", "start": 0.0, "end": 180.0}],
+            "mood_energy": "contemplative",
+            "language": "en",
+        }
+        mock_analyze.return_value = base_analysis
+        mock_social.return_value = {
+            "clips": [
+                {"id": "A", "start": 10.0, "end": 25.0, "section": "verse", "reason": "A"},
+                {"id": "B", "start": 60.0, "end": 75.0, "section": "verse", "reason": "B"},
+                {"id": "C", "start": 120.0, "end": 135.0, "section": "verse", "reason": "C"},
+            ]
+        }
+        mock_direct.return_value = {
+            "overall_style": "contemplative",
+            "color_palette": ["#aaa"],
+            "subtitle_style": {"font_size": 48, "color": "#FFF", "outline_color": "#000",
+                               "position": "center-bottom", "animation": "fade"},
+            "scenes": [{"section": "verse", "start": 0.0, "end": 180.0,
+                        "visual_prompt": "t", "motion": "static", "transition": "cut", "overlay": "none"}],
+        }
+        mock_fetch.return_value = [
+            {"scene_index": 0, "video_path": "/fake/v.mp4", "search_query": "t"},
+        ]
+
+        output_dir = tmp_path / "output"
+
+        # Run with 15s
+        runner.invoke(cli, [str(audio_file), "--output", str(output_dir), "--preset", "social"])
+        assert mock_social.call_count == 1
+
+        # Run with 30s — different cache key
+        runner.invoke(cli, [str(audio_file), "--output", str(output_dir), "--preset", "social", "--reel-duration", "30"])
+        assert mock_social.call_count == 2  # called again because different duration

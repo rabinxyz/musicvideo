@@ -9,9 +9,7 @@ cd "$PROJECT_DIR"
 source venv/bin/activate
 mkdir -p "$DONE_DIR"
 
-# Sortuj numerycznie po prefiksie (01-, 02- itd.)
-# Pliki bez prefiksu idą na końcu
-SPECS=($(ls "$SPECS_DIR"/*.md 2>/dev/null | sort -t'/' -k9 -V))
+SPECS=($(find "$SPECS_DIR" -maxdepth 1 -name "*.md" | xargs -I{} basename {} | sort -V | xargs -I{} echo "$SPECS_DIR/{}"))
 
 if [ ${#SPECS[@]} -eq 0 ]; then
   echo "Brak specyfikacji w $SPECS_DIR"
@@ -24,8 +22,9 @@ FAILED=0
 
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo "  Kolejka: $TOTAL specyfikacji"
-ls "$SPECS_DIR"/*.md 2>/dev/null | sort -t'/' -k9 -V | while read f; do
-  echo "  • $(basename $f)"
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+for SPEC_PATH in "${SPECS[@]}"; do
+  echo "  $(basename $SPEC_PATH)"
 done
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
@@ -41,13 +40,13 @@ for SPEC_PATH in "${SPECS[@]}"; do
     mv "$SPEC_PATH" "$DONE_DIR/$SPEC_NAME"
     echo "✅ [$CURRENT/$TOTAL] Gotowe → done/$SPEC_NAME"
   else
-    echo "❌ [$CURRENT/$TOTAL] Błąd: $SPEC_NAME — zostaje w specs/"
+    echo "❌ [$CURRENT/$TOTAL] Blad: $SPEC_NAME — zostaje w specs/"
     FAILED=$((FAILED + 1))
   fi
 done
 
 echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo "  ✅ Wykonane: $((TOTAL - FAILED))"
-echo "  ❌ Błędy:    $FAILED"
+echo "  Wykonane: $((TOTAL - FAILED))"
+echo "  Bledy:    $FAILED"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"

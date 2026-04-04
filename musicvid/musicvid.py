@@ -18,6 +18,8 @@ from musicvid.pipeline.assembler import assemble_video
 from musicvid.pipeline.font_loader import get_font_path
 from musicvid.pipeline.lyrics_parser import align_with_claude
 from musicvid.pipeline.video_animator import animate_image
+from musicvid.pipeline.social_clip_selector import select_social_clips
+from musicvid.pipeline.assembler import _remap_motion_for_portrait
 
 
 load_dotenv()
@@ -124,7 +126,9 @@ def _filter_manifest_to_clip(manifest, scenes, clip_start, clip_end):
 @click.option("--platform", type=click.Choice(["reels", "shorts", "tiktok"]), default=None, help="Social media platform (sets portrait 9:16 resolution).")
 @click.option("--title-card", is_flag=True, default=False, help="Add 2-second title card with song name at start of clip.")
 @click.option("--animate", "animate_mode", type=click.Choice(["auto", "always", "never"]), default="auto", help="Animated video via Runway Gen-4 (auto: director decides, always: all scenes, never: off). Only with --mode ai.")
-def cli(audio_file, mode, provider, style, output, resolution, lang, new, font_path, lyrics_path, effects, clip_duration, platform, title_card, animate_mode):
+@click.option("--preset", type=click.Choice(["full", "social", "all"]), default=None, help="Preset mode: full (YouTube), social (3 reels), all (both).")
+@click.option("--reel-duration", type=click.Choice(["15", "20", "30"]), default="15", help="Duration of social media reels in seconds.")
+def cli(audio_file, mode, provider, style, output, resolution, lang, new, font_path, lyrics_path, effects, clip_duration, platform, title_card, animate_mode, preset, reel_duration):
     """Generate a music video from AUDIO_FILE."""
     audio_path = Path(audio_file).resolve()
     output_dir = Path(output).resolve()
@@ -287,6 +291,25 @@ def cli(audio_file, mode, provider, style, output, resolution, lang, new, font_p
     # Resolve font
     font = get_font_path(custom_path=font_path)
 
+    # === Preset mode routing ===
+    if preset is not None:
+        _run_preset_mode(
+            preset=preset,
+            reel_duration=int(reel_duration),
+            analysis=analysis,
+            scene_plan=scene_plan,
+            fetch_manifest=fetch_manifest,
+            audio_path=str(audio_path),
+            output_dir=output_dir,
+            stem=audio_path.stem,
+            font=font,
+            effects=effects,
+            cache_dir=cache_dir,
+            new=new,
+        )
+        return
+
+    # === Original single-output mode (unchanged) ===
     # Build output filename
     if clip_duration:
         suffix = f"_{clip_duration}s"
@@ -316,6 +339,106 @@ def cli(audio_file, mode, provider, style, output, resolution, lang, new, font_p
         title_card_text=title_card_text,
     )
     click.echo(f"  Done! Output: {output_path}")
+
+
+def _run_preset_mode(preset, reel_duration, analysis, scene_plan, fetch_manifest,
+                     audio_path, output_dir, stem, font, effects, cache_dir, new):
+    """Handle --preset flag: generate full video and/or social reels."""
+    generate_full = preset in ("full", "all")
+    generate_social = preset in ("social", "all")
+
+    # Social clip selection
+    social_clips = None
+    if generate_social:
+        social_cache_name = f"social_clips_{reel_duration}s.json"
+        social_clips = load_cache(str(cache_dir), social_cache_name) if not new else None
+        if social_clips:
+            click.echo(f"[social] Social clip selection ({reel_duration}s)... CACHED (skipped)")
+        else:
+            click.echo(f"[social] Selecting 3 \u00d7 {reel_duration}s fragments...")
+            social_clips = select_social_clips(analysis, reel_duration)
+            save_cache(str(cache_dir), social_cache_name, social_clips)
+        for clip in social_clips["clips"]:
+            click.echo(f"  Clip {clip['id']}: {clip['start']:.1f}s\u2013{clip['end']:.1f}s "
+                       f"({clip.get('section', '?')}) \u2014 {clip.get('reason', '')}")
+
+    # Count total assemblies for progress
+    total = (1 if generate_full else 0) + (3 if generate_social else 0)
+    assembly_num = 0
+
+    click.echo("[4/4] Monta\u017c:")
+
+    # Stage 4a: Full YouTube video
+    if generate_full:
+        assembly_num += 1
+        pelny_dir = output_dir / "pelny"
+        pelny_dir.mkdir(parents=True, exist_ok=True)
+        full_output = str(pelny_dir / f"{stem}_youtube.mp4")
+        click.echo(f"  \u2192 Pe\u0142ny teledysk YouTube ({assembly_num}/{total})...")
+        assemble_video(
+            analysis=analysis,
+            scene_plan=scene_plan,
+            fetch_manifest=fetch_manifest,
+            audio_path=audio_path,
+            output_path=full_output,
+            resolution="1080p",
+            font_path=font,
+            effects_level=effects,
+        )
+        click.echo(f"  \u2192 Pe\u0142ny teledysk YouTube ({assembly_num}/{total})... \u2705")
+
+    # Stage 4b-d: Social reels
+    if generate_social:
+        social_dir = output_dir / "social"
+        social_dir.mkdir(parents=True, exist_ok=True)
+
+        for clip_info in social_clips["clips"]:
+            assembly_num += 1
+            clip_id = clip_info["id"]
+            clip_start = clip_info["start"]
+            clip_end = clip_info["end"]
+            section = clip_info.get("section", "unknown")
+
+            reel_output = str(social_dir / f"{stem}_rolka_{clip_id}_{reel_duration}s.mp4")
+
+            click.echo(f"  \u2192 Rolka {clip_id} \u2014 {section} ({assembly_num}/{total})...")
+
+            # Filter analysis, scene plan, and manifest to clip window
+            clip_analysis = _filter_analysis_to_clip(analysis, clip_start, clip_end)
+            clip_scene_plan = _filter_scene_plan_to_clip(scene_plan, clip_start, clip_end)
+
+            # Remap horizontal pans to vertical for portrait
+            for scene in clip_scene_plan["scenes"]:
+                scene["motion"] = _remap_motion_for_portrait(scene.get("motion", "static"))
+
+            clip_manifest = _filter_manifest_to_clip(
+                fetch_manifest, scene_plan["scenes"], clip_start, clip_end
+            )
+
+            assemble_video(
+                analysis=clip_analysis,
+                scene_plan=clip_scene_plan,
+                fetch_manifest=clip_manifest,
+                audio_path=audio_path,
+                output_path=reel_output,
+                resolution="portrait",
+                font_path=font,
+                effects_level=effects,
+                clip_start=clip_start,
+                clip_end=clip_end,
+                audio_fade_out=1.5,
+                subtitle_margin_bottom=200,
+                cinematic_bars=False,
+            )
+            click.echo(f"  \u2192 Rolka {clip_id} \u2014 {section} ({assembly_num}/{total})... \u2705")
+
+    # Summary
+    click.echo(f"\nGotowe! Wygenerowano {total} plik\u00f3w:")
+    if generate_full:
+        click.echo(f"  {output_dir}/pelny/{stem}_youtube.mp4")
+    if generate_social:
+        for clip_info in social_clips["clips"]:
+            click.echo(f"  {output_dir}/social/{stem}_rolka_{clip_info['id']}_{reel_duration}s.mp4")
 
 
 if __name__ == "__main__":

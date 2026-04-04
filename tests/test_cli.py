@@ -412,6 +412,229 @@ class TestCLI:
         call_kwargs = mock_assemble.call_args[1]
         assert call_kwargs["font_path"] == "/resolved/font.ttf"
 
+    def test_clip_flag_accepted(self, runner, tmp_path):
+        """The --clip flag should be accepted by the CLI."""
+        audio_file = tmp_path / "test.mp3"
+        audio_file.write_bytes(b"fake audio")
+        result = runner.invoke(cli, [str(audio_file), "--clip", "15", "--help"])
+        assert result.exit_code == 0
+
+    def test_platform_flag_accepted(self, runner, tmp_path):
+        """The --platform flag should be accepted by the CLI."""
+        audio_file = tmp_path / "test.mp3"
+        audio_file.write_bytes(b"fake audio")
+        result = runner.invoke(cli, [str(audio_file), "--platform", "reels", "--help"])
+        assert result.exit_code == 0
+
+    def test_title_card_flag_accepted(self, runner, tmp_path):
+        """The --title-card flag should be accepted by the CLI."""
+        audio_file = tmp_path / "test.mp3"
+        audio_file.write_bytes(b"fake audio")
+        result = runner.invoke(cli, [str(audio_file), "--title-card", "--help"])
+        assert result.exit_code == 0
+
+    @patch("musicvid.musicvid.get_font_path", return_value="/fake/font.ttf")
+    @patch("musicvid.musicvid.assemble_video")
+    @patch("musicvid.musicvid.fetch_videos")
+    @patch("musicvid.musicvid.create_scene_plan")
+    @patch("musicvid.musicvid.analyze_audio")
+    @patch("musicvid.musicvid.select_clip")
+    def test_clip_mode_calls_select_clip(
+        self, mock_select, mock_analyze, mock_direct, mock_fetch, mock_assemble, mock_font,
+        runner, tmp_path
+    ):
+        audio_file = tmp_path / "test.mp3"
+        audio_file.write_bytes(b"fake audio")
+
+        mock_analyze.return_value = {
+            "lyrics": [{"start": 45.0, "end": 60.0, "text": "Amazing grace"}],
+            "beats": [45.0, 46.0],
+            "bpm": 120.0,
+            "duration": 180.0,
+            "sections": [{"label": "chorus", "start": 45.0, "end": 75.0}],
+            "mood_energy": "contemplative",
+            "language": "en",
+        }
+        mock_select.return_value = {"start": 45.0, "end": 60.0, "reason": "chorus"}
+        mock_direct.return_value = {
+            "overall_style": "contemplative",
+            "color_palette": ["#aaa"],
+            "subtitle_style": {"font_size": 48, "color": "#FFF", "outline_color": "#000",
+                               "position": "center-bottom", "animation": "fade"},
+            "scenes": [{"section": "chorus", "start": 0.0, "end": 15.0,
+                        "visual_prompt": "test", "motion": "static",
+                        "transition": "cut", "overlay": "none"}],
+        }
+        mock_fetch.return_value = [
+            {"scene_index": 0, "video_path": "/fake/v.mp4", "search_query": "test"},
+        ]
+
+        output_dir = tmp_path / "output"
+        result = runner.invoke(cli, [
+            str(audio_file),
+            "--output", str(output_dir),
+            "--clip", "15",
+        ])
+
+        assert result.exit_code == 0, result.output
+        mock_select.assert_called_once()
+        select_args = mock_select.call_args
+        assert select_args[0][1] == 15
+
+    @patch("musicvid.musicvid.get_font_path", return_value="/fake/font.ttf")
+    @patch("musicvid.musicvid.assemble_video")
+    @patch("musicvid.musicvid.fetch_videos")
+    @patch("musicvid.musicvid.create_scene_plan")
+    @patch("musicvid.musicvid.analyze_audio")
+    @patch("musicvid.musicvid.select_clip")
+    def test_clip_mode_output_filename_has_duration_suffix(
+        self, mock_select, mock_analyze, mock_direct, mock_fetch, mock_assemble, mock_font,
+        runner, tmp_path
+    ):
+        audio_file = tmp_path / "mysong.mp3"
+        audio_file.write_bytes(b"fake audio")
+
+        mock_analyze.return_value = {
+            "lyrics": [{"start": 45.0, "end": 60.0, "text": "Amazing grace"}],
+            "beats": [45.0],
+            "bpm": 120.0,
+            "duration": 180.0,
+            "sections": [{"label": "chorus", "start": 45.0, "end": 75.0}],
+            "mood_energy": "contemplative",
+            "language": "en",
+        }
+        mock_select.return_value = {"start": 45.0, "end": 60.0, "reason": "chorus"}
+        mock_direct.return_value = {
+            "overall_style": "contemplative",
+            "color_palette": ["#aaa"],
+            "subtitle_style": {"font_size": 48, "color": "#FFF", "outline_color": "#000",
+                               "position": "center-bottom", "animation": "fade"},
+            "scenes": [{"section": "chorus", "start": 0.0, "end": 15.0,
+                        "visual_prompt": "test", "motion": "static",
+                        "transition": "cut", "overlay": "none"}],
+        }
+        mock_fetch.return_value = [
+            {"scene_index": 0, "video_path": "/fake/v.mp4", "search_query": "test"},
+        ]
+
+        output_dir = tmp_path / "output"
+        result = runner.invoke(cli, [
+            str(audio_file),
+            "--output", str(output_dir),
+            "--clip", "30",
+        ])
+
+        assert result.exit_code == 0, result.output
+        assemble_call_kwargs = mock_assemble.call_args[1]
+        assert "30s" in assemble_call_kwargs["output_path"]
+
+    @patch("musicvid.musicvid.get_font_path", return_value="/fake/font.ttf")
+    @patch("musicvid.musicvid.assemble_video")
+    @patch("musicvid.musicvid.fetch_videos")
+    @patch("musicvid.musicvid.create_scene_plan")
+    @patch("musicvid.musicvid.analyze_audio")
+    @patch("musicvid.musicvid.select_clip")
+    def test_clip_mode_with_platform_uses_portrait_resolution(
+        self, mock_select, mock_analyze, mock_direct, mock_fetch, mock_assemble, mock_font,
+        runner, tmp_path
+    ):
+        audio_file = tmp_path / "test.mp3"
+        audio_file.write_bytes(b"fake audio")
+
+        mock_analyze.return_value = {
+            "lyrics": [{"start": 45.0, "end": 60.0, "text": "Amazing grace"}],
+            "beats": [45.0],
+            "bpm": 120.0,
+            "duration": 180.0,
+            "sections": [{"label": "chorus", "start": 45.0, "end": 75.0}],
+            "mood_energy": "contemplative",
+            "language": "en",
+        }
+        mock_select.return_value = {"start": 45.0, "end": 60.0, "reason": "chorus"}
+        mock_direct.return_value = {
+            "overall_style": "contemplative",
+            "color_palette": ["#aaa"],
+            "subtitle_style": {"font_size": 48, "color": "#FFF", "outline_color": "#000",
+                               "position": "center-bottom", "animation": "fade"},
+            "scenes": [{"section": "chorus", "start": 0.0, "end": 15.0,
+                        "visual_prompt": "test", "motion": "static",
+                        "transition": "cut", "overlay": "none"}],
+        }
+        mock_fetch.return_value = [
+            {"scene_index": 0, "video_path": "/fake/v.mp4", "search_query": "test"},
+        ]
+
+        output_dir = tmp_path / "output"
+        result = runner.invoke(cli, [
+            str(audio_file),
+            "--output", str(output_dir),
+            "--clip", "30",
+            "--platform", "reels",
+        ])
+
+        assert result.exit_code == 0, result.output
+        assemble_call_kwargs = mock_assemble.call_args[1]
+        assert assemble_call_kwargs["resolution"] == "portrait"
+        assert "reels" in assemble_call_kwargs["output_path"]
+
+    @patch("musicvid.musicvid.get_font_path", return_value="/fake/font.ttf")
+    @patch("musicvid.musicvid.assemble_video")
+    @patch("musicvid.musicvid.fetch_videos")
+    @patch("musicvid.musicvid.create_scene_plan")
+    @patch("musicvid.musicvid.analyze_audio")
+    @patch("musicvid.musicvid.select_clip")
+    def test_clip_mode_filters_analysis_to_clip_window(
+        self, mock_select, mock_analyze, mock_direct, mock_fetch, mock_assemble, mock_font,
+        runner, tmp_path
+    ):
+        import pytest
+        audio_file = tmp_path / "test.mp3"
+        audio_file.write_bytes(b"fake audio")
+
+        mock_analyze.return_value = {
+            "lyrics": [
+                {"start": 10.0, "end": 15.0, "text": "Before clip"},
+                {"start": 45.0, "end": 55.0, "text": "In clip"},
+                {"start": 80.0, "end": 90.0, "text": "After clip"},
+            ],
+            "beats": [10.0, 45.0, 50.0, 80.0],
+            "bpm": 120.0,
+            "duration": 180.0,
+            "sections": [{"label": "chorus", "start": 45.0, "end": 75.0}],
+            "mood_energy": "contemplative",
+            "language": "en",
+        }
+        mock_select.return_value = {"start": 45.0, "end": 60.0, "reason": "chorus"}
+        mock_direct.return_value = {
+            "overall_style": "contemplative",
+            "color_palette": ["#aaa"],
+            "subtitle_style": {"font_size": 48, "color": "#FFF", "outline_color": "#000",
+                               "position": "center-bottom", "animation": "fade"},
+            "scenes": [{"section": "chorus", "start": 0.0, "end": 15.0,
+                        "visual_prompt": "test", "motion": "static",
+                        "transition": "cut", "overlay": "none"}],
+        }
+        mock_fetch.return_value = [
+            {"scene_index": 0, "video_path": "/fake/v.mp4", "search_query": "test"},
+        ]
+
+        output_dir = tmp_path / "output"
+        result = runner.invoke(cli, [
+            str(audio_file),
+            "--output", str(output_dir),
+            "--clip", "15",
+        ])
+
+        assert result.exit_code == 0, result.output
+        # Director receives filtered analysis: only "In clip" segment, offset by clip_start
+        director_analysis = mock_direct.call_args[0][0]
+        assert director_analysis["duration"] == pytest.approx(15.0, abs=0.5)
+        filtered_lyrics = director_analysis["lyrics"]
+        assert len(filtered_lyrics) == 1
+        assert filtered_lyrics[0]["text"] == "In clip"
+        # Times should be offset relative to clip_start=45.0
+        assert filtered_lyrics[0]["start"] == pytest.approx(0.0, abs=0.5)
+
 
 class TestLyricsFlag:
     """Tests for --lyrics CLI option and auto-detection."""

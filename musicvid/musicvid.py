@@ -9,6 +9,7 @@ from dotenv import load_dotenv
 
 from musicvid.pipeline.audio_analyzer import analyze_audio
 from musicvid.pipeline.cache import get_audio_hash, load_cache, save_cache
+from musicvid.pipeline.clip_selector import select_clip
 from musicvid.pipeline.director import create_scene_plan
 from musicvid.pipeline.stock_fetcher import fetch_videos
 from musicvid.pipeline.image_generator import generate_images
@@ -30,6 +31,44 @@ def _image_files_exist(manifest):
     return all(Path(entry["video_path"]).exists() for entry in manifest)
 
 
+def _filter_analysis_to_clip(analysis, clip_start, clip_end):
+    """Return a copy of analysis restricted to the [clip_start, clip_end] window.
+
+    Lyrics, beats, and section times are offset by clip_start so they start at t=0.
+    """
+    clip_duration = clip_end - clip_start
+
+    lyrics = [
+        {**seg, "start": seg["start"] - clip_start, "end": seg["end"] - clip_start}
+        for seg in analysis.get("lyrics", [])
+        if seg["start"] >= clip_start - 0.1 and seg["end"] <= clip_end + 0.1
+    ]
+
+    sections = [
+        {
+            **sec,
+            "start": max(0.0, sec["start"] - clip_start),
+            "end": min(clip_duration, sec["end"] - clip_start),
+        }
+        for sec in analysis.get("sections", [])
+        if sec["start"] < clip_end and sec["end"] > clip_start
+    ]
+
+    beats = [
+        b - clip_start
+        for b in analysis.get("beats", [])
+        if clip_start <= b <= clip_end
+    ]
+
+    return {
+        **analysis,
+        "lyrics": lyrics,
+        "sections": sections,
+        "beats": beats,
+        "duration": clip_duration,
+    }
+
+
 @click.command()
 @click.argument("audio_file", type=click.Path(exists=True))
 @click.option("--mode", type=click.Choice(["stock", "ai", "hybrid"]), default="stock", help="Video source mode.")
@@ -42,7 +81,10 @@ def _image_files_exist(manifest):
 @click.option("--font", "font_path", type=click.Path(), default=None, help="Custom .ttf font file for subtitles.")
 @click.option("--lyrics", "lyrics_path", type=click.Path(), default=None, help="Path to .txt lyrics file (skips Whisper).")
 @click.option("--effects", type=click.Choice(["none", "minimal", "full"]), default="minimal", help="Visual effects level.")
-def cli(audio_file, mode, provider, style, output, resolution, lang, new, font_path, lyrics_path, effects):
+@click.option("--clip", "clip_duration", type=click.Choice(["15", "20", "25", "30"]), default=None, help="Clip duration in seconds for social media (selects best fragment).")
+@click.option("--platform", type=click.Choice(["reels", "shorts", "tiktok"]), default=None, help="Social media platform (sets portrait 9:16 resolution).")
+@click.option("--title-card", is_flag=True, default=False, help="Add 2-second title card with song name at start of clip.")
+def cli(audio_file, mode, provider, style, output, resolution, lang, new, font_path, lyrics_path, effects, clip_duration, platform, title_card):
     """Generate a music video from AUDIO_FILE."""
     audio_path = Path(audio_file).resolve()
     output_dir = Path(output).resolve()
@@ -67,7 +109,7 @@ def cli(audio_file, mode, provider, style, output, resolution, lang, new, font_p
     elif len(txt_files_in_dir) == 1:
         lyrics_file = txt_files_in_dir[0]
     elif len(txt_files_in_dir) > 1:
-        click.echo("  ⚠ Znaleziono wiele plików .txt — użyj --lyrics aby wybrać")
+        click.echo("  \u26a0 Znaleziono wiele plik\u00f3w .txt \u2014 u\u017cyj --lyrics aby wybra\u0107")
 
     # Compute lyrics hash for cache invalidation
     lyrics_hash = None
@@ -104,20 +146,44 @@ def cli(audio_file, mode, provider, style, output, resolution, lang, new, font_p
     click.echo(f"  BPM: {analysis['bpm']}, Duration: {analysis['duration']}s, "
                f"Sections: {len(analysis['sections'])}, Mood: {analysis['mood_energy']}")
 
+    # Clip selection (between Stage 1 and Stage 2)
+    clip_start = None
+    clip_end = None
+    if clip_duration is not None:
+        clip_secs = int(clip_duration)
+        clip_cache_name = f"clip_{clip_secs}s.json"
+        clip_info = load_cache(str(cache_dir), clip_cache_name) if not new else None
+        if clip_info:
+            click.echo(f"[clip] Clip selection ({clip_secs}s)... CACHED (skipped)")
+        else:
+            click.echo(f"[clip] Selecting best {clip_secs}s fragment...")
+            clip_info = select_clip(analysis, clip_secs)
+            save_cache(str(cache_dir), clip_cache_name, clip_info)
+        clip_start = clip_info["start"]
+        clip_end = clip_info["end"]
+        click.echo(f"  Clip: {clip_start:.1f}s\u2013{clip_end:.1f}s \u2014 {clip_info.get('reason', '')}")
+        analysis = _filter_analysis_to_clip(analysis, clip_start, clip_end)
+
+    # Determine resolution (platform overrides --resolution)
+    effective_resolution = "portrait" if platform else resolution
+
     # Stage 2: Direct Scenes
     style_override = style if style != "auto" else None
-    scene_plan = load_cache(str(cache_dir), "scene_plan.json") if not new else None
+    scene_cache_name = f"scene_plan_clip_{clip_duration}s.json" if clip_duration else "scene_plan.json"
+    scene_plan = load_cache(str(cache_dir), scene_cache_name) if not new else None
     if scene_plan:
         click.echo("[2/4] Scene planning... CACHED (skipped)")
     else:
         click.echo("[2/4] Creating scene plan...")
         scene_plan = create_scene_plan(analysis, style_override=style_override, output_dir=str(cache_dir))
-        save_cache(str(cache_dir), "scene_plan.json", scene_plan)
+        save_cache(str(cache_dir), scene_cache_name, scene_plan)
     click.echo(f"  Style: {scene_plan['overall_style']}, Scenes: {len(scene_plan['scenes'])}")
 
     # Stage 3: Fetch Videos or Generate Images
+    manifest_suffix = f"_clip_{clip_duration}s" if clip_duration else ""
     if mode == "ai":
-        image_manifest = load_cache(str(cache_dir), "image_manifest.json") if not new else None
+        image_cache_name = f"image_manifest{manifest_suffix}.json"
+        image_manifest = load_cache(str(cache_dir), image_cache_name) if not new else None
         if image_manifest and _image_files_exist(image_manifest):
             click.echo("[3/4] Generating images... CACHED (skipped)")
             fetch_manifest = image_manifest
@@ -128,35 +194,50 @@ def cli(audio_file, mode, provider, style, output, resolution, lang, new, font_p
                 {"scene_index": i, "video_path": path, "search_query": scene["visual_prompt"]}
                 for i, (path, scene) in enumerate(zip(image_paths, scene_plan["scenes"]))
             ]
-            save_cache(str(cache_dir), "image_manifest.json", fetch_manifest)
+            save_cache(str(cache_dir), image_cache_name, fetch_manifest)
         click.echo(f"  Generated: {len(fetch_manifest)} images")
     else:
-        fetch_manifest = load_cache(str(cache_dir), "video_manifest.json") if not new else None
+        video_cache_name = f"video_manifest{manifest_suffix}.json"
+        fetch_manifest = load_cache(str(cache_dir), video_cache_name) if not new else None
         if fetch_manifest and _video_files_exist(fetch_manifest):
             click.echo("[3/4] Fetching videos... CACHED (skipped)")
         else:
             click.echo("[3/4] Fetching stock videos...")
             fetch_manifest = fetch_videos(scene_plan, output_dir=str(cache_dir))
-            save_cache(str(cache_dir), "video_manifest.json", fetch_manifest)
+            save_cache(str(cache_dir), video_cache_name, fetch_manifest)
         fetched = sum(1 for f in fetch_manifest if f["video_path"].endswith(".mp4"))
         click.echo(f"  Fetched: {fetched}/{len(fetch_manifest)} videos")
 
     # Resolve font
     font = get_font_path(custom_path=font_path)
 
+    # Build output filename
+    if clip_duration:
+        suffix = f"_{clip_duration}s"
+        if platform:
+            suffix += f"_{platform}"
+        output_filename = audio_path.stem + suffix + ".mp4"
+    else:
+        output_filename = audio_path.stem + "_musicvideo.mp4"
+    output_path = str(output_dir / output_filename)
+
+    # Build title card text if requested
+    title_card_text = audio_path.stem if title_card and clip_duration else None
+
     # Stage 4: Assemble Video
     click.echo("[4/4] Assembling video...")
-    output_filename = audio_path.stem + "_musicvideo.mp4"
-    output_path = str(output_dir / output_filename)
     assemble_video(
         analysis=analysis,
         scene_plan=scene_plan,
         fetch_manifest=fetch_manifest,
         audio_path=str(audio_path),
         output_path=output_path,
-        resolution=resolution,
+        resolution=effective_resolution,
         font_path=font,
         effects_level=effects,
+        clip_start=clip_start,
+        clip_end=clip_end,
+        title_card_text=title_card_text,
     )
     click.echo(f"  Done! Output: {output_path}")
 

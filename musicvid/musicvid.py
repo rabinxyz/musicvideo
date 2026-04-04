@@ -71,6 +71,43 @@ def _filter_analysis_to_clip(analysis, clip_start, clip_end):
     }
 
 
+def _filter_scene_plan_to_clip(scene_plan, clip_start, clip_end):
+    """Return a copy of scene_plan with scenes filtered and offset to the clip window.
+
+    Scenes that don't overlap [clip_start, clip_end] are dropped.
+    Overlapping scenes are trimmed to the window and offset so clip_start becomes t=0.
+    """
+    filtered_scenes = []
+    for scene in scene_plan["scenes"]:
+        if scene["end"] <= clip_start or scene["start"] >= clip_end:
+            continue
+        trimmed = {
+            **scene,
+            "start": max(0.0, scene["start"] - clip_start),
+            "end": min(clip_end - clip_start, scene["end"] - clip_start),
+        }
+        filtered_scenes.append(trimmed)
+
+    return {**scene_plan, "scenes": filtered_scenes}
+
+
+def _filter_manifest_to_clip(manifest, scenes, clip_start, clip_end):
+    """Return manifest entries for scenes that overlap the clip window, with reindexed scene_index."""
+    overlapping_indices = set()
+    for i, scene in enumerate(scenes):
+        if scene["end"] > clip_start and scene["start"] < clip_end:
+            overlapping_indices.add(i)
+
+    filtered = []
+    new_idx = 0
+    for entry in manifest:
+        if entry["scene_index"] in overlapping_indices:
+            filtered.append({**entry, "scene_index": new_idx})
+            new_idx += 1
+
+    return filtered
+
+
 @click.command()
 @click.argument("audio_file", type=click.Path(exists=True))
 @click.option("--mode", type=click.Choice(["stock", "ai", "hybrid"]), default="stock", help="Video source mode.")

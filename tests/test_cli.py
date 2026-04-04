@@ -1262,3 +1262,137 @@ class TestAnimateCLI:
 
         mock_animate.assert_not_called()
         assert result.exit_code == 0
+
+
+class TestFilterScenePlanToClip:
+    """Tests for _filter_scene_plan_to_clip helper."""
+
+    def test_returns_only_overlapping_scenes(self):
+        from musicvid.musicvid import _filter_scene_plan_to_clip
+
+        scene_plan = {
+            "overall_style": "contemplative",
+            "master_style": "warm tones",
+            "color_palette": ["#aaa"],
+            "subtitle_style": {"font_size": 48},
+            "scenes": [
+                {"section": "intro", "start": 0.0, "end": 15.0, "visual_prompt": "sunrise",
+                 "motion": "slow_zoom_in", "transition": "cut", "overlay": "none"},
+                {"section": "verse", "start": 15.0, "end": 45.0, "visual_prompt": "lake",
+                 "motion": "pan_left", "transition": "crossfade", "overlay": "none"},
+                {"section": "chorus", "start": 45.0, "end": 75.0, "visual_prompt": "mountain",
+                 "motion": "slow_zoom_out", "transition": "cut", "overlay": "none"},
+                {"section": "outro", "start": 75.0, "end": 100.0, "visual_prompt": "sunset",
+                 "motion": "static", "transition": "fade_black", "overlay": "none"},
+            ],
+        }
+
+        result = _filter_scene_plan_to_clip(scene_plan, 45.0, 60.0)
+
+        assert len(result["scenes"]) == 1
+        assert result["scenes"][0]["section"] == "chorus"
+
+    def test_offsets_scene_times_to_zero(self):
+        from musicvid.musicvid import _filter_scene_plan_to_clip
+
+        scene_plan = {
+            "overall_style": "contemplative",
+            "master_style": "",
+            "color_palette": [],
+            "subtitle_style": {},
+            "scenes": [
+                {"section": "chorus", "start": 45.0, "end": 75.0, "visual_prompt": "mountain",
+                 "motion": "slow_zoom_out", "transition": "cut", "overlay": "none"},
+            ],
+        }
+
+        result = _filter_scene_plan_to_clip(scene_plan, 45.0, 60.0)
+
+        assert result["scenes"][0]["start"] == 0.0
+        assert result["scenes"][0]["end"] == 15.0
+
+    def test_trims_partially_overlapping_scenes(self):
+        from musicvid.musicvid import _filter_scene_plan_to_clip
+
+        scene_plan = {
+            "overall_style": "contemplative",
+            "master_style": "",
+            "color_palette": [],
+            "subtitle_style": {},
+            "scenes": [
+                {"section": "verse", "start": 10.0, "end": 30.0, "visual_prompt": "lake",
+                 "motion": "pan_left", "transition": "cut", "overlay": "none"},
+                {"section": "chorus", "start": 30.0, "end": 50.0, "visual_prompt": "mountain",
+                 "motion": "slow_zoom_out", "transition": "cut", "overlay": "none"},
+            ],
+        }
+
+        result = _filter_scene_plan_to_clip(scene_plan, 25.0, 40.0)
+
+        assert len(result["scenes"]) == 2
+        assert result["scenes"][0]["start"] == 0.0
+        assert result["scenes"][0]["end"] == 5.0
+        assert result["scenes"][1]["start"] == 5.0
+        assert result["scenes"][1]["end"] == 15.0
+
+    def test_preserves_non_scene_fields(self):
+        from musicvid.musicvid import _filter_scene_plan_to_clip
+
+        scene_plan = {
+            "overall_style": "joyful",
+            "master_style": "golden tones",
+            "color_palette": ["#fff"],
+            "subtitle_style": {"font_size": 48},
+            "scenes": [
+                {"section": "chorus", "start": 0.0, "end": 30.0, "visual_prompt": "test",
+                 "motion": "static", "transition": "cut", "overlay": "none"},
+            ],
+        }
+
+        result = _filter_scene_plan_to_clip(scene_plan, 0.0, 15.0)
+
+        assert result["overall_style"] == "joyful"
+        assert result["master_style"] == "golden tones"
+        assert result["color_palette"] == ["#fff"]
+        assert result["subtitle_style"] == {"font_size": 48}
+
+
+class TestFilterManifestToClip:
+    """Tests for _filter_manifest_to_clip helper."""
+
+    def test_returns_only_matching_entries(self):
+        from musicvid.musicvid import _filter_manifest_to_clip
+
+        scenes = [
+            {"section": "intro", "start": 0.0, "end": 15.0},
+            {"section": "verse", "start": 15.0, "end": 45.0},
+            {"section": "chorus", "start": 45.0, "end": 75.0},
+        ]
+        manifest = [
+            {"scene_index": 0, "video_path": "/a.jpg", "search_query": "intro"},
+            {"scene_index": 1, "video_path": "/b.jpg", "search_query": "verse"},
+            {"scene_index": 2, "video_path": "/c.jpg", "search_query": "chorus"},
+        ]
+
+        result = _filter_manifest_to_clip(manifest, scenes, 45.0, 60.0)
+
+        assert len(result) == 1
+        assert result[0]["video_path"] == "/c.jpg"
+
+    def test_reindexes_scene_indices(self):
+        from musicvid.musicvid import _filter_manifest_to_clip
+
+        scenes = [
+            {"section": "verse", "start": 15.0, "end": 45.0},
+            {"section": "chorus", "start": 45.0, "end": 75.0},
+        ]
+        manifest = [
+            {"scene_index": 0, "video_path": "/a.jpg", "search_query": "verse"},
+            {"scene_index": 1, "video_path": "/b.jpg", "search_query": "chorus"},
+        ]
+
+        result = _filter_manifest_to_clip(manifest, scenes, 40.0, 55.0)
+
+        assert len(result) == 2
+        assert result[0]["scene_index"] == 0
+        assert result[1]["scene_index"] == 1

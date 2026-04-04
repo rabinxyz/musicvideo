@@ -8,6 +8,7 @@ from musicvid.pipeline.effects import apply_warm_grade
 from musicvid.pipeline.effects import apply_vignette
 from musicvid.pipeline.effects import create_cinematic_bars
 from musicvid.pipeline.effects import apply_film_grain
+from musicvid.pipeline.effects import create_light_leak
 
 
 class TestApplyWarmGrade:
@@ -146,3 +147,38 @@ class TestApplyFilmGrain:
 
         diff = np.abs(output.astype(int) - frame.astype(int))
         assert diff.mean() < 5, f"Grain too strong: mean diff {diff.mean()}"
+
+
+class TestCreateLightLeak:
+    """Tests for light leak effect."""
+
+    @patch("musicvid.pipeline.effects.ImageClip")
+    def test_returns_clip_with_correct_duration(self, mock_image_clip):
+        mock_clip = MagicMock()
+        mock_clip.with_duration.return_value = mock_clip
+        mock_clip.with_start.return_value = mock_clip
+        mock_clip.with_end.return_value = mock_clip
+        mock_clip.with_position.return_value = mock_clip
+        mock_clip.with_effects.return_value = mock_clip
+        mock_image_clip.return_value = mock_clip
+
+        result = create_light_leak(10.0, (1920, 1080))
+
+        mock_clip.with_duration.assert_called_once()
+        assert result is not None
+
+    @patch("musicvid.pipeline.effects.ImageClip")
+    def test_leak_appears_between_20_and_60_percent(self, mock_image_clip):
+        mock_clip = MagicMock()
+        mock_clip.with_duration.return_value = mock_clip
+        mock_clip.with_start.return_value = mock_clip
+        mock_clip.with_end.return_value = mock_clip
+        mock_clip.with_position.return_value = mock_clip
+        mock_clip.with_effects.return_value = mock_clip
+        mock_image_clip.return_value = mock_clip
+
+        np.random.seed(42)
+        create_light_leak(10.0, (1920, 1080))
+
+        start_call = mock_clip.with_start.call_args[0][0]
+        assert 2.0 <= start_call <= 6.0, f"Start {start_call} not in 20-60% of 10s"

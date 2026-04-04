@@ -1,4 +1,7 @@
-from musicvid.pipeline.logo_overlay import compute_margin, compute_logo_size, get_logo_position
+import numpy as np
+from PIL import Image
+from unittest.mock import patch, MagicMock
+from musicvid.pipeline.logo_overlay import compute_margin, compute_logo_size, get_logo_position, load_logo
 
 
 class TestComputeMargin:
@@ -68,3 +71,44 @@ class TestGetLogoPosition:
         x, y = get_logo_position("top-left", (400, 200), (3840, 2160))
         assert x == 108
         assert y == 108
+
+
+class TestLoadLogo:
+    def _create_test_png(self, tmp_path, width=100, height=50, mode="RGBA"):
+        """Create a test PNG file and return its path."""
+        img = Image.new(mode, (width, height), (255, 0, 0, 255) if mode == "RGBA" else (255, 0, 0))
+        path = tmp_path / "logo.png"
+        img.save(str(path))
+        return str(path)
+
+    def test_load_png_returns_rgba(self, tmp_path):
+        path = self._create_test_png(tmp_path)
+        result = load_logo(path, 200, 100, 0.85)
+        assert result.mode == "RGBA"
+
+    def test_load_png_correct_size(self, tmp_path):
+        path = self._create_test_png(tmp_path)
+        result = load_logo(path, 200, 100, 0.85)
+        assert result.size == (200, 100)
+
+    def test_load_png_opacity(self, tmp_path):
+        path = self._create_test_png(tmp_path)
+        result = load_logo(path, 200, 100, 0.85)
+        alpha = np.array(result.getchannel("A"))
+        assert alpha.max() == 216  # int(255 * 0.85)
+
+    def test_load_png_full_opacity(self, tmp_path):
+        path = self._create_test_png(tmp_path)
+        result = load_logo(path, 200, 100, 1.0)
+        alpha = np.array(result.getchannel("A"))
+        assert alpha.max() == 255
+
+    def test_load_rgb_png_converts_to_rgba(self, tmp_path):
+        path = self._create_test_png(tmp_path, mode="RGB")
+        result = load_logo(path, 200, 100, 0.85)
+        assert result.mode == "RGBA"
+
+    def test_file_not_found(self):
+        import pytest
+        with pytest.raises(FileNotFoundError):
+            load_logo("/nonexistent/logo.png", 200, 100, 0.85)

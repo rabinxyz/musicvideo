@@ -1,5 +1,38 @@
 """Logo overlay utilities for compositing logos onto video frames."""
 
+from pathlib import Path
+from PIL import Image
+
+
+def load_logo(path, logo_width, logo_height, opacity):
+    """Load a logo image, resize it, and apply opacity.
+
+    Supports PNG and JPG. Returns a PIL Image in RGBA mode.
+    Raises FileNotFoundError if path does not exist.
+    """
+    logo_path = Path(path)
+    if not logo_path.exists():
+        raise FileNotFoundError(f"Logo file not found: {path}")
+
+    ext = logo_path.suffix.lower()
+
+    if ext == ".svg":
+        img = _load_svg(path, logo_width, logo_height)
+    else:
+        img = Image.open(path)
+
+    if img.mode != "RGBA":
+        img = img.convert("RGBA")
+
+    img = img.resize((logo_width, logo_height), Image.LANCZOS)
+
+    # Apply opacity — scale existing alpha by opacity factor
+    r, g, b, a = img.split()
+    a = a.point(lambda x: int(x * opacity))
+    img = Image.merge("RGBA", (r, g, b, a))
+
+    return img
+
 
 def compute_margin(frame_width, frame_height):
     """Return broadcast safe-zone margin (5% of shorter dimension)."""

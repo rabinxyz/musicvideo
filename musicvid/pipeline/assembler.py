@@ -9,7 +9,9 @@ from moviepy import (
     TextClip,
     CompositeVideoClip,
     concatenate_videoclips,
+    ColorClip,
     vfx,
+    afx,
 )
 
 from musicvid.pipeline.effects import apply_effects, create_cinematic_bars, create_light_leak
@@ -19,6 +21,7 @@ RESOLUTION_MAP = {
     "720p": (1280, 720),
     "1080p": (1920, 1080),
     "4k": (3840, 2160),
+    "portrait": (1080, 1920),
 }
 
 
@@ -131,6 +134,20 @@ def _create_subtitle_clips(lyrics, subtitle_style, size, font_path=None):
     return clips
 
 
+def _create_title_card(text, size, duration=2.0):
+    """Create a solid black title card with centred white text."""
+    bg = ColorClip(size=size, color=(0, 0, 0), duration=duration)
+    txt = TextClip(
+        text=text,
+        font_size=72,
+        color="#FFFFFF",
+        method="caption",
+        size=(size[0] - 200, None),
+    )
+    txt = txt.with_duration(duration).with_position("center")
+    return CompositeVideoClip([bg, txt], size=size)
+
+
 def _load_scene_clip(video_path, scene, target_size):
     """Load a video or image clip for a scene."""
     path = Path(video_path)
@@ -148,7 +165,7 @@ def _load_scene_clip(video_path, scene, target_size):
     return _create_ken_burns_clip(clip, duration, scene.get("motion", "static"), target_size)
 
 
-def assemble_video(analysis, scene_plan, fetch_manifest, audio_path, output_path, resolution="1080p", font_path=None, effects_level="minimal"):
+def assemble_video(analysis, scene_plan, fetch_manifest, audio_path, output_path, resolution="1080p", font_path=None, effects_level="minimal", clip_start=None, clip_end=None, title_card_text=None):
     """Assemble the final music video.
 
     Args:
@@ -198,7 +215,16 @@ def assemble_video(analysis, scene_plan, fetch_manifest, audio_path, output_path
 
     final = CompositeVideoClip(layers, size=target_size)
 
+    if clip_start is not None:
+        final = final.with_effects([vfx.FadeIn(0.5), vfx.FadeOut(1.0)])
+
+    if title_card_text is not None:
+        final = concatenate_videoclips([_create_title_card(title_card_text, target_size), final])
+
     audio = AudioFileClip(audio_path)
+    if clip_start is not None:
+        audio = audio.subclipped(clip_start, clip_end)
+        audio = audio.with_effects([afx.AudioFadeIn(0.5), afx.AudioFadeOut(1.0)])
     final = final.with_audio(audio)
     final = final.with_duration(min(final.duration, audio.duration))
 

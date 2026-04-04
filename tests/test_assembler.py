@@ -329,3 +329,213 @@ class TestAssembleVideoEffects:
         assert first_call_args[1]["level"] == "none"
         mock_bars.assert_not_called()
         mock_light_leak.assert_not_called()
+
+
+class TestAssembleVideoClipMode:
+    """Tests for clip mode (clip_start/clip_end, fades, title card, portrait resolution)."""
+
+    def _make_mock_clip(self):
+        mock_clip = MagicMock()
+        mock_clip.duration = 15.0
+        mock_clip.size = (1920, 1080)
+        mock_clip.w = 1920
+        mock_clip.h = 1080
+        mock_clip.resized.return_value = mock_clip
+        mock_clip.subclipped.return_value = mock_clip
+        mock_clip.with_duration.return_value = mock_clip
+        mock_clip.with_position.return_value = mock_clip
+        mock_clip.with_start.return_value = mock_clip
+        mock_clip.with_end.return_value = mock_clip
+        mock_clip.with_effects.return_value = mock_clip
+        mock_clip.transform.return_value = mock_clip
+        mock_clip.with_audio.return_value = mock_clip
+        return mock_clip
+
+    @patch("musicvid.pipeline.assembler.create_cinematic_bars")
+    @patch("musicvid.pipeline.assembler.create_light_leak")
+    @patch("musicvid.pipeline.assembler.apply_effects")
+    @patch("musicvid.pipeline.assembler.afx")
+    @patch("musicvid.pipeline.assembler.vfx")
+    @patch("musicvid.pipeline.assembler.VideoFileClip")
+    @patch("musicvid.pipeline.assembler.ImageClip")
+    @patch("musicvid.pipeline.assembler.AudioFileClip")
+    @patch("musicvid.pipeline.assembler.TextClip")
+    @patch("musicvid.pipeline.assembler.CompositeVideoClip")
+    @patch("musicvid.pipeline.assembler.concatenate_videoclips")
+    def test_clip_mode_trims_audio(
+        self, mock_concat, mock_composite, mock_text, mock_audio_cls,
+        mock_image, mock_video, mock_vfx, mock_afx, mock_apply_effects,
+        mock_light_leak, mock_bars,
+        sample_analysis, sample_scene_plan, tmp_output
+    ):
+        mock_clip = self._make_mock_clip()
+        mock_video.return_value = mock_clip
+        mock_image.return_value = mock_clip
+        mock_audio_cls.return_value = mock_clip
+        mock_text.return_value = mock_clip
+        mock_concat.return_value = mock_clip
+        mock_composite.return_value = mock_clip
+        mock_apply_effects.return_value = mock_clip
+        mock_bars.return_value = [mock_clip]
+
+        fetch_manifest = [
+            {"scene_index": 0, "video_path": "/fake/scene_000.mp4", "search_query": "test"},
+        ]
+
+        assemble_video(
+            analysis=sample_analysis,
+            scene_plan=sample_scene_plan,
+            fetch_manifest=fetch_manifest,
+            audio_path="/fake/audio.mp3",
+            output_path=str(tmp_output / "output.mp4"),
+            resolution="1080p",
+            clip_start=45.0,
+            clip_end=60.0,
+        )
+
+        mock_clip.subclipped.assert_called_with(45.0, 60.0)
+
+    @patch("musicvid.pipeline.assembler.create_cinematic_bars")
+    @patch("musicvid.pipeline.assembler.create_light_leak")
+    @patch("musicvid.pipeline.assembler.apply_effects")
+    @patch("musicvid.pipeline.assembler.afx")
+    @patch("musicvid.pipeline.assembler.vfx")
+    @patch("musicvid.pipeline.assembler.VideoFileClip")
+    @patch("musicvid.pipeline.assembler.ImageClip")
+    @patch("musicvid.pipeline.assembler.AudioFileClip")
+    @patch("musicvid.pipeline.assembler.TextClip")
+    @patch("musicvid.pipeline.assembler.CompositeVideoClip")
+    @patch("musicvid.pipeline.assembler.concatenate_videoclips")
+    def test_clip_mode_applies_audio_fades(
+        self, mock_concat, mock_composite, mock_text, mock_audio_cls,
+        mock_image, mock_video, mock_vfx, mock_afx, mock_apply_effects,
+        mock_light_leak, mock_bars,
+        sample_analysis, sample_scene_plan, tmp_output
+    ):
+        mock_clip = self._make_mock_clip()
+        mock_video.return_value = mock_clip
+        mock_image.return_value = mock_clip
+        mock_audio_cls.return_value = mock_clip
+        mock_text.return_value = mock_clip
+        mock_concat.return_value = mock_clip
+        mock_composite.return_value = mock_clip
+        mock_apply_effects.return_value = mock_clip
+        mock_bars.return_value = [mock_clip]
+
+        fetch_manifest = [
+            {"scene_index": 0, "video_path": "/fake/scene_000.mp4", "search_query": "test"},
+        ]
+
+        assemble_video(
+            analysis=sample_analysis,
+            scene_plan=sample_scene_plan,
+            fetch_manifest=fetch_manifest,
+            audio_path="/fake/audio.mp3",
+            output_path=str(tmp_output / "output.mp4"),
+            resolution="1080p",
+            clip_start=45.0,
+            clip_end=60.0,
+        )
+
+        mock_afx.AudioFadeIn.assert_called_with(0.5)
+        mock_afx.AudioFadeOut.assert_called_with(1.0)
+
+    @patch("musicvid.pipeline.assembler.create_cinematic_bars")
+    @patch("musicvid.pipeline.assembler.create_light_leak")
+    @patch("musicvid.pipeline.assembler.apply_effects")
+    @patch("musicvid.pipeline.assembler.afx")
+    @patch("musicvid.pipeline.assembler.vfx")
+    @patch("musicvid.pipeline.assembler.VideoFileClip")
+    @patch("musicvid.pipeline.assembler.ImageClip")
+    @patch("musicvid.pipeline.assembler.AudioFileClip")
+    @patch("musicvid.pipeline.assembler.TextClip")
+    @patch("musicvid.pipeline.assembler.CompositeVideoClip")
+    @patch("musicvid.pipeline.assembler.concatenate_videoclips")
+    def test_clip_mode_applies_video_fades(
+        self, mock_concat, mock_composite, mock_text, mock_audio_cls,
+        mock_image, mock_video, mock_vfx, mock_afx, mock_apply_effects,
+        mock_light_leak, mock_bars,
+        sample_analysis, sample_scene_plan, tmp_output
+    ):
+        mock_clip = self._make_mock_clip()
+        mock_video.return_value = mock_clip
+        mock_image.return_value = mock_clip
+        mock_audio_cls.return_value = mock_clip
+        mock_text.return_value = mock_clip
+        mock_concat.return_value = mock_clip
+        mock_composite.return_value = mock_clip
+        mock_apply_effects.return_value = mock_clip
+        mock_bars.return_value = [mock_clip]
+
+        fetch_manifest = [
+            {"scene_index": 0, "video_path": "/fake/scene_000.mp4", "search_query": "test"},
+        ]
+
+        assemble_video(
+            analysis=sample_analysis,
+            scene_plan=sample_scene_plan,
+            fetch_manifest=fetch_manifest,
+            audio_path="/fake/audio.mp3",
+            output_path=str(tmp_output / "output.mp4"),
+            resolution="1080p",
+            clip_start=45.0,
+            clip_end=60.0,
+        )
+
+        mock_vfx.FadeIn.assert_called_with(0.5)
+        mock_vfx.FadeOut.assert_called_with(1.0)
+
+    @patch("musicvid.pipeline.assembler.create_cinematic_bars")
+    @patch("musicvid.pipeline.assembler.create_light_leak")
+    @patch("musicvid.pipeline.assembler.apply_effects")
+    @patch("musicvid.pipeline.assembler.afx")
+    @patch("musicvid.pipeline.assembler.vfx")
+    @patch("musicvid.pipeline.assembler.VideoFileClip")
+    @patch("musicvid.pipeline.assembler.ImageClip")
+    @patch("musicvid.pipeline.assembler.AudioFileClip")
+    @patch("musicvid.pipeline.assembler.TextClip")
+    @patch("musicvid.pipeline.assembler.CompositeVideoClip")
+    @patch("musicvid.pipeline.assembler.concatenate_videoclips")
+    @patch("musicvid.pipeline.assembler.ColorClip")
+    def test_clip_mode_title_card_prepended(
+        self, mock_color_clip, mock_concat, mock_composite, mock_text, mock_audio_cls,
+        mock_image, mock_video, mock_vfx, mock_afx, mock_apply_effects,
+        mock_light_leak, mock_bars,
+        sample_analysis, sample_scene_plan, tmp_output
+    ):
+        mock_clip = self._make_mock_clip()
+        mock_video.return_value = mock_clip
+        mock_image.return_value = mock_clip
+        mock_audio_cls.return_value = mock_clip
+        mock_text.return_value = mock_clip
+        mock_color_clip.return_value = mock_clip
+        mock_concat.return_value = mock_clip
+        mock_composite.return_value = mock_clip
+        mock_apply_effects.return_value = mock_clip
+        mock_bars.return_value = [mock_clip]
+
+        fetch_manifest = [
+            {"scene_index": 0, "video_path": "/fake/scene_000.mp4", "search_query": "test"},
+        ]
+
+        assemble_video(
+            analysis=sample_analysis,
+            scene_plan=sample_scene_plan,
+            fetch_manifest=fetch_manifest,
+            audio_path="/fake/audio.mp3",
+            output_path=str(tmp_output / "output.mp4"),
+            resolution="1080p",
+            clip_start=45.0,
+            clip_end=60.0,
+            title_card_text="My Song",
+        )
+
+        # Title card text should appear in a TextClip call
+        text_calls = [str(c) for c in mock_text.call_args_list]
+        assert any("My Song" in c for c in text_calls)
+
+    def test_portrait_resolution_maps_correctly(self):
+        from musicvid.pipeline.assembler import _get_resolution
+        w, h = _get_resolution("portrait")
+        assert w == 1080
+        assert h == 1920

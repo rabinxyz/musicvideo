@@ -12,6 +12,7 @@ from musicvid.pipeline.director import create_scene_plan
 from musicvid.pipeline.stock_fetcher import fetch_videos
 from musicvid.pipeline.image_generator import generate_images
 from musicvid.pipeline.assembler import assemble_video
+from musicvid.pipeline.font_loader import get_font_path
 
 
 load_dotenv()
@@ -36,7 +37,8 @@ def _image_files_exist(manifest):
 @click.option("--resolution", type=click.Choice(["720p", "1080p", "4k"]), default="1080p", help="Output resolution.")
 @click.option("--lang", default="auto", help="Language for transcription.")
 @click.option("--new", is_flag=True, default=False, help="Force recalculation, ignore cache.")
-def cli(audio_file, mode, provider, style, output, resolution, lang, new):
+@click.option("--font", "font_path", type=click.Path(), default=None, help="Custom .ttf font file for subtitles.")
+def cli(audio_file, mode, provider, style, output, resolution, lang, new, font_path):
     """Generate a music video from AUDIO_FILE."""
     audio_path = Path(audio_file).resolve()
     output_dir = Path(output).resolve()
@@ -98,6 +100,9 @@ def cli(audio_file, mode, provider, style, output, resolution, lang, new):
         fetched = sum(1 for f in fetch_manifest if f["video_path"].endswith(".mp4"))
         click.echo(f"  Fetched: {fetched}/{len(fetch_manifest)} videos")
 
+    # Resolve font
+    font = get_font_path(custom_path=font_path)
+
     # Stage 4: Assemble Video
     click.echo("[4/4] Assembling video...")
     output_filename = audio_path.stem + "_musicvideo.mp4"
@@ -109,6 +114,7 @@ def cli(audio_file, mode, provider, style, output, resolution, lang, new):
         audio_path=str(audio_path),
         output_path=output_path,
         resolution=resolution,
+        font_path=font,
     )
     click.echo(f"  Done! Output: {output_path}")
 

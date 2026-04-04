@@ -1,176 +1,181 @@
 # Idea
 
-# Spec: Style Locking — Visual Bible dla spójności kolorystycznej
+# Spec: Re-render pojedynczej sceny
 
-## Problem
-BFL generuje każde zdjęcie niezależnie — bez wiedzy o poprzednich scenach.
-Efekt: każda scena może mieć inny klimat, paletę kolorów i nastrój.
-Teledysk wygląda jak zlepek niepasujących obrazów zamiast spójnej całości.
+## Cel
+Możliwość podmiany jednej sceny bez generowania całego teledysku od nowa.
+Oszczędza czas i koszt API gdy jedna scena nie pasuje wizualnie.
 
-## Rozwiązanie — Visual Bible
+## Nowe komendy CLI
 
-Przed generowaniem jakichkolwiek obrazów Claude tworzy "Visual Bible" —
-szczegółowy dokument opisujący wygląd całego teledysku.
-Każdy prompt obrazu jest budowany na bazie Visual Bible.
+### Podgląd planu scen
+python3 -m musicvid.musicvid song.mp3 --list-scenes
 
-## Przepływ
+Wyświetla tabelę wszystkich scen z cache:
+  Nr  Sekcja    Start    Koniec   Prompt (pierwsze 60 znaków)
+  ─────────────────────────────────────────────────────────────
+  0   intro     0:00     0:12     Golden sunrise over mountain peaks...
+  1   verse     0:12     0:44     Ancient forest with light filtering...
+  2   chorus    0:44     1:16     Silhouette of person with hands raised...
+  3   verse     1:16     1:48     Calm lake reflecting blue sky and clouds...
 
-Stage 1 — analiza audio (bez zmian)
-Stage 1.5 — NOWY: Claude generuje Visual Bible
-Stage 2 — reżyseria Claude (używa Visual Bible)
-Stage 3 — generowanie obrazów (każdy prompt zawiera Visual Bible suffix)
+Wymaga istnienia cache (output/tmp/{hash}/).
+Jeśli brak cache: "Najpierw wygeneruj teledysk bez --list-scenes"
 
-## Struktura Visual Bible
+### Re-render sceny z nowym promptem
+python3 -m musicvid.musicvid song.mp3 --rerender-scene 2
 
-Claude generuje JSON z polami:
+Generuje nowy obraz dla sceny nr 2 z tym samym promptem co poprzednio.
+Użyteczne gdy obraz nie pasuje jakościowo ale prompt był dobry.
 
-{
-  "overall_mood": string,
-  Ogólny nastrój teledysku w 1 zdaniu.
-  Przykład: "Contemplative and hopeful, like dawn breaking after a long night"
+### Re-render z własnym promptem
+python3 -m musicvid.musicvid song.mp3 --rerender-scene 2 \
+  --scene-prompt "Vast wheat fields at golden hour, wind rippling through grain"
 
-  "color_palette": {
-    "primary": string,      hex dominujący kolor
-    "secondary": string,    hex drugi kolor
-    "accent": string,       hex kolor akcentu
-    "shadows": string,      opis cieni (np. "deep blue-black, never pure black")
-    "highlights": string,   opis świateł (np. "warm ivory, golden at peaks")
-    "description": string   opis palety w 2 zdaniach
-  },
+Generuje nowy obraz dla sceny nr 2 z podanym promptem.
+Style suffix z Visual Bible jest doklejany automatycznie.
 
-  "lighting": {
-    "quality": string,      np. "soft, diffused, golden hour"
-    "direction": string,    np. "side lighting, rays from upper right"
-    "time_of_day": string,  np. "golden hour, dawn, or dusk — never midday"
-    "description": string   opis oświetlenia w 2 zdaniach
-  },
+### Re-render z nowym promptem przez Claude
+python3 -m musicvid.musicvid song.mp3 --rerender-scene 2 --reprompt
 
-  "composition": {
-    "preferred_shots": [string],  np. ["wide establishing", "medium", "never close-up"]
-    "depth": string,              np. "always foreground + background layers"
-    "rule_of_thirds": bool,       czy stosować
-    "description": string
-  },
+Claude generuje nowy prompt dla tej sceny na podstawie:
+- tekstu linijek które pojawiają się w tej scenie
+- Visual Bible (styl, paleta)
+- informacji że poprzedni prompt był niesatysfakcjonujący
+Użyteczne gdy chcesz żeby AI zaproponowała coś innego.
 
-  "texture_and_atmosphere": string,
-  Opis tekstury i atmosfery w 2 zdaniach.
-  Przykład: "Slight haze and atmospheric depth. Soft bokeh in backgrounds.
-  Photorealistic with painterly quality, never HDR or oversaturated."
+### Rebuild wideo po re-renderze
+python3 -m musicvid.musicvid song.mp3 --rebuild
 
-  "forbidden_elements": [string],
-  Lista elementów których absolutnie nie wolno używać w tej piosence.
-  Claude wypełnia na podstawie tekstu i nastroju.
+Ponownie montuje wideo z istniejących assetów w cache.
+Używa gdy zmieniłeś dowolny plik w cache (obraz, plan scen).
+Pomija Stage 1-3 (analiza, reżyseria, generowanie) — tylko montaż.
 
-  "style_suffix": string
-  Gotowy suffix do doklejenia do KAŻDEGO promptu obrazu.
-  Maksymalnie 3 zdania — esencja Visual Bible w formie promptu.
-  Przykład: "Consistent warm color grade with golden amber tones and
-  soft blue shadows. Atmospheric haze and cinematic depth of field.
-  Photorealistic, contemplative mood, golden hour lighting throughout."
-}
+## Typowy workflow
 
-## Prompt dla Claude przy generowaniu Visual Bible
+1. Wygeneruj teledysk normalnie
+   python3 -m musicvid.musicvid song.mp3 --mode ai --preset all
 
-System: używaj istniejącego director_system.txt
+2. Obejrzyj wynik — scena 2 nie pasuje
 
-User:
-Na podstawie tekstu i analizy muzycznej piosenki stwórz Visual Bible —
-spójny przewodnik wizualny który zapewni że wszystkie sceny teledysku
-tworzą harmonijną całość.
+3. Sprawdź listę scen
+   python3 -m musicvid.musicvid song.mp3 --list-scenes
 
-Visual Bible musi być:
-- Spójna wewnętrznie (paleta kolorów pasuje do nastroju)
-- Odpowiednia dla protestantzkiej muzyki uwielbienia
-- Konkretna i opisowa — każdy element musi być mierzalny
-  (nie "ciepłe kolory" ale "amber #B8860B jako dominanta")
+4a. Wygeneruj nowy obraz z tym samym promptem (losowość BFL)
+    python3 -m musicvid.musicvid song.mp3 --rerender-scene 2
 
-Tekst piosenki: {lyrics_text}
-BPM: {bpm}
-Nastrój energetyczny: {mood_energy} (0=spokojny, 1=dynamiczny)
-Sekcje: {sections}
+4b. Lub z własnym promptem
+    python3 -m musicvid.musicvid song.mp3 --rerender-scene 2 \
+      --scene-prompt "Open Bible on wooden table with warm window light"
 
-Zwróć WYŁĄCZNIE czysty JSON bez markdown.
+4c. Lub poproś Claude o nowy pomysł
+    python3 -m musicvid.musicvid song.mp3 --rerender-scene 2 --reprompt
 
-## Użycie Visual Bible w promptach
+5. Zmontuj ponownie
+   python3 -m musicvid.musicvid song.mp3 --rebuild
 
-W director.py przy budowaniu visual_prompt dla każdej sceny:
-  full_prompt = scene_prompt + " " + visual_bible["style_suffix"]
+## Jak działa re-render
 
-W image_generator.py:
-  Przed wysłaniem do BFL sprawdź że prompt kończy się style_suffix.
-  Nie modyfikuj style_suffix — doklejaj w całości.
+Wczytaj scene_plan.json z cache.
+Znajdź scenę o podanym indeksie.
+Wygeneruj nowy obraz przez BFL API (jeden obraz, nie wszystkie).
+Zapisz jako scene_NNN.jpg w cache — nadpisz poprzedni.
+Jeśli --animate i scena była animowana: uruchom Runway ponownie.
+Wyświetl: "Scena 2 wygenerowana → output/tmp/{hash}/scene_002.jpg"
+Przypomnij: "Uruchom --rebuild żeby złożyć nowe wideo"
 
-## Cachowanie
+## Zachowanie scene_plan.json przy --scene-prompt
 
-Visual Bible cachowana w: output/tmp/{hash}/visual_bible.json
-Zmiana audio invaliduje cache.
-Visual Bible generowana PRZED planem scen — director używa jej jako kontekstu.
+Gdy podano własny prompt:
+Zaktualizuj pole visual_prompt dla tej sceny w scene_plan.json.
+Zapisz zaktualizowany plan — następne --rebuild użyje nowego promptu.
+Wyświetl: "Plan scen zaktualizowany: scena 2 ma nowy prompt"
 
-## Przekazanie do Claude-reżysera
-
-Gdy director.py generuje plan scen, dostaje Visual Bible jako dodatkowy kontekst:
-
-"Używaj poniższej Visual Bible przy planowaniu każdej sceny.
-Każdy visual_prompt musi być spójny z opisaną paletą, oświetleniem
-i kompozycją. Nie odchodź od ustalonego stylu.
-
-Visual Bible: {visual_bible_json}"
-
-## Walidacja promptów
-
-Po wygenerowaniu planu scen przez Claude sprawdź każdy visual_prompt:
-- Czy zawiera style_suffix (string matching)
-- Czy nie zawiera elementów z forbidden_elements
-Jeśli nie: dołącz style_suffix automatycznie.
-Jeśli zawiera forbidden element: zaloguj ostrzeżenie
-(nie blokuj — Claude wie co robi).
-
-## Nowy moduł musicvid/pipeline/visual_bible.py
+## Nowy moduł musicvid/pipeline/scene_rerender.py
 
 Funkcje:
-- generate_visual_bible(analysis, lyrics_text) -> dict
-  Wywołuje Claude API, zwraca dict Visual Bible.
-  Cachuje w tmp/visual_bible.json.
+- list_scenes(cache_dir) -> list[dict]
+  Wczytuje scene_plan.json, zwraca listę scen z indeksem i skrótem promptu.
 
-- get_style_suffix(visual_bible) -> str
-  Zwraca visual_bible["style_suffix"] — gotowy do doklejenia.
+- print_scenes_table(scenes)
+  Wyświetla tabelę w terminalu (tabulate lub ręczne formatowanie).
 
-- validate_prompt(prompt, visual_bible) -> (bool, str)
-  Sprawdza prompt pod kątem forbidden_elements i style_suffix.
-  Zwraca (is_valid, reason).
+- rerender_scene(cache_dir, scene_idx, new_prompt=None, provider="flux-pro") -> str
+  Generuje nowy obraz dla sceny scene_idx.
+  Gdy new_prompt: aktualizuje scene_plan.json.
+  Gdy brak new_prompt: używa istniejącego promptu + style_suffix.
+  Zwraca ścieżkę do nowego pliku obrazu.
 
-- apply_style_to_plan(scene_plan, visual_bible) -> scene_plan
-  Dla każdej sceny w planie: doklejа style_suffix do visual_prompt
-  jeśli jeszcze go nie zawiera.
+- reprompt_scene(cache_dir, scene_idx, analysis, visual_bible) -> str
+  Wywołuje Claude API żeby wygenerować nowy prompt dla sceny.
+  Kontekst dla Claude: tekst sceny + visual_bible + info że poprzedni nie pasował.
+  Zapisuje nowy prompt w scene_plan.json.
+  Zwraca nowy prompt.
+
+- rebuild_video(audio_path, cache_dir, output_dir, platform_config, effects_config)
+  Wczytuje wszystkie assety z cache i montuje wideo od nowa.
+  Odpowiednik Stage 4 bez Stage 1-3.
+  Identyczny wynik co pełny pipeline dla tych samych assetów.
 
 ## Integracja w musicvid.py
 
-Nowa kolejność Stage 2:
-  visual_bible = generate_visual_bible(analysis, lyrics_text)
-  scene_plan = director.create_plan(analysis, visual_bible)
-  scene_plan = apply_style_to_plan(scene_plan, visual_bible)
+Dodaj obsługę flag w CLI:
+  --list-scenes: wywołaj list_scenes() + print_scenes_table() i exit
+  --rerender-scene INT: wywołaj rerender_scene() i exit
+  --scene-prompt TEXT: używane razem z --rerender-scene
+  --reprompt: używane razem z --rerender-scene
+  --rebuild: wywołaj rebuild_video() bez Stage 1-3
 
-Wyświetl po wygenerowaniu Visual Bible:
-  "[2/4] Visual Bible: {overall_mood}"
-  "       Paleta: {primary} + {secondary} + {accent}"
+Walidacja:
+  --rerender-scene bez istniejącego cache: czytelny błąd
+  --rerender-scene N gdy N >= liczba scen: błąd z listą dostępnych
+  --scene-prompt bez --rerender-scene: błąd "--scene-prompt wymaga --rerender-scene"
+  --reprompt bez --rerender-scene: błąd analogiczny
+  --rebuild bez cache: błąd "Najpierw wygeneruj teledysk"
 
-## Nowa flaga CLI
---no-style-lock  Wyłącz Visual Bible (szybciej, mniej spójnie)
+## Cache — co jest zachowane między re-renderami
+
+Zachowuje się:
+  audio_analysis.json
+  scene_plan.json (aktualizowany przez --scene-prompt)
+  visual_bible.json
+  scene_NNN.jpg (nadpisywany przez --rerender-scene)
+  animated_scene_NNN.mp4 (nadpisywany jeśli --animate)
+
+Nie nadpisuje się automatycznie:
+  Poprzedni scene_NNN.jpg — rozważ backup do scene_NNN_backup.jpg
+  przed nadpisaniem żeby umożliwić powrót do poprzedniej wersji
+
+## Backup poprzedniej sceny
+
+Przed nadpisaniem scene_NNN.jpg stwórz kopię:
+  scene_002.jpg → scene_002_v1.jpg (jeśli v1 nie istnieje)
+  scene_002.jpg → scene_002_v2.jpg (przy kolejnym re-renderze)
+  itd. do maksymalnie 5 wersji
+
+Dodaj komendę --restore-scene N [--version V]:
+  python3 -m musicvid.musicvid song.mp3 --restore-scene 2
+  Przywraca ostatnią wersję backup (scene_002_v1.jpg → scene_002.jpg)
+  python3 -m musicvid.musicvid song.mp3 --restore-scene 2 --version 1
+  Przywraca konkretną wersję
 
 ## Testy
-- generate_visual_bible: mockuj Claude API, sprawdź strukturę JSON
-- get_style_suffix: zwraca niepusty string
-- validate_prompt: prompt bez style_suffix → is_valid=False
-- validate_prompt: prompt z forbidden_element → ostrzeżenie w logach
-- apply_style_to_plan: każdy visual_prompt zawiera style_suffix po wywołaniu
-- Cache: drugi run nie wywołuje Claude (wczytuje z pliku)
-- --no-style-lock: visual_bible nie generowana, prompty bez suffix
+- list_scenes: zwraca listę z poprawnymi indeksami i sekcjami
+- rerender_scene: generuje plik scene_NNN.jpg w cache (mockuj BFL)
+- rerender_scene z new_prompt: aktualizuje scene_plan.json
+- reprompt_scene: mockuj Claude API, zwraca niepusty string
+- rebuild_video: montuje wideo (mockuj MoviePy), nie wywołuje Whisper ani BFL
+- Backup: scene_002_v1.jpg istnieje po pierwszym re-renderze
+- restore-scene: scene_002.jpg zastąpiony przez scene_002_v1.jpg
+- --rerender-scene bez cache: FileNotFoundError z komunikatem
+- --rerender-scene poza zakresem: ValueError z listą dostępnych
 
 ## Acceptance Criteria
-- Visual Bible generowana przed planem scen
-- Każdy prompt obrazu kończy się style_suffix z Visual Bible
-- Wszystkie sceny mają spójną paletę kolorów i nastrój
-- Visual Bible cachowana — nie generuje się ponownie przy --new nie podanym
-- "[2/4] Visual Bible: ..." wyświetlane w logach z nazwą nastroju i paletą
-- --no-style-lock wyłącza mechanizm
+- --list-scenes wyświetla tabelę scen z cache
+- --rerender-scene 2 generuje nowy obraz tylko dla sceny 2
+- --rerender-scene 2 --scene-prompt "..." używa podanego promptu
+- --rerender-scene 2 --reprompt pyta Claude o nowy prompt
+- --rebuild montuje wideo bez Stage 1-3
+- Backup poprzedniej wersji sceny przed nadpisaniem
+- --restore-scene przywraca poprzednią wersję
 - python3 -m pytest tests/ -v przechodzi

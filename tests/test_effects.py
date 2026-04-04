@@ -5,6 +5,7 @@ import pytest
 from unittest.mock import MagicMock
 
 from musicvid.pipeline.effects import apply_warm_grade
+from musicvid.pipeline.effects import apply_vignette
 
 
 class TestApplyWarmGrade:
@@ -41,3 +42,38 @@ class TestApplyWarmGrade:
 
         assert output[:, :, 0].mean() == 255  # R: clamped at 255
         assert output[:, :, 2].mean() == 240  # B: 250 - 10
+
+
+class TestApplyVignette:
+    """Tests for vignette (edge darkening) effect."""
+
+    def test_edges_darker_than_center(self):
+        """Edge pixels should be darker than center pixels after vignette."""
+        frame = np.full((200, 200, 3), 200, dtype=np.uint8)
+        mock_clip = MagicMock()
+        mock_clip.transform.return_value = mock_clip
+
+        apply_vignette(mock_clip)
+
+        transform_fn = mock_clip.transform.call_args[0][0]
+        get_frame = lambda t: frame
+        output = transform_fn(get_frame, 0)
+
+        center_val = output[100, 100, 0]
+        corner_val = output[0, 0, 0]
+        assert center_val > corner_val, f"Center {center_val} should be brighter than corner {corner_val}"
+
+    def test_center_mostly_unchanged(self):
+        """Center pixel should retain most of its original brightness."""
+        frame = np.full((200, 200, 3), 200, dtype=np.uint8)
+        mock_clip = MagicMock()
+        mock_clip.transform.return_value = mock_clip
+
+        apply_vignette(mock_clip)
+
+        transform_fn = mock_clip.transform.call_args[0][0]
+        get_frame = lambda t: frame
+        output = transform_fn(get_frame, 0)
+
+        center_val = output[100, 100, 0]
+        assert center_val >= 190, f"Center {center_val} should be close to original 200"

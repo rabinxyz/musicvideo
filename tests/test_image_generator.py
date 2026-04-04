@@ -100,8 +100,8 @@ class TestBFLFlowSubmitPollDownload:
         assert "/v1/flux-dev" in url
 
         payload = post_call[1]["json"]
-        assert payload["width"] == 1280
-        assert payload["height"] == 720
+        assert payload["width"] == 1024
+        assert payload["height"] == 768
         assert "prompt" in payload
         assert "output_format" not in payload
         assert "safety_tolerance" not in payload

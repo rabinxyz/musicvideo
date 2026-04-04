@@ -1,5 +1,3 @@
-# Idea
-
 # Spec: Naprawa wymiarów obrazów dla BFL API
 
 ## Problem

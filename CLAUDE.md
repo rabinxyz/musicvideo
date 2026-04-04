@@ -38,7 +38,7 @@ CLI tool that generates synchronized MP4 music videos from audio files using sto
 - Stock fetcher tests need `PEXELS_API_KEY` env var set via `@patch.dict(os.environ)` to exercise API code path
 - Image generator BFL tests need `BFL_API_KEY` env var via `@patch.dict(os.environ)` and mock `requests` at module level
 - BFL API flow: `_submit_task` returns `(task_id, polling_url)` tuple; `_poll_result` takes `polling_url` (not task_id)
-- BFL API payload: only `prompt`, `width`, `height` — no `output_format`, `safety_tolerance`, or `prompt_upsampling`
+- BFL API payload: only `prompt`, `width`, `height` — no `output_format`, `safety_tolerance`, or `prompt_upsampling`; use 1024x768 (1280x720 causes 422 from flux-dev)
 - Image generator polling tests mock `time.monotonic` and `time.sleep` to control timing
 - Image generator retry tests must patch tenacity wait to `wait_none()` to avoid slow tests
 - Font loader: `musicvid/pipeline/font_loader.py` auto-downloads Montserrat from Google Fonts ZIP, falls back to system DejaVuSans

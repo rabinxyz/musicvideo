@@ -57,8 +57,8 @@ def _submit_task(model_name, prompt):
     url = f"{BFL_BASE_URL}/v1/{model_name}"
     payload = {
         "prompt": prompt,
-        "width": 1280,
-        "height": 720,
+        "width": 1024,
+        "height": 768,
     }
     resp = requests.post(url, json=payload, headers=_get_headers())
     resp.raise_for_status()

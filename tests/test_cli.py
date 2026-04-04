@@ -2054,3 +2054,61 @@ class TestLogoFlag:
         assert result.exit_code == 0, f"CLI failed: {result.output}"
         call_kwargs = mock_assemble.call_args[1]
         assert call_kwargs["logo_path"] is None
+
+
+class TestLogoWithPreset:
+    """Tests that logo params are passed through preset mode."""
+
+    @patch("musicvid.musicvid.get_font_path", return_value="/fake/font.ttf")
+    @patch("musicvid.musicvid.assemble_video")
+    @patch("musicvid.musicvid.select_social_clips")
+    @patch("musicvid.musicvid.fetch_videos")
+    @patch("musicvid.musicvid.create_scene_plan")
+    @patch("musicvid.musicvid.analyze_audio")
+    def test_preset_all_passes_logo_to_all_assemblies(
+        self, mock_analyze, mock_director, mock_fetch, mock_social, mock_assemble, mock_font,
+        runner, tmp_path
+    ):
+        audio = tmp_path / "song.mp3"
+        audio.write_bytes(b"fake")
+        logo = tmp_path / "logo.png"
+        logo.write_bytes(b"fake_png")
+
+        mock_analyze.return_value = {
+            "lyrics": [], "beats": [0.0, 0.5], "bpm": 120.0,
+            "duration": 100.0, "sections": [{"label": "verse", "start": 0.0, "end": 100.0}],
+            "mood_energy": "contemplative", "language": "en",
+        }
+        mock_director.return_value = {
+            "overall_style": "contemplative",
+            "color_palette": ["#aaa"],
+            "subtitle_style": {"font_size": 48, "color": "#FFF", "outline_color": "#000",
+                               "position": "center-bottom", "animation": "fade"},
+            "scenes": [{"section": "verse", "start": 0.0, "end": 100.0,
+                         "visual_prompt": "test", "motion": "static",
+                         "transition": "cut", "overlay": "none"}],
+        }
+        mock_fetch.return_value = [
+            {"scene_index": 0, "video_path": "/fake/v.mp4", "search_query": "test"},
+        ]
+        mock_social.return_value = {
+            "clips": [
+                {"id": 1, "start": 0.0, "end": 15.0, "section": "intro", "reason": "test"},
+                {"id": 2, "start": 30.0, "end": 45.0, "section": "chorus", "reason": "test"},
+                {"id": 3, "start": 60.0, "end": 75.0, "section": "outro", "reason": "test"},
+            ]
+        }
+
+        result = runner.invoke(cli, [
+            str(audio), "--preset", "all",
+            "--logo", str(logo), "--logo-position", "top-right",
+            "--output", str(tmp_path / "out"),
+        ])
+
+        assert result.exit_code == 0, f"CLI failed: {result.output}\n{result.exception}"
+        # 1 full + 3 social = 4 assemble calls
+        assert mock_assemble.call_count == 4
+        for call_obj in mock_assemble.call_args_list:
+            kwargs = call_obj[1]
+            assert kwargs["logo_path"] == str(logo)
+            assert kwargs["logo_position"] == "top-right"

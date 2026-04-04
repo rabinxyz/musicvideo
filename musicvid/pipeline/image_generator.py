@@ -88,13 +88,13 @@ def _download_image(image_url, output_path):
     Path(output_path).write_bytes(resp.content)
 
 
-def generate_images(scene_plan, output_dir, provider="flux-dev"):
+def generate_images(scene_plan, output_dir, provider="flux-pro"):
     """Generate one image per scene using BFL API.
 
     Args:
         scene_plan: Scene plan dict from Stage 2.
         output_dir: Directory to save generated images.
-        provider: One of flux-dev, flux-pro, flux-schnell.
+        provider: One of flux-dev, flux-pro, flux-schnell. Default: flux-pro (flux-pro-1.1).
 
     Returns:
         list of image file paths in scene order.
@@ -103,6 +103,7 @@ def generate_images(scene_plan, output_dir, provider="flux-dev"):
 
     model_name = BFL_MODELS[provider]
     scenes = scene_plan.get("scenes", [])
+    master_style = scene_plan.get("master_style", "")
     output_path = Path(output_dir)
     output_path.mkdir(parents=True, exist_ok=True)
 
@@ -111,7 +112,10 @@ def generate_images(scene_plan, output_dir, provider="flux-dev"):
 
     for i, scene in enumerate(scenes):
         visual_prompt = scene.get("visual_prompt", "nature landscape")
-        full_prompt = f"{visual_prompt}, cinematic 16:9, photorealistic, high quality"
+        if master_style:
+            full_prompt = f"{visual_prompt}, {master_style}, cinematic 16:9, photorealistic, high quality"
+        else:
+            full_prompt = f"{visual_prompt}, cinematic 16:9, photorealistic, high quality"
 
         task_id, polling_url = _submit_task(model_name, full_prompt)
         image_url = _poll_result(polling_url)

@@ -213,7 +213,7 @@ class TestProviderDetection:
 
     @patch.dict(os.environ, {"BFL_API_KEY": "test-key"})
     @patch("musicvid.pipeline.image_generator.requests")
-    def test_default_provider_is_flux_dev(self, mock_requests, tmp_path):
+    def test_default_provider_is_flux_pro(self, mock_requests, tmp_path):
         from musicvid.pipeline.image_generator import generate_images
 
         mock_requests.post.return_value = _make_post_response()
@@ -225,7 +225,7 @@ class TestProviderDetection:
         generate_images(ONE_SCENE_PLAN, str(tmp_path))
 
         url = mock_requests.post.call_args[0][0]
-        assert "/v1/flux-dev" in url
+        assert "/v1/flux-pro-1.1" in url
 
 
 class TestRetryBehavior:
@@ -318,3 +318,77 @@ class TestBannedWords:
             prompt = post_call[1]["json"]["prompt"].lower()
             for word in BANNED_WORDS:
                 assert word not in prompt, f"Banned word '{word}' found in prompt: {prompt}"
+
+
+class TestMasterStylePrompt:
+    """Tests that master_style from scene_plan is appended to BFL prompts."""
+
+    @patch.dict(os.environ, {"BFL_API_KEY": "test-key"})
+    @patch("musicvid.pipeline.image_generator.requests")
+    def test_master_style_appended_to_prompt(self, mock_requests, tmp_path):
+        from musicvid.pipeline.image_generator import generate_images
+
+        mock_requests.post.return_value = _make_post_response("task-1")
+        mock_requests.get.side_effect = [
+            _make_poll_response("Ready", "https://bfl.ai/img1.jpg"),
+            _make_download_response(),
+        ]
+
+        plan = {
+            "master_style": "Warm cinematic grade, golden tones",
+            "scenes": [{"visual_prompt": "mountain sunrise", "start": 0.0, "end": 5.0}],
+        }
+        generate_images(plan, str(tmp_path))
+
+        call_payload = mock_requests.post.call_args[1]["json"]
+        assert "Warm cinematic grade, golden tones" in call_payload["prompt"]
+        assert "mountain sunrise" in call_payload["prompt"]
+
+    @patch.dict(os.environ, {"BFL_API_KEY": "test-key"})
+    @patch("musicvid.pipeline.image_generator.requests")
+    def test_no_master_style_still_works(self, mock_requests, tmp_path):
+        from musicvid.pipeline.image_generator import generate_images
+
+        mock_requests.post.return_value = _make_post_response("task-1")
+        mock_requests.get.side_effect = [
+            _make_poll_response("Ready", "https://bfl.ai/img1.jpg"),
+            _make_download_response(),
+        ]
+
+        plan = {
+            "scenes": [{"visual_prompt": "calm lake", "start": 0.0, "end": 5.0}],
+        }
+        generate_images(plan, str(tmp_path))
+
+        call_payload = mock_requests.post.call_args[1]["json"]
+        assert "calm lake" in call_payload["prompt"]
+
+
+class TestDefaultProvider:
+    """Tests that the default provider is flux-pro (maps to flux-pro-1.1)."""
+
+    @patch.dict(os.environ, {"BFL_API_KEY": "test-key"})
+    @patch("musicvid.pipeline.image_generator.requests")
+    def test_default_provider_is_flux_pro(self, mock_requests, tmp_path):
+        import inspect
+        from musicvid.pipeline.image_generator import generate_images
+
+        sig = inspect.signature(generate_images)
+        assert sig.parameters["provider"].default == "flux-pro"
+
+    @patch.dict(os.environ, {"BFL_API_KEY": "test-key"})
+    @patch("musicvid.pipeline.image_generator.requests")
+    def test_default_provider_calls_flux_pro_1_1_endpoint(self, mock_requests, tmp_path):
+        from musicvid.pipeline.image_generator import generate_images
+
+        mock_requests.post.return_value = _make_post_response("task-1")
+        mock_requests.get.side_effect = [
+            _make_poll_response("Ready", "https://bfl.ai/img1.jpg"),
+            _make_download_response(),
+        ]
+
+        plan = {"scenes": [{"visual_prompt": "test", "start": 0.0, "end": 5.0}]}
+        generate_images(plan, str(tmp_path))  # uses default provider
+
+        called_url = mock_requests.post.call_args[0][0]
+        assert "flux-pro-1.1" in called_url

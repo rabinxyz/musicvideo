@@ -1,5 +1,3 @@
-# Idea
-
 # Spec: Zmiana providera obrazów na oficjalne BFL API (Black Forest Labs)
 
 ## Kontekst

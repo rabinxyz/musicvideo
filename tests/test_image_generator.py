@@ -29,9 +29,12 @@ ONE_SCENE_PLAN = {
 
 
 def _make_post_response(task_id="task-123"):
-    """Create a mock POST response returning a task ID."""
+    """Create a mock POST response returning a task ID and polling URL."""
     resp = MagicMock()
-    resp.json.return_value = {"id": task_id}
+    resp.json.return_value = {
+        "id": task_id,
+        "polling_url": f"https://api.bfl.ai/v1/get_result?id={task_id}",
+    }
     return resp
 
 
@@ -99,8 +102,10 @@ class TestBFLFlowSubmitPollDownload:
         payload = post_call[1]["json"]
         assert payload["width"] == 1280
         assert payload["height"] == 720
-        assert payload["output_format"] == "jpeg"
         assert "prompt" in payload
+        assert "output_format" not in payload
+        assert "safety_tolerance" not in payload
+        assert "prompt_upsampling" not in payload
 
     @patch.dict(os.environ, {"BFL_API_KEY": "test-key"})
     @patch("musicvid.pipeline.image_generator.requests")
@@ -116,7 +121,7 @@ class TestBFLFlowSubmitPollDownload:
         generate_images(ONE_SCENE_PLAN, str(tmp_path), provider="flux-pro")
 
         url = mock_requests.post.call_args[0][0]
-        assert "/v1/flux-pro1.1" in url
+        assert "/v1/flux-pro-1.1" in url
 
     @patch.dict(os.environ, {"BFL_API_KEY": "test-key"})
     @patch("musicvid.pipeline.image_generator.requests")
@@ -132,7 +137,7 @@ class TestBFLFlowSubmitPollDownload:
         generate_images(ONE_SCENE_PLAN, str(tmp_path), provider="flux-schnell")
 
         url = mock_requests.post.call_args[0][0]
-        assert "/v1/flux-schnell" in url
+        assert "/v1/flux-2-klein-4b" in url
 
     @patch.dict(os.environ, {"BFL_API_KEY": "my-secret-key"})
     @patch("musicvid.pipeline.image_generator.requests")
@@ -170,7 +175,7 @@ class TestPolling:
             _make_poll_response("Ready", "https://bfl.ai/result.jpg"),
         ]
 
-        result = _poll_result("task-abc")
+        result = _poll_result("https://api.bfl.ai/v1/get_result?id=task-abc")
 
         assert result == "https://bfl.ai/result.jpg"
         assert mock_requests.get.call_count == 3
@@ -187,7 +192,7 @@ class TestPolling:
         mock_time.sleep = MagicMock()
 
         with pytest.raises(TimeoutError):
-            _poll_result("task-timeout")
+            _poll_result("https://api.bfl.ai/v1/get_result?id=task-timeout")
 
 
 class TestProviderDetection:
@@ -246,11 +251,12 @@ class TestRetryBehavior:
         original_wait = _submit_task.retry.wait
         _submit_task.retry.wait = wait_none()
         try:
-            result = _submit_task("flux-dev", "test prompt")
+            task_id, polling_url = _submit_task("flux-dev", "test prompt")
         finally:
             _submit_task.retry.wait = original_wait
 
-        assert result == "task-ok"
+        assert task_id == "task-ok"
+        assert "task-ok" in polling_url
         assert mock_requests.post.call_count == 3
 
     @patch.dict(os.environ, {"BFL_API_KEY": "test-key"})

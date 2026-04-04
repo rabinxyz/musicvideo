@@ -307,3 +307,35 @@ class TestBannedWords:
             prompt = call[1]["arguments"]["prompt"].lower()
             for word in BANNED_WORDS:
                 assert word not in prompt, f"Banned word '{word}' found in prompt: {prompt}"
+
+    @patch.dict(os.environ, {"OPENAI_API_KEY": "test-key"})
+    @patch("musicvid.pipeline.image_generator.requests")
+    @patch("musicvid.pipeline.image_generator.openai")
+    def test_dalle_prompt_has_no_banned_words(self, mock_openai, mock_requests, tmp_path):
+        from musicvid.pipeline.image_generator import generate_images
+
+        scene_plan = {
+            "scenes": [
+                {"visual_prompt": "golden wheat fields, warm light, peaceful", "start": 0.0, "end": 5.0},
+                {"visual_prompt": "mountain peaks, morning mist, majestic", "start": 5.0, "end": 10.0},
+            ]
+        }
+
+        mock_client = MagicMock()
+        mock_openai.OpenAI.return_value = mock_client
+        mock_image = MagicMock()
+        mock_image.url = "https://example.com/image.png"
+        mock_response = MagicMock()
+        mock_response.data = [mock_image]
+        mock_client.images.generate.return_value = mock_response
+
+        mock_http = MagicMock()
+        mock_http.content = b"fake png"
+        mock_requests.get.return_value = mock_http
+
+        generate_images(scene_plan, str(tmp_path), provider="dalle")
+
+        for call in mock_client.images.generate.call_args_list:
+            prompt = call[1]["prompt"].lower()
+            for word in BANNED_WORDS:
+                assert word not in prompt, f"Banned word '{word}' found in DALL-E prompt: {prompt}"

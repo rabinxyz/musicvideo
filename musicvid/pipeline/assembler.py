@@ -90,19 +90,47 @@ def _create_ken_burns_clip(clip, duration, motion="slow_zoom_in", target_size=(1
             return cropped
         return clip.transform(pan_r)
 
+    elif motion == "pan_up":
+        def pan_u(get_frame, t):
+            progress = t / duration
+            frame = get_frame(t)
+            fh, fw = frame.shape[:2]
+            max_offset = fh - h
+            y = int(max_offset * (1 - progress))
+            cropped = frame[y:y + h, 0:w]
+            return cropped
+        return clip.transform(pan_u)
+
+    elif motion == "pan_down":
+        def pan_d(get_frame, t):
+            progress = t / duration
+            frame = get_frame(t)
+            fh, fw = frame.shape[:2]
+            max_offset = fh - h
+            y = int(max_offset * progress)
+            cropped = frame[y:y + h, 0:w]
+            return cropped
+        return clip.transform(pan_d)
+
     else:  # static
         clip = clip.resized(new_size=(w, h))
         clip = clip.with_duration(duration)
         return clip
 
 
-def _create_subtitle_clips(lyrics, subtitle_style, size, font_path=None):
+def _remap_motion_for_portrait(motion):
+    """Remap horizontal pans to vertical for portrait (9:16) format."""
+    remap = {"pan_left": "pan_up", "pan_right": "pan_down"}
+    return remap.get(motion, motion)
+
+
+def _create_subtitle_clips(lyrics, subtitle_style, size, font_path=None, subtitle_margin_bottom=80):
     """Create subtitle TextClips from lyrics with word-level timing."""
     clips = []
     font_size = subtitle_style.get("font_size", 58)
     color = subtitle_style.get("color", "#FFFFFF")
     outline_color = subtitle_style.get("outline_color", "#000000")
-    margin_bottom = 80
+    margin_bottom = subtitle_margin_bottom
 
     for segment in lyrics:
         duration = segment["end"] - segment["start"]
@@ -169,7 +197,7 @@ def _load_scene_clip(video_path, scene, target_size):
     return _create_ken_burns_clip(clip, duration, scene.get("motion", "static"), target_size)
 
 
-def assemble_video(analysis, scene_plan, fetch_manifest, audio_path, output_path, resolution="1080p", font_path=None, effects_level="minimal", clip_start=None, clip_end=None, title_card_text=None):
+def assemble_video(analysis, scene_plan, fetch_manifest, audio_path, output_path, resolution="1080p", font_path=None, effects_level="minimal", clip_start=None, clip_end=None, title_card_text=None, audio_fade_out=1.0, subtitle_margin_bottom=80, cinematic_bars=True):
     """Assemble the final music video.
 
     Args:
@@ -199,11 +227,12 @@ def assemble_video(analysis, scene_plan, fetch_manifest, audio_path, output_path
         scene_plan.get("subtitle_style", {}),
         target_size,
         font_path=font_path,
+        subtitle_margin_bottom=subtitle_margin_bottom,
     )
 
     layers = [video] + subtitle_clips
 
-    if effects_level in ("minimal", "full"):
+    if cinematic_bars and effects_level in ("minimal", "full"):
         bars = create_cinematic_bars(target_size[0], target_size[1], video.duration)
         layers.extend(bars)
 
@@ -228,7 +257,7 @@ def assemble_video(analysis, scene_plan, fetch_manifest, audio_path, output_path
     audio = AudioFileClip(audio_path)
     if clip_start is not None:
         audio = audio.subclipped(clip_start, clip_end)
-        audio = audio.with_effects([afx.AudioFadeIn(0.5), afx.AudioFadeOut(1.0)])
+        audio = audio.with_effects([afx.AudioFadeIn(0.5), afx.AudioFadeOut(audio_fade_out)])
     final = final.with_audio(audio)
     final = final.with_duration(min(final.duration, audio.duration))
 

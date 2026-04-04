@@ -4,7 +4,7 @@
 CLI tool that generates synchronized MP4 music videos from audio files using stock footage, beat-synced cuts, and whisper-based subtitles.
 
 ## Commands
-- `python3 -m pytest tests/ -v` - run all tests (54 tests)
+- `python3 -m pytest tests/ -v` - run all tests (65 tests)
 - `python3 -m musicvid.musicvid song.mp3` - run the CLI (uses cache by default)
 - `python3 -m musicvid.musicvid song.mp3 --new` - force recalculation, ignore cache
 - `python3 -c "import musicvid; print(musicvid.__version__)"` - check version
@@ -14,6 +14,7 @@ CLI tool that generates synchronized MP4 music videos from audio files using sto
 - `--mode stock` (default): Stage 3 uses `stock_fetcher` (Pexels API)
 - `--mode ai`: Stage 3 uses `image_generator` (BFL API: flux-dev/flux-pro/flux-schnell), caches to `image_manifest.json`
 - `--provider [flux-dev|flux-pro|flux-schnell]` (default: flux-dev): selects BFL model for `--mode ai`
+- `--font PATH`: custom .ttf font for subtitles (optional, defaults to auto-downloaded Montserrat Light)
 
 ## Caching
 - Content-addressed cache in `output/tmp/{audio_hash}/` (MD5 of first 64KB, 12 chars)
@@ -36,6 +37,8 @@ CLI tool that generates synchronized MP4 music videos from audio files using sto
 - Image generator BFL tests need `BFL_API_KEY` env var via `@patch.dict(os.environ)` and mock `requests` at module level
 - Image generator polling tests mock `time.monotonic` and `time.sleep` to control timing
 - Image generator retry tests must patch tenacity wait to `wait_none()` to avoid slow tests
+- Font loader: `musicvid/pipeline/font_loader.py` auto-downloads Montserrat from Google Fonts ZIP, falls back to system DejaVuSans
+- CLI tests that run the full pipeline must mock `get_font_path` via `@patch("musicvid.musicvid.get_font_path", return_value="/fake/font.ttf")`
 - Use `python3` not `python` on this macOS system
 
 ## Environment

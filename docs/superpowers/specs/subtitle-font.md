@@ -1,5 +1,3 @@
-# Idea
-
 # Spec: Czcionka napisów — polska obsługa + minimalistyczny styl
 
 ## Problem

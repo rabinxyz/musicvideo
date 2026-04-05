@@ -281,11 +281,11 @@ class TestCLI:
 
     @patch("musicvid.musicvid.get_font_path", return_value="/fake/font.ttf")
     @patch("musicvid.musicvid.assemble_video")
-    @patch("musicvid.musicvid.generate_images")
+    @patch("musicvid.musicvid.VisualRouter")
     @patch("musicvid.musicvid.create_scene_plan")
     @patch("musicvid.musicvid.analyze_audio")
-    def test_mode_ai_calls_image_generator(
-        self, mock_analyze, mock_direct, mock_gen_images, mock_assemble, mock_font, runner, tmp_path
+    def test_mode_ai_calls_visual_router(
+        self, mock_analyze, mock_direct, mock_router_cls, mock_assemble, mock_font, runner, tmp_path
     ):
         audio_file = tmp_path / "test.mp3"
         audio_file.write_bytes(b"fake audio")
@@ -295,16 +295,23 @@ class TestCLI:
             "duration": 10.0, "sections": [{"label": "verse", "start": 0.0, "end": 10.0}],
             "mood_energy": "contemplative", "language": "en",
         }
+        scene = {
+            "section": "verse", "start": 0.0, "end": 10.0,
+            "visual_source": "TYPE_AI", "search_query": "", "visual_prompt": "test",
+            "motion": "static", "transition": "cut", "overlay": "none",
+            "animate": False, "motion_prompt": "", "lyrics_in_scene": [],
+        }
         mock_direct.return_value = {
             "overall_style": "contemplative",
             "color_palette": ["#aaa"],
             "subtitle_style": {"font_size": 48, "color": "#FFF", "outline_color": "#000",
                                "position": "center-bottom", "animation": "fade"},
-            "scenes": [{"section": "verse", "start": 0.0, "end": 10.0,
-                         "visual_prompt": "test", "motion": "static",
-                         "transition": "cut", "overlay": "none"}],
+            "scenes": [scene],
         }
-        mock_gen_images.return_value = [str(tmp_path / "scene_000.png")]
+        fake_asset = str(tmp_path / "scene_000.jpg")
+        router_instance = MagicMock()
+        router_instance.route.return_value = fake_asset
+        mock_router_cls.return_value = router_instance
 
         output_dir = tmp_path / "output"
         result = runner.invoke(cli, [
@@ -315,13 +322,12 @@ class TestCLI:
         ])
 
         assert result.exit_code == 0
-        mock_gen_images.assert_called_once()
+        mock_router_cls.assert_called_once()
+        router_instance.route.assert_called_once()
         mock_assemble.assert_called_once()
-
-        # Check that fetch_manifest passed to assembler uses image paths
         call_kwargs = mock_assemble.call_args[1]
         manifest = call_kwargs["fetch_manifest"]
-        assert manifest[0]["video_path"].endswith(".png")
+        assert manifest[0]["video_path"] == fake_asset
 
     @patch("musicvid.musicvid.get_font_path", return_value="/fake/font.ttf")
     @patch("musicvid.musicvid.assemble_video")
@@ -1363,148 +1369,158 @@ class TestAILyricsAlignment:
 
 
 class TestAnimateCLI:
-    """Tests for the --animate CLI flag."""
-
-    def _make_scene_plan_with_animated(self):
-        return {
-            "overall_style": "contemplative",
-            "master_style": "Warm grade",
-            "color_palette": ["#aaa"],
-            "subtitle_style": {"font_size": 48, "color": "#FFF",
-                               "outline_color": "#000", "position": "center-bottom",
-                               "animation": "fade"},
-            "scenes": [
-                {"section": "verse", "start": 0.0, "end": 4.0,
-                 "visual_prompt": "meadow", "motion": "slow_zoom_in",
-                 "transition": "crossfade", "overlay": "none",
-                 "animate": True, "motion_prompt": "Camera rises slowly"},
-                {"section": "chorus", "start": 4.0, "end": 7.0,
-                 "visual_prompt": "mountain", "motion": "static",
-                 "transition": "cut", "overlay": "none",
-                 "animate": False, "motion_prompt": ""},
-                {"section": "outro", "start": 7.0, "end": 10.0,
-                 "visual_prompt": "sunset", "motion": "pan_left",
-                 "transition": "fade_black", "overlay": "none",
-                 "animate": False, "motion_prompt": ""},
-            ],
-        }
+    """Tests for the --animate flag behavior with VisualRouter."""
 
     def _make_analysis(self):
         return {
-            "lyrics": [], "beats": [], "bpm": 120.0, "duration": 10.0,
-            "sections": [{"label": "verse", "start": 0.0, "end": 10.0}],
-            "mood_energy": "contemplative", "language": "en",
+            "lyrics": [{"text": "Test", "start": 0.0, "end": 10.0}],
+            "beats": [i * 0.5 for i in range(60)],
+            "bpm": 120.0,
+            "duration": 30.0,
+            "sections": [
+                {"label": "verse", "start": 0.0, "end": 10.0},
+                {"label": "chorus", "start": 10.0, "end": 20.0},
+                {"label": "verse", "start": 20.0, "end": 30.0},
+            ],
+            "mood_energy": "worship",
+            "language": "pl",
         }
 
-    @patch("musicvid.musicvid.animate_image")
+    def _make_scene_plan_with_animated(self):
+        return {
+            "overall_style": "worship",
+            "master_style": "Documentary",
+            "color_palette": ["#fff"],
+            "subtitle_style": {
+                "font_size": 48, "color": "#FFF", "outline_color": "#000",
+                "position": "center-bottom", "animation": "karaoke",
+            },
+            "scenes": [
+                {
+                    "section": "chorus", "start": 0.0, "end": 10.0,
+                    "visual_source": "TYPE_ANIMATED",
+                    "search_query": "", "visual_prompt": "Light above clouds",
+                    "motion": "slow_zoom_in", "transition_to_next": "cut",
+                    "overlay": "none", "animate": True,
+                    "motion_prompt": "slow camera rises", "lyrics_in_scene": [],
+                },
+                {
+                    "section": "verse", "start": 10.0, "end": 20.0,
+                    "visual_source": "TYPE_VIDEO_STOCK",
+                    "search_query": "mountain valley", "visual_prompt": "",
+                    "motion": "pan_left", "transition_to_next": "cut",
+                    "overlay": "none", "animate": False,
+                    "motion_prompt": "", "lyrics_in_scene": [],
+                },
+                {
+                    "section": "verse", "start": 20.0, "end": 30.0,
+                    "visual_source": "TYPE_AI",
+                    "search_query": "", "visual_prompt": "Golden field at sunset",
+                    "motion": "slow_zoom_out", "transition_to_next": "cut",
+                    "overlay": "none", "animate": False,
+                    "motion_prompt": "", "lyrics_in_scene": [],
+                },
+            ],
+        }
+
+    def _make_router_mock(self, tmp_path, n_scenes=3):
+        router_instance = MagicMock()
+        router_instance.route.side_effect = [
+            str(tmp_path / f"scene_{i:03d}.jpg") for i in range(n_scenes)
+        ]
+        return router_instance
+
     @patch("musicvid.musicvid.get_font_path", return_value="/fake/font.ttf")
     @patch("musicvid.musicvid.assemble_video")
-    @patch("musicvid.musicvid.generate_images", return_value=["/fake/s0.jpg", "/fake/s1.jpg", "/fake/s2.jpg"])
+    @patch("musicvid.musicvid.VisualRouter")
     @patch("musicvid.musicvid.create_scene_plan")
     @patch("musicvid.musicvid.analyze_audio")
-    def test_animate_never_does_not_call_animate_image(
-        self, mock_analyze, mock_plan, mock_gen, mock_assemble, mock_font, mock_animate, tmp_path
+    def test_animate_never_converts_animated_to_ai(
+        self, mock_analyze, mock_plan, mock_router_cls, mock_assemble, mock_font, tmp_path
     ):
         from musicvid.musicvid import cli
 
         mock_analyze.return_value = self._make_analysis()
         mock_plan.return_value = self._make_scene_plan_with_animated()
+        router_instance = self._make_router_mock(tmp_path)
+        mock_router_cls.return_value = router_instance
 
         audio = tmp_path / "song.mp3"
         audio.write_bytes(b"fake audio")
 
         runner = CliRunner()
-        result = runner.invoke(cli, [str(audio), "--mode", "ai", "--animate", "never"])
+        result = runner.invoke(cli, [
+            str(audio), "--mode", "ai", "--animate", "never",
+            "--preset", "full", "--output", str(tmp_path / "output"),
+        ])
 
-        mock_animate.assert_not_called()
         assert result.exit_code == 0
+        # With animate=never, TYPE_ANIMATED should be converted to TYPE_AI before routing
+        mock_router_cls.assert_called_once()
+        assert router_instance.route.call_count == 3
+        # The first scene should have visual_source=TYPE_AI now (converted from TYPE_ANIMATED)
+        routed_scene = router_instance.route.call_args_list[0][0][0]
+        assert routed_scene["visual_source"] == "TYPE_AI"
 
-    @patch("musicvid.musicvid.animate_image", return_value="/fake/animated.mp4")
     @patch("musicvid.musicvid.enforce_animation_rules", side_effect=lambda scenes: scenes)
     @patch("musicvid.musicvid.get_font_path", return_value="/fake/font.ttf")
     @patch("musicvid.musicvid.assemble_video")
-    @patch("musicvid.musicvid.generate_images", return_value=["/fake/s0.jpg", "/fake/s1.jpg", "/fake/s2.jpg"])
+    @patch("musicvid.musicvid.VisualRouter")
     @patch("musicvid.musicvid.create_scene_plan")
     @patch("musicvid.musicvid.analyze_audio")
-    def test_animate_auto_with_runway_key_calls_animator(
-        self, mock_analyze, mock_plan, mock_gen, mock_assemble, mock_font, mock_enforce, mock_animate, tmp_path
+    def test_animate_auto_uses_director_visual_source(
+        self, mock_analyze, mock_plan, mock_router_cls, mock_assemble, mock_font, mock_enforce, tmp_path
     ):
         from musicvid.musicvid import cli
 
         mock_analyze.return_value = self._make_analysis()
         mock_plan.return_value = self._make_scene_plan_with_animated()
+        router_instance = self._make_router_mock(tmp_path)
+        mock_router_cls.return_value = router_instance
 
         audio = tmp_path / "song.mp3"
         audio.write_bytes(b"fake audio")
 
         runner = CliRunner()
-        with patch.dict(os.environ, {"RUNWAY_API_KEY": "test-key", "BFL_API_KEY": "test-bfl"}):
-            result = runner.invoke(cli, [str(audio), "--mode", "ai", "--animate", "auto"])
+        result = runner.invoke(cli, [
+            str(audio), "--mode", "ai", "--animate", "auto",
+            "--preset", "full", "--output", str(tmp_path / "output"),
+        ])
 
-        # Should be called once (only scene 0 has animate=True)
-        mock_animate.assert_called_once()
         assert result.exit_code == 0
+        mock_router_cls.assert_called_once()
+        assert router_instance.route.call_count == 3
 
-    @patch("musicvid.musicvid.animate_image")
+    @patch("musicvid.musicvid.enforce_animation_rules", side_effect=lambda scenes: scenes)
     @patch("musicvid.musicvid.get_font_path", return_value="/fake/font.ttf")
     @patch("musicvid.musicvid.assemble_video")
-    @patch("musicvid.musicvid.generate_images", return_value=["/fake/s0.jpg", "/fake/s1.jpg", "/fake/s2.jpg"])
+    @patch("musicvid.musicvid.VisualRouter")
     @patch("musicvid.musicvid.create_scene_plan")
     @patch("musicvid.musicvid.analyze_audio")
-    def test_animate_fallback_when_no_runway_key(
-        self, mock_analyze, mock_plan, mock_gen, mock_assemble, mock_font, mock_animate, tmp_path
+    def test_animate_always_converts_stock_to_animated(
+        self, mock_analyze, mock_plan, mock_router_cls, mock_assemble, mock_font, mock_enforce, tmp_path
     ):
         from musicvid.musicvid import cli
 
         mock_analyze.return_value = self._make_analysis()
         mock_plan.return_value = self._make_scene_plan_with_animated()
+        router_instance = self._make_router_mock(tmp_path)
+        mock_router_cls.return_value = router_instance
 
         audio = tmp_path / "song.mp3"
         audio.write_bytes(b"fake audio")
 
         runner = CliRunner()
-        # Remove RUNWAY_API_KEY so the fallback path is triggered
-        env = {k: v for k, v in os.environ.items() if k != "RUNWAY_API_KEY"}
-        env["BFL_API_KEY"] = "test-bfl"
-        with patch.dict(os.environ, env, clear=True):
-            result = runner.invoke(cli, [str(audio), "--mode", "ai", "--animate", "auto"])
+        result = runner.invoke(cli, [
+            str(audio), "--mode", "ai", "--animate", "always",
+            "--preset", "full", "--output", str(tmp_path / "output"),
+        ])
 
-        mock_animate.assert_not_called()
         assert result.exit_code == 0
-
-    @patch("musicvid.musicvid.animate_image")
-    @patch("musicvid.musicvid.get_font_path", return_value="/fake/font.ttf")
-    @patch("musicvid.musicvid.assemble_video")
-    @patch("musicvid.musicvid.generate_images", return_value=["/fake/s0.jpg", "/fake/s1.jpg", "/fake/s2.jpg"])
-    @patch("musicvid.musicvid.create_scene_plan")
-    @patch("musicvid.musicvid.analyze_audio")
-    def test_animate_error_shows_runway_response(
-        self, mock_analyze, mock_plan, mock_gen, mock_assemble, mock_font, mock_animate, tmp_path
-    ):
-        import requests
-
-        from musicvid.musicvid import cli
-
-        mock_analyze.return_value = self._make_analysis()
-        mock_plan.return_value = self._make_scene_plan_with_animated()
-
-        mock_response = MagicMock()
-        mock_response.status_code = 400
-        mock_response.text = '{"error":"invalid ratio"}'
-        http_error = requests.exceptions.HTTPError("400 Client Error")
-        http_error.response = mock_response
-        mock_animate.side_effect = http_error
-
-        audio = tmp_path / "song.mp3"
-        audio.write_bytes(b"fake audio")
-
-        runner = CliRunner()
-        with patch.dict(os.environ, {"RUNWAY_API_KEY": "test-key", "BFL_API_KEY": "test-bfl"}):
-            result = runner.invoke(cli, [str(audio), "--mode", "ai", "--animate", "always"])
-
-        assert "Runway error: 400" in result.output
-        assert "invalid ratio" in result.output
-        assert result.exit_code == 0
+        mock_router_cls.assert_called_once()
+        # All non-ANIMATED scenes should be converted to TYPE_ANIMATED
+        routed_scenes = [call[0][0] for call in router_instance.route.call_args_list]
+        assert all(s["visual_source"] == "TYPE_ANIMATED" for s in routed_scenes)
 
 
 class TestFilterScenePlanToClip:
@@ -2465,11 +2481,11 @@ class TestLogoWithPreset:
 
     @patch("musicvid.musicvid.get_font_path", return_value="/fake/font.ttf")
     @patch("musicvid.musicvid.assemble_video")
-    @patch("musicvid.musicvid.generate_images")
+    @patch("musicvid.musicvid.VisualRouter")
     @patch("musicvid.musicvid.create_scene_plan")
     @patch("musicvid.musicvid.analyze_audio")
     def test_economy_mode_uses_flux_dev(
-        self, mock_analyze, mock_direct, mock_gen, mock_assemble, mock_font, runner, tmp_path
+        self, mock_analyze, mock_direct, mock_router_cls, mock_assemble, mock_font, runner, tmp_path
     ):
         audio_file = tmp_path / "test.mp3"
         audio_file.write_bytes(b"fake audio")
@@ -2483,15 +2499,20 @@ class TestLogoWithPreset:
             "subtitle_style": {"font_size": 48, "color": "#FFF", "outline_color": "#000",
                                "position": "center-bottom", "animation": "fade"},
             "scenes": [{"section": "verse", "start": 0.0, "end": 10.0,
-                        "visual_prompt": "test", "motion": "static",
-                        "transition": "cut", "overlay": "none", "animate": False}],
+                        "visual_source": "TYPE_AI", "search_query": "", "visual_prompt": "test",
+                        "motion": "static", "transition": "cut", "overlay": "none",
+                        "animate": False, "motion_prompt": "", "lyrics_in_scene": []}],
         }
-        mock_gen.return_value = ["/fake/img.jpg"]
+        router_instance = MagicMock()
+        router_instance.route.return_value = "/fake/img.jpg"
+        mock_router_cls.return_value = router_instance
         output_dir = tmp_path / "output"
         result = runner.invoke(cli, [str(audio_file), "--output", str(output_dir), "--economy"])
         assert result.exit_code == 0, result.output
-        mock_gen.assert_called_once()
-        assert mock_gen.call_args.kwargs.get("provider") == "flux-dev"
+        mock_router_cls.assert_called_once()
+        # Verify provider=flux-dev was passed to VisualRouter
+        call_kwargs = mock_router_cls.call_args[1]
+        assert call_kwargs.get("provider") == "flux-dev"
 
     @patch("musicvid.musicvid.get_font_path", return_value="/fake/font.ttf")
     @patch("musicvid.musicvid.assemble_video")

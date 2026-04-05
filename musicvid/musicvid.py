@@ -22,6 +22,7 @@ from musicvid.pipeline.font_loader import get_font_path
 from musicvid.pipeline.lyrics_parser import merge_whisper_with_lyrics_file
 from musicvid.pipeline.video_animator import animate_image
 from musicvid.pipeline.social_clip_selector import select_social_clips
+from musicvid.pipeline.visual_router import VisualRouter
 from musicvid.pipeline.assembler import _remap_motion_for_portrait
 
 
@@ -599,60 +600,49 @@ def cli(audio_file, mode, provider, style, output, resolution, lang, new, font_p
         image_cache_name = f"image_manifest{manifest_suffix}.json"
         image_manifest = load_cache(str(cache_dir), image_cache_name) if not new else None
         if image_manifest and _image_files_exist(image_manifest):
-            click.echo("[3/4] Generating images... CACHED (skipped)")
+            click.echo("[3/4] Generating assets... CACHED (skipped)")
             fetch_manifest = image_manifest
         else:
-            click.echo(f"[3/4] Generating images (provider: {provider})...")
-            gen_platform = "reels" if preset == "social" else None
-            image_paths = generate_images(scene_plan, str(cache_dir), provider=provider, platform=gen_platform)
-            fetch_manifest = [
-                {"scene_index": i, "video_path": path, "search_query": scene["visual_prompt"]}
-                for i, (path, scene) in enumerate(zip(image_paths, scene_plan["scenes"]))
-            ]
+            # Apply --animate overrides to visual_source before routing
+            scenes = scene_plan["scenes"]
+            if animate_mode == "always":
+                for scene in scenes:
+                    if scene.get("visual_source") in ("TYPE_AI", "TYPE_VIDEO_STOCK", "TYPE_PHOTO_STOCK"):
+                        scene["visual_source"] = "TYPE_ANIMATED"
+                    if not scene.get("motion_prompt"):
+                        scene["motion_prompt"] = "Slow camera push forward, gentle atmospheric movement"
+                scenes = enforce_animation_rules(scenes)
+            elif animate_mode == "never":
+                for scene in scenes:
+                    if scene.get("visual_source") == "TYPE_ANIMATED":
+                        scene["visual_source"] = "TYPE_AI"
+            elif animate_mode == "auto":
+                scenes = enforce_animation_rules(scenes)
+            scene_plan["scenes"] = scenes
+
+            click.echo(f"[3/4] Generating assets (provider: {provider})...")
+            router = VisualRouter(cache_dir=str(cache_dir), provider=provider)
+            fetch_manifest = []
+            for i, scene in enumerate(scene_plan["scenes"]):
+                scene["index"] = i
+                src = scene.get("visual_source", "TYPE_AI")
+                label = scene.get("search_query") or scene.get("visual_prompt", "")
+                click.echo(f"  [{i + 1}/{len(scene_plan['scenes'])}] "
+                           f"{scene['section']}: {src} — '{label[:40]}'")
+                asset_path = router.route(scene)
+                if asset_path is None:
+                    from musicvid.pipeline.stock_fetcher import _create_placeholder_video
+                    placeholder_dest = cache_dir / f"scene_{i:03d}"
+                    asset_path = _create_placeholder_video(placeholder_dest, scene)
+                fetch_manifest.append({
+                    "scene_index": i,
+                    "video_path": asset_path,
+                    "start": scene["start"],
+                    "end": scene["end"],
+                    "source": src,
+                })
             save_cache(str(cache_dir), image_cache_name, fetch_manifest)
-        click.echo(f"  Generated: {len(fetch_manifest)} images")
-
-        # Apply --animate overrides to scene plan
-        if animate_mode == "always":
-            for scene in scene_plan["scenes"]:
-                scene["animate"] = True
-                if not scene.get("motion_prompt"):
-                    scene["motion_prompt"] = "Slow camera push forward, gentle atmospheric movement"
-        elif animate_mode == "never":
-            for scene in scene_plan["scenes"]:
-                scene["animate"] = False
-
-        # Enforce animation placement rules (auto mode only — always/never are explicit overrides)
-        if animate_mode == "auto":
-            scene_plan["scenes"] = enforce_animation_rules(scene_plan["scenes"])
-
-        # Stage 3.5: Animate scenes with Runway Gen-4
-        if animate_mode != "never":
-            runway_key = os.environ.get("RUNWAY_API_KEY")
-            for entry in fetch_manifest:
-                idx = entry["scene_index"]
-                scene = scene_plan["scenes"][idx]
-                if not scene.get("animate", False):
-                    continue
-                if not runway_key:
-                    click.echo(f"  \u26a0 RUNWAY_API_KEY not set \u2014 Ken Burns fallback for scene {idx + 1}")
-                    scene["animate"] = False
-                    continue
-                animated_path = str(cache_dir / f"animated_scene_{idx:03d}.mp4")
-                click.echo(f"  Animating scene {idx + 1}/{len(scene_plan['scenes'])}...")
-                try:
-                    result_path = animate_image(
-                        entry["video_path"],
-                        scene.get("motion_prompt", "Slow camera push forward"),
-                        duration=5,
-                        output_path=animated_path,
-                    )
-                    entry["video_path"] = result_path
-                except Exception as exc:
-                    if hasattr(exc, 'response') and exc.response is not None:
-                        click.echo(f"  Runway error: {exc.response.status_code} {exc.response.text[:300]}")
-                    click.echo(f"  \u26a0 Animation failed for scene {idx + 1}: {exc} \u2014 Ken Burns fallback")
-                    scene["animate"] = False
+        click.echo(f"  Assets: {len(fetch_manifest)} scenes")
     else:
         video_cache_name = f"video_manifest{manifest_suffix}.json"
         fetch_manifest = load_cache(str(cache_dir), video_cache_name) if not new else None

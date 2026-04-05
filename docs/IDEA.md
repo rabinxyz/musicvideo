@@ -1,178 +1,146 @@
 # Idea
 
-# Spec 1: Synchronizacja tekstu — sekwencyjne dopasowanie Whisper + plik lyrics
+# Spec 2: Animowane sceny nie mogą sąsiadować ze sobą
 
 ## Kontekst i historia problemu
 
-Mamy dwa źródła danych:
-- Whisper: niedokładny tekst ale DOBRY timing (start/end każdego segmentu)
-- plik tekst.txt: DOKŁADNY tekst ale brak timingu
+Runway Gen-4 animuje co N-tą scenę (animate=True).
+Problem: Claude-reżyser może wygenerować plan gdzie dwie animowane
+sceny są obok siebie. Powoduje to że widz widzi dwa bardzo podobne
+ruchy kamery jeden po drugim — wygląda to monotonnie i sztucznie.
 
-Poprzednie próby rozwiązania:
-1. Tylko Whisper — tekst błędny (szczególnie polskie słowa)
-2. AI matching (Claude dopasowuje) — niedokładny, gubił kolejność
-3. Sekwencyjne grupowanie — gubił linie gdy N segmentów != M linii
+Dodatkowo: animowane sceny powinny być rozłożone RÓWNOMIERNIE
+przez cały teledysk — nie skupione w jednej części.
 
-Obecny problem: napisy pojawiają się ale w złym czasie względem muzyki.
+## Zasady rozmieszczenia animowanych scen
 
-## Wymaganie
+### Zasada 1: Minimum 2 nieanimowane sceny między każdą animowaną
+Nie: [animate, animate, static, animate]
+Tak: [animate, static, static, animate, static, static, animate]
 
-Zsynchronizować DOKŁADNY tekst z pliku z DOBRYM timingiem z Whisper.
-Napisy muszą pojawiać się dokładnie gdy słyszysz daną frazę w muzyce.
+### Zasada 2: Animowane sceny przy kulminacyjnych momentach
+Priorytet dla animate=True:
+  - Pierwsze wystąpienie refrenu (chorus_first)
+  - Bridge (emocjonalny szczyt)
+  - Ostatni refren przed outro
+  - Intro (pierwsze 12s) — jeśli ma silny hook
 
-## Algorytm — sekwencyjne proporcjonalne dopasowanie
+Nigdy animate=True dla:
+  - Outro (ostatnie 15s) — powinno być spokojne
+  - Sceny z bardzo krótkim czasem trwania (< 6s) — za krótko dla Runway
 
-### Krok 1: Przygotowanie danych
+### Zasada 3: Maksymalna liczba animowanych scen
+max_animated = max(1, total_scenes // 4)
+Np. dla 20 scen: max 5 animowanych
+Np. dla 8 scen: max 2 animowane
 
-Whisper segments (po filtracji pustych):
-  segments = [s for s in whisper_result["segments"] if s["text"].strip()]
-  Każdy segment: {start: float, end: float, text: str}
-
-Linie z pliku (po filtracji pustych i whitespace):
-  lines = [l.strip() for l in file_content.split('\n') if l.strip()]
-  Ignoruj linie które są tylko interpunkcją lub mają < 2 znaki
-
-### Krok 2: Przypadek A — N_segments == N_lines (idealne)
-Przypisz 1:1:
-  result = []
-  for i, (seg, line) in enumerate(zip(segments, lines)):
-      result.append({
-          "start": seg["start"],
-          "end": seg["end"],
-          "text": line
-      })
-
-### Krok 3: Przypadek B — N_segments > N_lines (więcej segmentów niż linii)
-Np. Whisper wykrył 20 segmentów ale plik ma 12 linii.
-Każda linia dostaje grupę segmentów proporcjonalnie:
-
-  segments_per_line = N_segments / N_lines  # może być float np. 1.67
-
-  result = []
-  for i, line in enumerate(lines):
-      seg_start_idx = round(i * segments_per_line)
-      seg_end_idx = round((i + 1) * segments_per_line)
-      seg_end_idx = min(seg_end_idx, N_segments)
-
-      group = segments[seg_start_idx:seg_end_idx]
-      if not group:
-          continue
-
-      result.append({
-          "start": group[0]["start"],
-          "end": group[-1]["end"],
-          "text": line
-      })
-
-### Krok 4: Przypadek C — N_segments < N_lines (więcej linii niż segmentów)
-Np. Whisper wykrył 8 segmentów ale plik ma 20 linii.
-Podziel każdy segment na podgrupy linii proporcjonalnie:
-
-  result = []
-  lines_per_seg = N_lines / N_segments
-
-  for i, seg in enumerate(segments):
-      line_start_idx = round(i * lines_per_seg)
-      line_end_idx = round((i + 1) * lines_per_seg)
-      line_end_idx = min(line_end_idx, N_lines)
-
-      group_lines = lines[line_start_idx:line_end_idx]
-      if not group_lines:
-          continue
-
-      seg_duration = seg["end"] - seg["start"]
-      time_per_line = seg_duration / len(group_lines)
-
-      for j, line in enumerate(group_lines):
-          result.append({
-              "start": seg["start"] + j * time_per_line,
-              "end": seg["start"] + (j + 1) * time_per_line,
-              "text": line
-          })
-
-### Krok 5: Korekta timingu
-
-Po zbudowaniu result:
-
-1. Minimum gap między napisami: 0.15s
-   Jeśli result[i]["end"] > result[i+1]["start"] - 0.15:
-       result[i]["end"] = result[i+1]["start"] - 0.15
-
-2. Napis nie może trwać krócej niż 0.8s:
-   Jeśli duration < 0.8s: rozszerz end do start + 0.8
-
-3. Napis nie może trwać dłużej niż 8s (jeśli tak — segment był za długi):
-   Jeśli duration > 8s: ogranicz end do start + 8
-
-4. Offset -0.05s na początku każdego napisu:
-   result[i]["start"] = max(0, result[i]["start"] - 0.05)
-   (widz zdąży przeczytać zanim usłyszy)
-
-### Krok 6: Walidacja końcowa
-
-Sprawdź że:
-- Żaden napis nie wychodzi poza czas trwania audio
-- Napisy są posortowane chronologicznie
-- Brak duplikatów
-- Każdy napis ma niepusty text
-
-Wypisz statystyki:
-  print(f"Dopasowano: {len(result)} napisów")
-  print(f"Whisper segmentów: {N_segments}, Linii w pliku: {N_lines}")
-  print(f"Pierwsza linia: '{result[0]['text']}' @ {result[0]['start']:.1f}s")
-  print(f"Ostatnia linia: '{result[-1]['text']}' @ {result[-1]['start']:.1f}s")
+### Zasada 4: Równomierne rozłożenie
+Animowane sceny powinny być rozłożone w odstępach:
+  ideal_gap = total_scenes / (max_animated + 1)
+  Np. dla 20 scen i 5 animowanych: co ~4 sceny
 
 ## Implementacja
 
-### Lokalizacja: musicvid/pipeline/lyrics_parser.py
-Stwórz lub zastąp funkcję:
-  merge_whisper_with_lyrics_file(whisper_segments, lyrics_lines, audio_duration) -> list[dict]
+### Lokalizacja: musicvid/musicvid.py — po otrzymaniu scene_plan od Claude
 
-Implementuj dokładnie algorytm powyżej.
+Funkcja: enforce_animation_rules(scenes: list) -> list
+  Modyfikuje listę scen in-place, zwraca poprawioną listę.
 
-### Integracja w audio_analyzer.py lub musicvid.py
-Gdy lyrics_path jest dostępny (z --lyrics lub auto-wykryty):
-  whisper_result = model.transcribe(audio_path, word_timestamps=True)
-  whisper_segments = [s for s in whisper_result["segments"] if s["text"].strip()]
-  lyrics_lines = read_lyrics_file(lyrics_path)
-  analysis["lyrics"] = merge_whisper_with_lyrics_file(
-      whisper_segments, lyrics_lines, analysis["duration"]
-  )
+Algorytm:
+  1. Zbierz indeksy scen z animate=True
+  2. Sprawdź zasadę sąsiedztwa:
+     for i in range(len(scenes) - 1):
+         if scenes[i].get("animate") and scenes[i+1].get("animate"):
+             # Wyłącz animację dla sceny o MNIEJSZEJ priorytecie
+             # Priorytet: chorus > bridge > verse > intro > outro
+             priority_i = get_section_priority(scenes[i]["section"])
+             priority_next = get_section_priority(scenes[i+1]["section"])
+             if priority_i >= priority_next:
+                 scenes[i+1]["animate"] = False
+             else:
+                 scenes[i]["animate"] = False
 
-Gdy lyrics_path NIE jest dostępny:
-  Użyj segments z Whisper bezpośrednio (tekst z Whisper, timing z Whisper)
-  analysis["lyrics"] = [{"start": s["start"], "end": s["end"], "text": s["text"]}
-                         for s in whisper_segments]
+  3. Sprawdź maksymalną liczbę animowanych:
+     animated_indices = [i for i, s in enumerate(scenes) if s.get("animate")]
+     max_animated = max(1, len(scenes) // 4)
+     if len(animated_indices) > max_animated:
+         # Wyłącz nadmiarowe — zachowaj te o najwyższym priorytecie
+         excess = animated_indices[max_animated:]
+         for idx in excess:
+             scenes[idx]["animate"] = False
+
+  4. Sprawdź czas trwania animowanych scen:
+     for scene in scenes:
+         if scene.get("animate"):
+             duration = scene["end"] - scene["start"]
+             if duration < 6.0:
+                 scene["animate"] = False
+                 print(f"WARN: Scena {scene['section']} za krótka ({duration:.1f}s) — Ken Burns fallback")
+
+  5. Wypisz plan animacji:
+     animated = [i for i, s in enumerate(scenes) if s.get("animate")]
+     print(f"Plan animacji Runway: {len(animated)} scen z {len(scenes)}")
+     for i in animated:
+         s = scenes[i]
+         print(f"  Scena {i}: {s['section']} @ {s['start']:.1f}-{s['end']:.1f}s")
+
+def get_section_priority(section: str) -> int:
+  Mapowanie sekcji na priorytet (wyższy = ważniejszy dla animacji):
+    "chorus": 5
+    "bridge": 4
+    "verse": 3
+    "intro": 2
+    "outro": 0  (nigdy nie animuj outro)
+    default: 1
+
+### Dodaj enforce_animation_rules do pipeline
+
+W musicvid.py po Stage 2 (director) i po Stage 3.5 setup:
+  scene_plan["scenes"] = enforce_animation_rules(scene_plan["scenes"])
+
+Wywołaj PRZED pętlą animowania — nie po.
+
+### Zaktualizuj prompt Claude-reżysera w director.py
+
+Dodaj do promptu:
+"ZASADY DLA POLA animate:
+- animate=True TYLKO dla: pierwszego refrenu, bridge, ostatniego refrenu
+- animate=False dla: outro, scen < 6 sekund, dwóch sąsiednich scen
+- Maksymalnie co 4. scena może mieć animate=True
+- Dwie sceny animate=True nigdy obok siebie
+- motion_prompt: opisuje RUCH KAMERY (nie treść obrazu)
+  Przykłady dobrych motion_prompt:
+  'Slow camera push forward through morning mist, gentle movement'
+  'Camera slowly rises revealing valley below, clouds drift'
+  'Subtle dolly back, light shifts from left to right gradually'
+  Unikaj: 'beautiful scene', 'spiritual moment' — to treść, nie ruch"
 
 ## Testy
 
-test_case_1: N_segments==N_lines (8 i 8)
-  Każda linia ma timing odpowiadającego segmentu
-  result[3]["text"] == lines[3]
-  result[3]["start"] == segments[3]["start"]
+test_adjacent_animated:
+  Input: [animate=True, animate=True, animate=False, animate=True]
+  Output: [animate=True, animate=False, animate=False, animate=True]
 
-test_case_2: N_segments > N_lines (12 segmentów, 6 linii)
-  6 wyników
-  result[0]["start"] == segments[0]["start"]
-  result[5]["end"] == segments[11]["end"]
+test_max_animated:
+  Input: 20 scen, 8 z animate=True
+  Output: max 5 z animate=True (20 // 4 = 5)
 
-test_case_3: N_segments < N_lines (4 segmenty, 12 linii)
-  12 wyników
-  Każda linia w oknie czasowym swojego segmentu
+test_short_scene:
+  Input: scena 4s z animate=True
+  Output: scena 4s z animate=False
 
-test_case_4: Korekta timingu
-  Napisy nie nachodzą na siebie (gap >= 0.15s)
-  Żaden napis < 0.8s
+test_outro_never_animated:
+  Input: ostatnia scena (outro) z animate=True
+  Output: animate=False
 
-test_case_5: Pusty plik lyrics
-  ValueError z komunikatem
-
-test_case_6: Plik z pustymi liniami
-  Puste linie ignorowane przed dopasowaniem
+test_priority:
+  Input: chorus(animate=True) obok verse(animate=True)
+  Output: verse dostaje animate=False (niższy priorytet)
 
 ## Acceptance Criteria
-- Napisy pojawiają się sekwencyjnie w tym samym czasie co słyszysz tekst
-- Tekst pochodzi z pliku tekst.txt (poprawna polszczyzna)
-- Timing pochodzi z Whisper (zsynchronizowany z muzyką)
-- Działa dla wszystkich trzech przypadków N_seg vs N_lines
-- python3 -m pytest tests/test_lyrics_parser.py -v przechodzi
+- Brak dwóch animowanych scen obok siebie w żadnym teledysku
+- Maksymalnie 25% scen animowanych (1 na 4)
+- Outro nigdy nie jest animowane
+- Sceny < 6s nigdy nie są animowane
+- Log pokazuje plan animacji przed uruchomieniem Runway
+- python3 -m pytest tests/test_animation_rules.py -v przechodzi

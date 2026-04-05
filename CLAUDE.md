@@ -112,6 +112,9 @@ CLI tool that generates synchronized MP4 music videos from audio files using sto
 - `--new` flag uses `shutil.rmtree(cache_dir)` — deletes entire cache dir including scene_NNN.jpg and animated_scene_NNN.mp4; no partial-clear needed
 - Beat sync helpers in `musicvid.py`: `_compute_downbeats(beats)` (every 4th beat via `beats[::4]`), `_snap_to_downbeat(t, downbeats, window=0.5)` (snap only within ±0.5s); `_apply_beat_sync` uses downbeats not all beats
 - Director `_build_user_message` includes BPM, bar_duration, suggested_scene_count (`max(4, int(duration/(bar_duration*4)))`), downbeats preview; `_validate_scene_plan` defaults `lyrics_in_scene=[]` per scene
+- `enforce_animation_rules(scenes)` and `get_section_priority(section)` defined in `musicvid/musicvid.py` before `@click.command()`; enforces: no adjacent animated, max 25% (`max(1, N//4)`), no outro, no scenes <6s; called only when `animate_mode=="auto"` after animate overrides (~line 566)
+- CLI tests with `animate_mode="auto"` and short scenes (<6s) need `@patch("musicvid.musicvid.enforce_animation_rules", side_effect=lambda s: s)` or the function silently disables those scenes
+- `enforce_animation_rules` tests expecting 2+ animated scenes to survive must use ≥8 total scenes — with fewer, `max(1, N//4)` trims to 1 causing unexpected failures
 - Use `python3` not `python` on this macOS system
 
 ## Environment

@@ -474,3 +474,54 @@ class TestDefaultProvider:
 
         called_url = mock_requests.post.call_args[0][0]
         assert "flux-pro-1.1" in called_url
+
+
+class TestGenerateSingleImage:
+    """Tests for the generate_single_image() helper."""
+
+    @patch.dict(os.environ, {"BFL_API_KEY": "test-key"})
+    @patch("musicvid.pipeline.image_generator.requests")
+    @patch("musicvid.pipeline.image_generator.time")
+    def test_generates_and_saves_image(self, mock_time, mock_requests, tmp_path):
+        mock_time.monotonic.side_effect = [0.0, 1.0]
+        mock_time.sleep = MagicMock()
+
+        submit_resp = MagicMock()
+        submit_resp.json.return_value = {
+            "id": "task-001",
+            "polling_url": "https://api.bfl.ai/v1/poll/task-001",
+        }
+        submit_resp.raise_for_status = MagicMock()
+
+        poll_resp = MagicMock()
+        poll_resp.json.return_value = {
+            "status": "Ready",
+            "result": {"sample": "https://cdn.bfl.ai/img/result.jpg"},
+        }
+        poll_resp.raise_for_status = MagicMock()
+
+        download_resp = MagicMock()
+        download_resp.content = b"fake-image-bytes"
+        download_resp.raise_for_status = MagicMock()
+
+        mock_requests.post.return_value = submit_resp
+        mock_requests.get.side_effect = [poll_resp, download_resp]
+
+        from musicvid.pipeline.image_generator import generate_single_image
+        from pathlib import Path
+        output = str(tmp_path / "scene_001.jpg")
+        result = generate_single_image("mountain sunrise", output, provider="flux-pro")
+
+        assert result == output
+        assert Path(output).read_bytes() == b"fake-image-bytes"
+
+    @patch.dict(os.environ, {"BFL_API_KEY": "test-key"})
+    def test_returns_cached_path_without_api_call(self, tmp_path):
+        output = tmp_path / "scene_002.jpg"
+        output.write_bytes(b"cached")
+
+        from musicvid.pipeline.image_generator import generate_single_image
+        with patch("musicvid.pipeline.image_generator.requests") as mock_req:
+            result = generate_single_image("any prompt", str(output), provider="flux-pro")
+        assert result == str(output)
+        mock_req.post.assert_not_called()

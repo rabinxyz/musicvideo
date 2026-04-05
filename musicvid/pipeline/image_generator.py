@@ -143,3 +143,27 @@ def generate_images(scene_plan, output_dir, provider="flux-pro", platform=None):
         print(f"Scena {i + 1}/{total} gotowa")
 
     return image_paths
+
+
+def generate_single_image(prompt, output_path, provider="flux-pro"):
+    """Generate a single image using BFL API.
+
+    Args:
+        prompt: Visual description string (without suffix — suffix is added here).
+        output_path: Path to save result .jpg.
+        provider: One of flux-dev, flux-pro, flux-schnell.
+
+    Returns:
+        str: output_path after download.
+    """
+    _detect_provider(provider)
+    model_name = BFL_MODELS[provider]
+
+    if Path(output_path).exists():
+        return str(output_path)
+
+    full_prompt = f"{prompt}, cinematic 16:9, {DOCUMENTARY_SUFFIX}, {NEGATIVE_CONTEXT}"
+    task_id, polling_url = _submit_task(model_name, full_prompt)
+    image_url = _poll_result(polling_url)
+    _download_image(image_url, output_path)
+    return str(output_path)

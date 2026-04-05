@@ -71,27 +71,36 @@ class VisualRouter:
             return output_path
 
         unsplash_key = os.environ.get("UNSPLASH_ACCESS_KEY", "")
-        if not unsplash_key:
-            print(f"  Fallback: scene {idx} TYPE_PHOTO_STOCK → TYPE_AI (no UNSPLASH_ACCESS_KEY)")
-            return self._generate_bfl(scene.get("visual_prompt", "nature landscape"), idx)
+        if unsplash_key:
+            query = scene.get("search_query", "nature landscape")
+            try:
+                resp = requests.get(
+                    "https://api.unsplash.com/photos/random",
+                    headers={"Authorization": f"Client-ID {unsplash_key}"},
+                    params={"query": query, "orientation": "landscape", "content_filter": "high"},
+                    timeout=10,
+                )
+                resp.raise_for_status()
+                image_url = resp.json()["urls"]["regular"]
+                img_resp = requests.get(image_url, timeout=30)
+                img_resp.raise_for_status()
+                Path(output_path).write_bytes(img_resp.content)
+                return output_path
+            except Exception as exc:
+                print(f"  Fallback: scene {idx} Unsplash failed ({exc}), trying Pexels")
 
-        query = scene.get("search_query", "nature landscape")
-        try:
-            resp = requests.get(
-                "https://api.unsplash.com/photos/random",
-                headers={"Authorization": f"Client-ID {unsplash_key}"},
-                params={"query": query, "orientation": "landscape", "content_filter": "high"},
-                timeout=10,
-            )
-            resp.raise_for_status()
-            image_url = resp.json()["urls"]["regular"]
-            img_resp = requests.get(image_url, timeout=30)
-            img_resp.raise_for_status()
-            Path(output_path).write_bytes(img_resp.content)
-            return output_path
-        except Exception as exc:
-            print(f"  Fallback: scene {idx} TYPE_PHOTO_STOCK → TYPE_AI ({exc})")
-            return self._generate_bfl(scene.get("visual_prompt", "nature landscape"), idx)
+        pexels_key = os.environ.get("PEXELS_API_KEY", "")
+        if pexels_key:
+            duration = scene["end"] - scene["start"]
+            query = scene.get("search_query", "nature landscape")
+            video_path = str(self.cache_dir / f"scene_{idx:03d}.mp4")
+            result = fetch_video_by_query(query, duration, video_path)
+            if result:
+                return result
+            print(f"  Fallback: scene {idx} Pexels failed, falling back to TYPE_AI")
+
+        print(f"  WARN: Brak kluczy stock — fallback TYPE_AI dla sceny {idx}")
+        return self._generate_bfl(scene.get("visual_prompt", "nature landscape"), idx)
 
     def _route_animated(self, scene, idx, duration):
         output_path = str(self.cache_dir / f"animated_scene_{idx:03d}.mp4")

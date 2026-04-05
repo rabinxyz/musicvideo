@@ -161,6 +161,26 @@ class TestVisualRouterPhotoStock:
         mock_get.assert_not_called()
         assert result == str(cached)
 
+    def test_route_photo_stock_no_unsplash_pexels_fallback(self, tmp_path):
+        from musicvid.pipeline.visual_router import VisualRouter
+        router = VisualRouter(cache_dir=str(tmp_path), provider="flux-pro")
+
+        pexels_path = str(tmp_path / "scene_001.mp4")
+
+        with patch.dict(os.environ, {"PEXELS_API_KEY": "pexels-key"}, clear=True), \
+             patch("musicvid.pipeline.visual_router.fetch_video_by_query",
+                   return_value=pexels_path) as mock_fetch, \
+             patch("musicvid.pipeline.visual_router.generate_single_image") as mock_gen:
+            result = router.route(SCENE_PHOTO_STOCK)
+
+        mock_fetch.assert_called_once_with(
+            SCENE_PHOTO_STOCK["search_query"],
+            SCENE_PHOTO_STOCK["end"] - SCENE_PHOTO_STOCK["start"],
+            str(tmp_path / "scene_001.mp4"),
+        )
+        mock_gen.assert_not_called()
+        assert result == pexels_path
+
 
 class TestVisualRouterAI:
     @patch.dict(os.environ, {"BFL_API_KEY": "test-key"})

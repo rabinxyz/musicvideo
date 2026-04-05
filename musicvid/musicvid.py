@@ -561,6 +561,10 @@ def cli(audio_file, mode, provider, style, output, resolution, lang, new, font_p
             for scene in scene_plan["scenes"]:
                 scene["animate"] = False
 
+        # Enforce animation placement rules (auto mode only — always/never are explicit overrides)
+        if animate_mode == "auto":
+            scene_plan["scenes"] = enforce_animation_rules(scene_plan["scenes"])
+
         # Stage 3.5: Animate scenes with Runway Gen-4
         if animate_mode != "never":
             runway_key = os.environ.get("RUNWAY_API_KEY")

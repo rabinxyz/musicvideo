@@ -1420,13 +1420,14 @@ class TestAnimateCLI:
         assert result.exit_code == 0
 
     @patch("musicvid.musicvid.animate_image", return_value="/fake/animated.mp4")
+    @patch("musicvid.musicvid.enforce_animation_rules", side_effect=lambda scenes: scenes)
     @patch("musicvid.musicvid.get_font_path", return_value="/fake/font.ttf")
     @patch("musicvid.musicvid.assemble_video")
     @patch("musicvid.musicvid.generate_images", return_value=["/fake/s0.jpg", "/fake/s1.jpg", "/fake/s2.jpg"])
     @patch("musicvid.musicvid.create_scene_plan")
     @patch("musicvid.musicvid.analyze_audio")
     def test_animate_auto_with_runway_key_calls_animator(
-        self, mock_analyze, mock_plan, mock_gen, mock_assemble, mock_font, mock_animate, tmp_path
+        self, mock_analyze, mock_plan, mock_gen, mock_assemble, mock_font, mock_enforce, mock_animate, tmp_path
     ):
         from musicvid.musicvid import cli
 

@@ -2172,3 +2172,64 @@ class TestLogoWithPreset:
         audio_file.write_bytes(b"fake")
         result = runner.invoke(cli, [str(audio_file), "--economy", "--help"])
         assert result.exit_code == 0
+
+    @patch("musicvid.musicvid.get_font_path", return_value="/fake/font.ttf")
+    @patch("musicvid.musicvid.assemble_video")
+    @patch("musicvid.musicvid.fetch_videos")
+    @patch("musicvid.musicvid.create_scene_plan")
+    @patch("musicvid.musicvid.analyze_audio")
+    def test_quick_mode_uses_stock(
+        self, mock_analyze, mock_direct, mock_fetch, mock_assemble, mock_font, runner, tmp_path
+    ):
+        audio_file = tmp_path / "test.mp3"
+        audio_file.write_bytes(b"fake audio")
+        mock_analyze.return_value = {
+            "lyrics": [], "beats": [0.0, 0.5], "bpm": 120.0,
+            "duration": 10.0, "sections": [{"label": "verse", "start": 0.0, "end": 10.0}],
+            "mood_energy": "contemplative", "language": "en",
+        }
+        mock_direct.return_value = {
+            "overall_style": "contemplative", "color_palette": ["#aaa"],
+            "subtitle_style": {"font_size": 48, "color": "#FFF", "outline_color": "#000",
+                               "position": "center-bottom", "animation": "fade"},
+            "scenes": [{"section": "verse", "start": 0.0, "end": 10.0,
+                        "visual_prompt": "test", "motion": "static",
+                        "transition": "cut", "overlay": "none"}],
+        }
+        mock_fetch.return_value = [
+            {"scene_index": 0, "video_path": "/fake/v.mp4", "search_query": "test"},
+        ]
+        output_dir = tmp_path / "output"
+        result = runner.invoke(cli, [str(audio_file), "--output", str(output_dir), "--quick"])
+        assert result.exit_code == 0, result.output
+        mock_fetch.assert_called_once()  # stock mode: fetch_videos called, not generate_images
+
+    @patch("musicvid.musicvid.get_font_path", return_value="/fake/font.ttf")
+    @patch("musicvid.musicvid.assemble_video")
+    @patch("musicvid.musicvid.generate_images")
+    @patch("musicvid.musicvid.create_scene_plan")
+    @patch("musicvid.musicvid.analyze_audio")
+    def test_economy_mode_uses_flux_dev(
+        self, mock_analyze, mock_direct, mock_gen, mock_assemble, mock_font, runner, tmp_path
+    ):
+        audio_file = tmp_path / "test.mp3"
+        audio_file.write_bytes(b"fake audio")
+        mock_analyze.return_value = {
+            "lyrics": [], "beats": [0.0, 0.5], "bpm": 120.0,
+            "duration": 10.0, "sections": [{"label": "verse", "start": 0.0, "end": 10.0}],
+            "mood_energy": "contemplative", "language": "en",
+        }
+        mock_direct.return_value = {
+            "overall_style": "contemplative", "color_palette": ["#aaa"],
+            "subtitle_style": {"font_size": 48, "color": "#FFF", "outline_color": "#000",
+                               "position": "center-bottom", "animation": "fade"},
+            "scenes": [{"section": "verse", "start": 0.0, "end": 10.0,
+                        "visual_prompt": "test", "motion": "static",
+                        "transition": "cut", "overlay": "none", "animate": False}],
+        }
+        mock_gen.return_value = ["/fake/img.jpg"]
+        output_dir = tmp_path / "output"
+        result = runner.invoke(cli, [str(audio_file), "--output", str(output_dir), "--economy"])
+        assert result.exit_code == 0, result.output
+        mock_gen.assert_called_once()
+        assert mock_gen.call_args.kwargs.get("provider") == "flux-dev"

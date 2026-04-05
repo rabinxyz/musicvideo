@@ -146,6 +146,27 @@ def cli(audio_file, mode, provider, style, output, resolution, lang, new, font_p
         lut_style, lut_intensity, subtitle_style_override, transitions_mode, beat_sync,
         skip_confirm, quick_mode, economy_mode):
     """Generate a music video from AUDIO_FILE."""
+    # Apply --quick mode overrides
+    if quick_mode:
+        mode = "stock"
+        preset = "full"
+        effects = "none"
+        animate_mode = "never"
+        lut_style = None
+        transitions_mode = "cut"
+        beat_sync = "off"
+
+    # Apply --economy mode overrides
+    if economy_mode:
+        mode = "ai"
+        provider = "flux-dev"
+        preset = "full"
+        effects = "minimal"
+        animate_mode = "never"
+        lut_style = "warm"
+        transitions_mode = "auto"
+        beat_sync = "auto"
+
     audio_path = Path(audio_file).resolve()
     output_dir = Path(output).resolve()
     output_dir.mkdir(parents=True, exist_ok=True)

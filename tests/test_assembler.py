@@ -1132,3 +1132,57 @@ class TestSubtitleErrorHandling:
         # Position is ("center", y_value)
         y_value = args[0][1]
         assert y_value < frame_h, f"Subtitle y={y_value} is outside frame height={frame_h}"
+
+    @patch("musicvid.pipeline.assembler.vfx")
+    @patch("musicvid.pipeline.assembler.TextClip")
+    def test_textclip_height_includes_descender_padding(self, mock_text_clip, mock_vfx, sample_analysis, sample_scene_plan):
+        """TextClip height must be font_size + 35% to accommodate descenders."""
+        mock_clip = MagicMock()
+        mock_clip.with_duration.return_value = mock_clip
+        mock_clip.with_start.return_value = mock_clip
+        mock_clip.with_position.return_value = mock_clip
+        mock_clip.with_effects.return_value = mock_clip
+        mock_text_clip.return_value = mock_clip
+
+        subtitle_style = {"font_size": 58, "color": "#FFFFFF", "outline_color": "#000000"}
+        _create_subtitle_clips(
+            sample_analysis["lyrics"],
+            subtitle_style,
+            (1920, 1080),
+        )
+
+        call_kwargs = mock_text_clip.call_args_list[0][1]
+        w, h = call_kwargs["size"]
+        font_size = 58
+        expected_h = font_size + int(font_size * 0.35)
+        assert h == expected_h, f"Expected TextClip height={expected_h}, got {h}"
+
+    @patch("musicvid.pipeline.assembler.vfx")
+    @patch("musicvid.pipeline.assembler.TextClip")
+    def test_subtitle_y_pos_accounts_for_descender_padding(self, mock_text_clip, mock_vfx, sample_analysis, sample_scene_plan):
+        """Subtitle bottom edge (y_pos + padded_height) equals frame_h - margin_bottom."""
+        mock_clip = MagicMock()
+        mock_clip.with_duration.return_value = mock_clip
+        mock_clip.with_start.return_value = mock_clip
+        mock_clip.with_position.return_value = mock_clip
+        mock_clip.with_effects.return_value = mock_clip
+        mock_text_clip.return_value = mock_clip
+
+        font_size = 58
+        frame_h = 1080
+        margin_bottom = 80
+        subtitle_style = {"font_size": font_size, "color": "#FFFFFF", "outline_color": "#000000"}
+        _create_subtitle_clips(
+            sample_analysis["lyrics"],
+            subtitle_style,
+            (1920, frame_h),
+            subtitle_margin_bottom=margin_bottom,
+        )
+
+        pos_call = mock_clip.with_position.call_args_list[0]
+        args, _ = pos_call
+        y_pos = args[0][1]
+        padded_h = font_size + int(font_size * 0.35)
+        assert y_pos + padded_h == frame_h - margin_bottom, (
+            f"Expected y_pos + padded_h = {frame_h - margin_bottom}, got {y_pos + padded_h}"
+        )

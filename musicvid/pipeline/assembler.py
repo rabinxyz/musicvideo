@@ -142,6 +142,8 @@ def _create_subtitle_clips(lyrics, subtitle_style, size, font_path=None, subtitl
     color = subtitle_style.get("color", "#FFFFFF")
     outline_color = subtitle_style.get("outline_color", "#000000")
     margin_bottom = subtitle_margin_bottom
+    descender_pad = int(font_size * 0.35)
+    padded_height = font_size + descender_pad
 
     if not lyrics:
         print("Warning: no lyrics segments — subtitles skipped")
@@ -154,10 +156,10 @@ def _create_subtitle_clips(lyrics, subtitle_style, size, font_path=None, subtitl
 
         print(f"Napis: '{segment['text']}' start={segment['start']:.1f}s end={segment['end']:.1f}s")
 
-        y_pos = size[1] - margin_bottom - font_size
+        y_pos = size[1] - margin_bottom - padded_height
         if y_pos >= size[1]:
             print(f"Warning: subtitle y={y_pos} is outside frame height={size[1]}, clamping")
-            y_pos = size[1] - font_size - 10
+            y_pos = size[1] - padded_height - 10
 
         effective_font = font_path
         try:
@@ -169,7 +171,7 @@ def _create_subtitle_clips(lyrics, subtitle_style, size, font_path=None, subtitl
                 stroke_width=2,
                 font=effective_font,
                 method="caption",
-                size=(size[0] - 100, None),
+                size=(size[0] - 100, padded_height),
             )
         except Exception as e:
             print(f"Warning: subtitle failed for '{segment['text']}' with font {effective_font!r}: {e}")
@@ -183,7 +185,7 @@ def _create_subtitle_clips(lyrics, subtitle_style, size, font_path=None, subtitl
                         stroke_width=2,
                         font=None,
                         method="caption",
-                        size=(size[0] - 100, None),
+                        size=(size[0] - 100, padded_height),
                     )
                 except Exception as e2:
                     print(f"Warning: subtitle fallback also failed: {e2}")

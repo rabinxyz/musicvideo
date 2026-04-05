@@ -276,3 +276,29 @@ class TestCreateScenePlan:
         create_scene_plan(sample_analysis)
         call_kwargs = mock_client.messages.create.call_args[1]
         assert call_kwargs["max_tokens"] == 8192
+
+    @patch("musicvid.pipeline.director.anthropic")
+    def test_strips_json_markdown_fence(self, mock_anthropic, sample_analysis):
+        plan = self._base_plan()
+        wrapped = "```json\n" + json.dumps(plan) + "\n```"
+        mock_response = MagicMock()
+        mock_response.content = [MagicMock()]
+        mock_response.content[0].text = wrapped
+        mock_client = MagicMock()
+        mock_client.messages.create.return_value = mock_response
+        mock_anthropic.Anthropic.return_value = mock_client
+        result = create_scene_plan(sample_analysis)
+        assert "overall_style" in result
+
+    @patch("musicvid.pipeline.director.anthropic")
+    def test_strips_plain_markdown_fence(self, mock_anthropic, sample_analysis):
+        plan = self._base_plan()
+        wrapped = "```\n" + json.dumps(plan) + "\n```"
+        mock_response = MagicMock()
+        mock_response.content = [MagicMock()]
+        mock_response.content[0].text = wrapped
+        mock_client = MagicMock()
+        mock_client.messages.create.return_value = mock_response
+        mock_anthropic.Anthropic.return_value = mock_client
+        result = create_scene_plan(sample_analysis)
+        assert "overall_style" in result

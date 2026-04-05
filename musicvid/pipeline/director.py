@@ -78,8 +78,10 @@ def create_scene_plan(analysis, style_override=None, output_dir=None):
 
     text = response_text.strip()
     if text.startswith("```"):
-        lines = text.split("\n")
-        text = "\n".join(lines[1:-1])
+        text = text.split("```")[1]
+        if text.startswith("json"):
+            text = text[4:]
+    text = text.strip()
 
     plan = json.loads(text)
     plan = _validate_scene_plan(plan, analysis["duration"])

@@ -33,7 +33,7 @@ CLI tool that generates synchronized MP4 music videos from audio files using sto
 - Social clip selector: `musicvid/pipeline/social_clip_selector.py` — `select_social_clips(analysis, clip_duration)` asks Claude for 3 non-overlapping clips from different sections; mock: `@patch("musicvid.pipeline.social_clip_selector.anthropic")`
 - CLI tests for `--preset` must mock `@patch("musicvid.musicvid.select_social_clips")` in addition to the usual pipeline mocks
 - Scene plan/manifest clip filters: `_filter_scene_plan_to_clip(scene_plan, clip_start, clip_end)` and `_filter_manifest_to_clip(manifest, scenes, clip_start, clip_end)` in `musicvid.py` — filter and offset scenes/manifest entries to a clip time window
-- Assembler social mode kwargs: `audio_fade_out=1.0` (social uses 1.5), `subtitle_margin_bottom=80` (social uses 200), `cinematic_bars=True` (social uses False)
+- Assembler social mode kwargs: `audio_fade_out=1.0` (social uses 1.5), `subtitle_margin_bottom=80` (social uses 200), `cinematic_bars=False` (default); standard/preset-full passes `cinematic_bars=(effects == "full")`, social explicitly passes `False`
 - Ken Burns `pan_up`/`pan_down` motions added; `_remap_motion_for_portrait(motion)` maps horizontal pans to vertical for 9:16
 - Clip analysis filter: `_filter_analysis_to_clip(analysis, clip_start, clip_end)` in `musicvid.py` — offsets lyrics/beats/sections to clip-relative t=0 before passing to director
 - Lyrics parser: `musicvid/pipeline/lyrics_parser.py` — `align_with_claude(whisper_segments, file_lines)` for AI alignment via Claude API; also has `parse()` with variant A (plain text, even distribution) and B (MM:SS/HH:MM:SS timestamps)
@@ -82,6 +82,9 @@ CLI tool that generates synchronized MP4 music videos from audio files using sto
 - Assembler `RESOLUTION_MAP` includes `"portrait": (1080, 1920)` for social media clips
 - CLI tests for `--clip` must mock `@patch("musicvid.musicvid.select_clip")` in addition to the usual pipeline mocks
 - Effects per-frame transforms use `clip.transform(fn)` where `fn(get_frame, t)` returns numpy array; test by extracting transform_fn from `mock_clip.transform.call_args[0][0]`
+- `_create_ken_burns_clip` test mocks need `mock_clip.size=(w,h)`, `mock_clip.w=w`, `mock_clip.h=h`, `mock_clip.cropped.return_value=mock_clip` — omitting breaks the mock chain since `cropped()` returns an unconfigured auto-MagicMock
+- MoviePy 2.x cover-scale: `scale = max(tw/iw, th/ih); clip = clip.resized(scale); clip = clip.cropped(x1=x1, y1=y1, x2=x1+tw, y2=y1+th)` — scalar for proportional resize, explicit pixel coords for crop
+- `_create_subtitle_clips` has try/except around `TextClip` creation — silently skips failed segments; logs each lyric line; falls back to `font=None` if named font fails
 - Use `python3` not `python` on this macOS system
 
 ## Environment

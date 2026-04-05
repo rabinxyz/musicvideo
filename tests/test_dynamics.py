@@ -38,3 +38,51 @@ class TestEnforceMotionVariety:
         result = _enforce_motion_variety(scenes)
         # After dedup, adjacent motions must differ
         assert result[0]["motion"] != result[1]["motion"]
+
+
+from musicvid.musicvid import _assign_dynamic_transitions
+
+
+class TestAssignDynamicTransitions:
+    def _make_scenes(self, sections):
+        scenes = []
+        t = 0.0
+        for s in sections:
+            scenes.append({"section": s, "start": t, "end": t + 10.0, "transition": "crossfade"})
+            t += 10.0
+        return scenes
+
+    def test_verse_to_chorus_is_cut(self):
+        scenes = self._make_scenes(["verse", "chorus"])
+        result = _assign_dynamic_transitions(scenes, bpm=84.0)
+        assert result[0]["transition_to_next"] == "cut"
+
+    def test_chorus_to_verse_is_fade(self):
+        scenes = self._make_scenes(["chorus", "verse"])
+        result = _assign_dynamic_transitions(scenes, bpm=84.0)
+        assert result[0]["transition_to_next"] == "fade"
+
+    def test_bridge_to_chorus_is_cut(self):
+        scenes = self._make_scenes(["bridge", "chorus"])
+        result = _assign_dynamic_transitions(scenes, bpm=84.0)
+        assert result[0]["transition_to_next"] == "cut"
+
+    def test_intro_to_verse_is_cross_dissolve(self):
+        scenes = self._make_scenes(["intro", "verse"])
+        result = _assign_dynamic_transitions(scenes, bpm=84.0)
+        assert result[0]["transition_to_next"] == "cross_dissolve"
+
+    def test_chorus_to_chorus_is_dip_white(self):
+        scenes = self._make_scenes(["chorus", "chorus"])
+        result = _assign_dynamic_transitions(scenes, bpm=84.0)
+        assert result[0]["transition_to_next"] == "dip_white"
+
+    def test_last_scene_has_no_transition_to_next(self):
+        scenes = self._make_scenes(["verse", "chorus"])
+        result = _assign_dynamic_transitions(scenes, bpm=84.0)
+        assert "transition_to_next" not in result[-1]
+
+    def test_unknown_pair_defaults_to_cross_dissolve(self):
+        scenes = self._make_scenes(["intro", "outro"])
+        result = _assign_dynamic_transitions(scenes, bpm=84.0)
+        assert result[0]["transition_to_next"] == "cross_dissolve"

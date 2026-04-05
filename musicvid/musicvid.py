@@ -363,6 +363,31 @@ def _enforce_motion_variety(scenes):
     return scenes
 
 
+_TRANSITIONS_MAP = {
+    ("intro", "verse"):   "cross_dissolve",
+    ("verse", "chorus"):  "cut",
+    ("chorus", "verse"):  "fade",
+    ("chorus", "chorus"): "dip_white",
+    ("verse", "verse"):   "cross_dissolve",
+    ("verse", "bridge"):  "cross_dissolve",
+    ("bridge", "chorus"): "cut",
+    ("chorus", "outro"):  "fade",
+    ("outro", "outro"):   "cross_dissolve",
+}
+_DEFAULT_TRANSITION = "cross_dissolve"
+
+
+def _assign_dynamic_transitions(scenes, bpm):
+    """Assign transition_to_next on each scene (except the last) based on section pairs.
+
+    Does not affect the last scene. Returns mutated scenes list.
+    """
+    for i in range(len(scenes) - 1):
+        key = (scenes[i].get("section", ""), scenes[i + 1].get("section", ""))
+        scenes[i]["transition_to_next"] = _TRANSITIONS_MAP.get(key, _DEFAULT_TRANSITION)
+    return scenes
+
+
 @click.command()
 @click.argument("audio_file", type=click.Path(exists=True))
 @click.option("--mode", type=click.Choice(["stock", "ai", "hybrid"]), default="ai", help="Video source mode.")
@@ -562,6 +587,11 @@ def cli(audio_file, mode, provider, style, output, resolution, lang, new, font_p
 
     # Enforce motion variety: no two adjacent scenes with same motion
     scene_plan["scenes"] = _enforce_motion_variety(scene_plan["scenes"])
+
+    # Assign section-based transitions (only when --transitions auto)
+    if transitions_mode == "auto":
+        bpm = analysis.get("bpm", 120.0)
+        _assign_dynamic_transitions(scene_plan["scenes"], bpm)
 
     # Stage 3: Fetch Videos or Generate Images
     manifest_suffix = f"_clip_{clip_duration}s" if clip_duration else ""

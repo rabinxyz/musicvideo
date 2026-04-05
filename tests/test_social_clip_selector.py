@@ -113,6 +113,50 @@ def test_fallback_on_all_attempts_fail(mock_anthropic):
 
 
 @patch("musicvid.pipeline.social_clip_selector.anthropic")
+def test_30s_prompt_mentions_chorus_priority(mock_anthropic):
+    """For 30s clips the prompt should mention chorus/refrain as priority."""
+    mock_client = MagicMock()
+    mock_anthropic.Anthropic.return_value = mock_client
+    mock_response = MagicMock()
+    mock_response.content = [MagicMock(text='{"clips": [{"id": "A", "start": 10.0, "end": 40.0, "section": "chorus", "reason": "test"}, {"id": "B", "start": 60.0, "end": 90.0, "section": "verse", "reason": "test"}, {"id": "C", "start": 120.0, "end": 150.0, "section": "bridge", "reason": "test"}]}')]
+    mock_client.messages.create.return_value = mock_response
+
+    analysis = {
+        "lyrics": [{"start": 0.0, "end": 30.0, "text": "test lyric"}],
+        "sections": [{"label": "chorus", "start": 0.0, "end": 30.0}],
+        "duration": 180.0,
+        "bpm": 120,
+    }
+    select_social_clips(analysis, 30)
+
+    call_args = mock_client.messages.create.call_args
+    user_message = call_args[1]["messages"][0]["content"]
+    assert "Pełny refren" in user_message or "refren" in user_message.lower() or "chorus" in user_message.lower()
+
+
+@patch("musicvid.pipeline.social_clip_selector.anthropic")
+def test_15s_prompt_no_chorus_priority_block(mock_anthropic):
+    """For 15s clips the chorus-priority block is NOT added."""
+    mock_client = MagicMock()
+    mock_anthropic.Anthropic.return_value = mock_client
+    mock_response = MagicMock()
+    mock_response.content = [MagicMock(text='{"clips": [{"id": "A", "start": 10.0, "end": 25.0, "section": "verse", "reason": "test"}, {"id": "B", "start": 60.0, "end": 75.0, "section": "chorus", "reason": "test"}, {"id": "C", "start": 120.0, "end": 135.0, "section": "bridge", "reason": "test"}]}')]
+    mock_client.messages.create.return_value = mock_response
+
+    analysis = {
+        "lyrics": [{"start": 0.0, "end": 15.0, "text": "test lyric"}],
+        "sections": [{"label": "verse", "start": 0.0, "end": 15.0}],
+        "duration": 180.0,
+        "bpm": 120,
+    }
+    select_social_clips(analysis, 15)
+
+    call_args = mock_client.messages.create.call_args
+    user_message = call_args[1]["messages"][0]["content"]
+    assert "Pełny refren (priorytet najwyższy)" not in user_message
+
+
+@patch("musicvid.pipeline.social_clip_selector.anthropic")
 def test_rejects_response_with_wrong_clip_count(mock_anthropic):
     mock_client = MagicMock()
     mock_anthropic.Anthropic.return_value = mock_client

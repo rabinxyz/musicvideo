@@ -9,7 +9,7 @@ def select_social_clips(analysis, clip_duration):
 
     Args:
         analysis: Audio analysis dict (lyrics, sections, duration, bpm).
-        clip_duration: Desired clip duration in seconds (15, 20, or 30).
+        clip_duration: Desired clip duration in seconds (15, 20, 25, 30, 45, or 60).
 
     Returns:
         dict with key "clips": list of 3 dicts, each with id, start, end, section, reason.
@@ -22,6 +22,16 @@ def select_social_clips(analysis, clip_duration):
     ]
     sections = analysis.get("sections", [])
     duration = analysis.get("duration", 0)
+
+    long_clip_rules = ""
+    if clip_duration >= 30:
+        long_clip_rules = (
+            f"- Pełny refren (priorytet najwyższy) — prefer a complete chorus if available\n"
+            f"- Wyraźny hook melodyczny — include the main melodic hook\n"
+            f"- Kompletną myśl tekstową — no mid-sentence cuts, full lyrical thought\n"
+            f"- Zaczyna się na początku frazy muzycznej — start at a musical phrase boundary\n"
+            f"- Kończy na naturalnej pauzie lub końcu frazy — end at a natural pause or phrase end\n"
+        )
 
     user_message = (
         f"You are selecting 3 clips of {clip_duration} seconds each from a song for social media "
@@ -37,6 +47,7 @@ def select_social_clips(analysis, clip_duration):
         f"- Prefer fragments with strong lyrics and clear melody\n"
         f"- Each clip must start at the beginning of a phrase — not mid-word\n"
         f"- Each clip must end at the end of a lyric line\n"
+        f"{long_clip_rules}"
         f"- Describe briefly why you chose each fragment\n\n"
         f"Return ONLY valid JSON (no markdown, no explanation):\n"
         f'{{"clips": [\n'

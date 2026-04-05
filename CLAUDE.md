@@ -4,7 +4,7 @@
 CLI tool that generates synchronized MP4 music videos from audio files using stock footage, beat-synced cuts, and whisper-based subtitles.
 
 ## Commands
-- `python3 -m pytest tests/ -v` - run all tests (~209 tests)
+- `python3 -m pytest tests/ -v` - run all tests (~250 tests)
 - `python3 -m musicvid.musicvid song.mp3` - run the CLI (uses cache by default)
 - `python3 -m musicvid.musicvid song.mp3 --new` - force recalculation, ignore cache
 - `python3 -c "import musicvid; print(musicvid.__version__)"` - check version
@@ -22,6 +22,8 @@ CLI tool that generates synchronized MP4 music videos from audio files using sto
 - `--title-card`: prepends 2s black title card with song name; only active when used with `--clip`
 - `--animate [auto|always|never]` (default: auto): Runway Gen-4 image-to-video for scenes marked animate=true by director; `never` skips all animation; `always` forces all scenes animated; fallback to Ken Burns when RUNWAY_API_KEY absent
 - Director scene plan: now includes `master_style` (top-level string appended to all BFL prompts), `animate` (bool per scene), `motion_prompt` (str per scene); `_validate_scene_plan` defaults missing fields
+- Director JSON robustness: `max_tokens=8192`; `_strip_markdown(text)` strips ` ``` ` / ` ```json ` fences; on `JSONDecodeError` tries `_repair_truncated_json` (brace counting) then `_repair_truncated_json_aggressive` (stack-based) before retrying Claude with brevity instruction
+- Director scene limits: `_build_user_message` passes `max_scenes` to Claude based on duration (≤3 min→10, 3-5 min→12, >5 min→15); system prompt caps `visual_prompt` at 200 chars
 - Runway animator: `musicvid/pipeline/video_animator.py` — `animate_image(image_path, motion_prompt, duration, output_path)` calls Runway Gen-4; POLL_INTERVAL=3s, POLL_TIMEOUT=300s; cache check via output_path exists; mock target: `@patch("musicvid.pipeline.video_animator.requests")` + `@patch("musicvid.pipeline.video_animator.time")`
 - CLI tests for `--animate` must mock `@patch("musicvid.musicvid.animate_image")` since animate_image is imported at module level
 - Assembler `_load_scene_clip`: skips Ken Burns for scenes with `animate=True` and `.mp4` suffix — just resizes to target_size

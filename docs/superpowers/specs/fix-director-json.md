@@ -1,5 +1,3 @@
-# Idea
-
 # Spec: Naprawa uciętego JSON z Claude-reżysera
 
 ## Problem

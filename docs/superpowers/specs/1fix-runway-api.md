@@ -1,5 +1,3 @@
-# Idea
-
 # Spec: Naprawa Runway API — błąd 400
 
 ## Problem

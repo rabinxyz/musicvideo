@@ -453,3 +453,61 @@ def test_validate_scene_plan_defaults_lyrics_in_scene():
     }
     validated = _validate_scene_plan(plan, 10.0)
     assert validated["scenes"][0]["lyrics_in_scene"] == []
+
+
+class TestValidateScenePlanNewFields:
+    """Tests that _validate_scene_plan defaults new hybrid sourcing fields."""
+
+    def test_defaults_visual_source_to_type_ai(self):
+        from musicvid.pipeline.director import _validate_scene_plan
+        plan = {
+            "scenes": [
+                {"start": 0.0, "end": 10.0, "section": "verse"},
+            ]
+        }
+        result = _validate_scene_plan(plan, duration=10.0)
+        assert result["scenes"][0]["visual_source"] == "TYPE_AI"
+
+    def test_defaults_search_query_to_empty_string(self):
+        from musicvid.pipeline.director import _validate_scene_plan
+        plan = {
+            "scenes": [
+                {"start": 0.0, "end": 10.0, "section": "verse"},
+            ]
+        }
+        result = _validate_scene_plan(plan, duration=10.0)
+        assert result["scenes"][0]["search_query"] == ""
+
+    def test_preserves_existing_visual_source(self):
+        from musicvid.pipeline.director import _validate_scene_plan
+        plan = {
+            "scenes": [
+                {
+                    "start": 0.0,
+                    "end": 10.0,
+                    "section": "verse",
+                    "visual_source": "TYPE_VIDEO_STOCK",
+                    "search_query": "mountain sunrise",
+                },
+            ]
+        }
+        result = _validate_scene_plan(plan, duration=10.0)
+        assert result["scenes"][0]["visual_source"] == "TYPE_VIDEO_STOCK"
+        assert result["scenes"][0]["search_query"] == "mountain sunrise"
+
+    def test_defaults_visual_prompt_to_empty_string_when_missing(self):
+        from musicvid.pipeline.director import _validate_scene_plan
+        plan = {
+            "scenes": [
+                {
+                    "start": 0.0,
+                    "end": 10.0,
+                    "section": "verse",
+                    "visual_source": "TYPE_VIDEO_STOCK",
+                    "search_query": "mountain sunrise",
+                    # visual_prompt intentionally omitted
+                },
+            ]
+        }
+        result = _validate_scene_plan(plan, duration=10.0)
+        assert result["scenes"][0]["visual_prompt"] == ""

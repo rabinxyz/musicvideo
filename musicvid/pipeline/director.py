@@ -106,6 +106,13 @@ def _validate_scene_plan(plan, duration):
             scene["motion_prompt"] = ""
         if "lyrics_in_scene" not in scene:
             scene["lyrics_in_scene"] = []
+        # Hybrid visual sourcing fields (Spec 5)
+        if "visual_source" not in scene:
+            scene["visual_source"] = "TYPE_AI"
+        if "search_query" not in scene:
+            scene["search_query"] = ""
+        if "visual_prompt" not in scene:
+            scene["visual_prompt"] = ""
 
     plan["scenes"].sort(key=lambda s: s["start"])
     plan["scenes"][0]["start"] = 0.0

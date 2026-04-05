@@ -8,6 +8,35 @@ MASTER STYLE:
 Begin by composing a master_style string (1-2 sentences, English) describing the consistent visual grade
 applied to all scenes. Example: "Documentary worship photography aesthetic. Natural available light, film grain present, colors slightly desaturated and warm, authentic unposed moments, Sony A7III 35mm feel, no artificial enhancements, real and human." Include it as the master_style field in your JSON output.
 
+VISUAL SOURCE SELECTION:
+For each scene choose "visual_source" based on lyrics content:
+
+TYPE_VIDEO_STOCK — Pexels video (free, realistic)
+  When: concrete filmable elements — nature (mountains, water, sky, fields), people (worship,
+        prayer, walking), community activities. NOT for abstract spiritual concepts.
+  Fields: set search_query (English, 3-5 words), set visual_prompt to ""
+
+TYPE_PHOTO_STOCK — Unsplash photo (free, documentary)
+  When: still/contemplative moments, specific objects (open Bible, wooden cross, candle),
+        landscapes for Ken Burns pan.
+  Fields: set search_query (English, 3-5 words), set visual_prompt to ""
+
+TYPE_AI — BFL Flux image ($0.04, unique)
+  When: abstract spiritual concepts — glory of God, eternity, throne, river of life,
+        spiritual light (theological concept not physical light).
+  Fields: set visual_prompt (min 3 sentences, documentary style), set search_query to ""
+
+TYPE_ANIMATED — BFL image + Runway Gen-4 video ($0.54, climactic)
+  When: TYPE_AI scene that is first chorus, last chorus, or bridge. Max 25% of scenes,
+        never adjacent, min 6s scene. Also set animate: true.
+  Fields: set visual_prompt, motion_prompt, set search_query to ""
+
+EXAMPLES:
+  "góry, dolina, chodzę" → TYPE_VIDEO_STOCK, search_query: "person walking mountain valley path"
+  "otwarta Biblia" → TYPE_PHOTO_STOCK, search_query: "open bible morning light wooden table"
+  "Chwała Bogu na wysokościach" → TYPE_AI, visual_prompt: "Vast cathedral of light above cloud..."
+  First refrain (>6s, kulminacja) → TYPE_ANIMATED, visual_prompt: "...", motion_prompt: "slow camera rises"
+
 CONTEXT-AWARE VISUAL PROMPTS:
 For each scene, identify which lyrics lines fall within the scene's time window [start, end] seconds.
 You MUST populate "lyrics_in_scene" with the exact lyrics text from this window before writing visual_prompt.
@@ -89,7 +118,9 @@ OUTPUT FORMAT (pure JSON):
       "start": 0.0,
       "end": 15.0,
       "lyrics_in_scene": ["lyrics line 1 that appears in this scene", "lyrics line 2"],
-      "visual_prompt": "Detailed positive description following the rules above (min 3 sentences + technical suffix)",
+      "visual_source": "TYPE_VIDEO_STOCK|TYPE_PHOTO_STOCK|TYPE_AI|TYPE_ANIMATED",
+      "search_query": "english search terms for stock (3-5 words) or empty string for AI",
+      "visual_prompt": "Detailed description for AI/ANIMATED types, or empty string for STOCK types",
       "motion": "slow_zoom_in|slow_zoom_out|pan_left|pan_right|static|diagonal_drift|cut_zoom",
       "transition": "crossfade|cut|fade_black",
       "overlay": "none|particles|light_rays|bokeh",

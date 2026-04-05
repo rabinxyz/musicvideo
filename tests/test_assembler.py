@@ -1090,6 +1090,34 @@ class TestKenBurnsCoverScale:
         mock_clip.cropped.assert_called_once()
 
 
+class TestCreateKenBurnsClip:
+    """Tests for new motion types in _create_ken_burns_clip."""
+
+    def test_diagonal_drift_returns_clip(self):
+        mock_clip = MagicMock()
+        mock_clip.size = (1920, 1080)
+        mock_clip.w = 1920
+        mock_clip.h = 1080
+        mock_clip.resized.return_value = mock_clip
+        mock_clip.cropped.return_value = mock_clip
+        mock_clip.with_duration.return_value = mock_clip
+        mock_clip.transform.return_value = mock_clip
+        result = _create_ken_burns_clip(mock_clip, 10.0, motion="diagonal_drift")
+        mock_clip.transform.assert_called_once()
+
+    def test_cut_zoom_returns_clip(self):
+        mock_clip = MagicMock()
+        mock_clip.size = (1920, 1080)
+        mock_clip.w = 1920
+        mock_clip.h = 1080
+        mock_clip.resized.return_value = mock_clip
+        mock_clip.cropped.return_value = mock_clip
+        mock_clip.with_duration.return_value = mock_clip
+        mock_clip.transform.return_value = mock_clip
+        result = _create_ken_burns_clip(mock_clip, 5.0, motion="cut_zoom")
+        mock_clip.transform.assert_called_once()
+
+
 class TestSubtitleErrorHandling:
     """Tests for subtitle creation error handling."""
 

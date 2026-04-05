@@ -123,6 +123,36 @@ def _create_ken_burns_clip(clip, duration, motion="slow_zoom_in", target_size=(1
             return cropped
         return clip.transform(pan_d)
 
+    elif motion == "diagonal_drift":
+        def diagonal(get_frame, t):
+            progress = t / duration
+            frame = get_frame(t)
+            fh, fw = frame.shape[:2]
+            max_x = fw - w
+            max_y = fh - h
+            x = int(max_x * progress)
+            y = int(max_y * progress)
+            x = max(0, min(x, max_x))
+            y = max(0, min(y, max_y))
+            return frame[y:y + h, x:x + w]
+        return clip.transform(diagonal)
+
+    elif motion == "cut_zoom":
+        def cut_zoom_fn(get_frame, t):
+            progress = t / duration
+            scale = 1.0 + 0.25 * progress  # 1.0 → 1.25
+            frame = get_frame(t)
+            fh, fw = frame.shape[:2]
+            new_w, new_h = int(fw / scale), int(fh / scale)
+            x = (fw - new_w) // 2
+            y = (fh - new_h) // 2
+            cropped = frame[y:y + new_h, x:x + new_w]
+            from PIL import Image
+            import numpy as np
+            img = Image.fromarray(cropped).resize((w, h), Image.LANCZOS)
+            return np.array(img)
+        return clip.transform(cut_zoom_fn)
+
     else:  # static
         clip = clip.resized(new_size=(w, h))
         clip = clip.with_duration(duration)

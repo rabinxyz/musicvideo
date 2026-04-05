@@ -4,14 +4,22 @@
 CLI tool that generates synchronized MP4 music videos from audio files using stock footage, beat-synced cuts, and whisper-based subtitles.
 
 ## Commands
-- `python3 -m pytest tests/ -v` - run all tests (~395 tests)
+- `python3 -m pytest tests/ -v` - run all tests (~416 tests)
 - `python3 -m musicvid.musicvid song.mp3` - run the CLI (uses cache by default)
 - `python3 -m musicvid.musicvid song.mp3 --new` - force recalculation, ignore cache
 - `python3 -c "import musicvid; print(musicvid.__version__)"` - check version
 
 ## Architecture
-4-stage pipeline: audio_analyzer → director → stock_fetcher/image_generator → assembler, orchestrated by Click CLI in `musicvid/musicvid.py`.
-- `--mode ai` (default): Stage 3 uses `image_generator` (BFL API: flux-dev/flux-pro-1.1/flux-2-klein-4b), caches to `image_manifest.json`; `--mode stock` uses `stock_fetcher` (Pexels API)
+4-stage pipeline: audio_analyzer → director → visual_router/stock_fetcher → assembler, orchestrated by Click CLI in `musicvid/musicvid.py`.
+- `--mode ai` (default): Stage 3 uses `VisualRouter` (hybrid per-scene sourcing — Pexels/Unsplash/BFL/Runway), caches to `image_manifest.json`; `--mode stock` uses `stock_fetcher` (Pexels API for all scenes)
+- Hybrid visual sourcing: director outputs `visual_source` (TYPE_VIDEO_STOCK|TYPE_PHOTO_STOCK|TYPE_AI|TYPE_ANIMATED) and `search_query` per scene; `VisualRouter` in `musicvid/pipeline/visual_router.py` dispatches to the correct API; `_validate_scene_plan` defaults `visual_source="TYPE_AI"`, `search_query=""`, `visual_prompt=""`
+- VisualRouter fallback chain: TYPE_VIDEO_STOCK → simplified query (2 words) → TYPE_PHOTO_STOCK → TYPE_AI; TYPE_PHOTO_STOCK no key → TYPE_AI; TYPE_ANIMATED no RUNWAY_API_KEY → static image (Ken Burns)
+- `--animate` with VisualRouter: `never` converts TYPE_ANIMATED→TYPE_AI; `always` converts all→TYPE_ANIMATED + enforce_animation_rules; `auto` keeps director's visual_source + enforce_animation_rules
+- CLI tests for mode=ai must mock `@patch("musicvid.musicvid.VisualRouter")` — `generate_images` and `animate_image` are no longer called directly from `cli()` in ai mode
+- `fetch_manifest` entries in ai mode now include `start`, `end`, `source` keys (in addition to `scene_index`, `video_path`)
+- `UNSPLASH_ACCESS_KEY` env var: optional, for TYPE_PHOTO_STOCK scenes (free at unsplash.com/developers, 50 req/h)
+- `generate_single_image(prompt, output_path, provider)` added to `image_generator.py` — generates a single image (used by VisualRouter internally)
+- `fetch_video_by_query(query, min_duration, output_path)` added to `stock_fetcher.py` — direct query without style mapping (used by VisualRouter)
 - `--provider [flux-dev|flux-pro|flux-schnell]` (default: flux-pro): selects BFL model for `--mode ai`
 - `--font PATH`: custom .ttf font for subtitles (optional, defaults to auto-downloaded Montserrat Light)
 - `--lyrics PATH`: custom .txt lyrics file (optional); auto-detects single .txt in audio dir. When provided, Whisper still runs for timing, then Claude API aligns file text to Whisper segments
@@ -19,13 +27,13 @@ CLI tool that generates synchronized MP4 music videos from audio files using sto
 - `--clip [15|20|25|30]`: generate short social-media clip — Claude selects best fragment (chorus preferred); clips analysis to window before director; output named `{stem}_{N}s.mp4`
 - `--platform [reels|shorts|tiktok]`: forces portrait 9:16 resolution (1080×1920) and adds platform name to output filename; use with `--clip`
 - `--title-card`: prepends 2s black title card with song name; only active when used with `--clip`
-- `--animate [auto|always|never]` (default: auto): Runway Gen-4 image-to-video for scenes marked animate=true by director; `never` skips all animation; `always` forces all scenes animated; fallback to Ken Burns when RUNWAY_API_KEY absent
-- Director scene plan: now includes `master_style` (top-level string appended to all BFL prompts), `animate` (bool per scene), `motion_prompt` (str per scene); `_validate_scene_plan` defaults missing fields
+- `--animate [auto|always|never]` (default: auto): controls TYPE_ANIMATED scenes; `never` converts all to TYPE_AI; `always` converts all to TYPE_ANIMATED; fallback to Ken Burns when RUNWAY_API_KEY absent
+- Director scene plan: now includes `master_style`, `animate`, `motion_prompt`, `visual_source`, `search_query` per scene; `_validate_scene_plan` defaults all missing fields
 - Director JSON robustness: `max_tokens=8192`; `_strip_markdown(text)` strips ` ``` ` / ` ```json ` fences; on `JSONDecodeError` tries `_repair_truncated_json` (brace counting) then `_repair_truncated_json_aggressive` (stack-based) before retrying Claude with brevity instruction
 - Director scene limits: `_build_user_message` passes `max_scenes` to Claude based on duration (≤3 min→10, 3-5 min→12, >5 min→15); system prompt caps `visual_prompt` at 200 chars
 - Runway animator: `musicvid/pipeline/video_animator.py` — `animate_image(image_path, motion_prompt, duration, output_path)` calls Runway Gen-4; model=`gen4.5`, ratio=`1280:720` (16:9); POLL_INTERVAL=3s, POLL_TIMEOUT=300s; cache check via output_path exists; mock target: `@patch("musicvid.pipeline.video_animator.requests")` + `@patch("musicvid.pipeline.video_animator.time")`; Runway Gen-4 returns `output` as a list of URL strings (not dicts) — `_poll_animation` handles both formats; test helper `_make_poll_response_str` simulates the string-list format
-- Runway animation error tests: use `requests.exceptions.HTTPError` with `.response` mock (`status_code`, `text`) to test the Runway error detail output; mock `animate_image` via `@patch("musicvid.musicvid.animate_image")`
-- CLI tests for `--animate` must mock `@patch("musicvid.musicvid.animate_image")` since animate_image is imported at module level
+- Runway animation error tests: use `requests.exceptions.HTTPError` with `.response` mock (`status_code`, `text`) to test the Runway error detail output — these are in `test_visual_router.py` now, not `test_cli.py`
+- CLI tests for `--animate` must mock `@patch("musicvid.musicvid.VisualRouter")` — animation is handled inside VisualRouter._route_animated(), not in cli() directly
 - Assembler `_load_scene_clip`: skips Ken Burns for scenes with `animate=True` and `.mp4` suffix — just resizes to target_size
 - Clip selector: `musicvid/pipeline/clip_selector.py` — `select_clip(analysis, clip_duration)` calls Claude API; manual 2-attempt retry loop with fallback to song center; mock target: `@patch("musicvid.pipeline.clip_selector.anthropic")`
 - `--preset [full|social|all]` (default: "all"): preset mode — `full` generates YouTube 16:9 in `output/pelny/`, `social` generates 3 reels (9:16) from different sections in `output/social/`, `all` generates both. Stages 1-3 run once; stage 4 runs all variants in parallel (ThreadPoolExecutor). Uses `_run_preset_mode()` and `assemble_all_parallel()` in `musicvid.py`
@@ -51,11 +59,12 @@ CLI tool that generates synchronized MP4 music videos from audio files using sto
 - Ken Burns motions also include `diagonal_drift` (top-left → bottom-right pan) and `cut_zoom` (aggressive 1.0→1.25 zoom for chorus energy)
 - Assembler `_concatenate_with_transitions(scene_clips, scenes, bpm, target_size)` replaces direct `concatenate_videoclips` in `assemble_video`; handles cut/cross_dissolve/fade/dip_white using `scene["transition_to_next"]`; mock target: `@patch("musicvid.pipeline.assembler._concatenate_with_transitions")`
 - Dynamics post-processing in `cli()` after `_apply_beat_sync`: `_enforce_motion_variety(scenes)` (always, deduplicates adjacent same motions) → `_assign_dynamic_transitions(scenes, bpm)` (when `transitions_mode=="auto"`, sets `transition_to_next` per section pair); both mutate scenes list in-place
+- `enforce_animation_rules(scenes)` called inside Stage 3 (mode=ai, after animate_mode overrides), not at the fixed post-dynamics location mentioned in old notes
 - `--reels-style [crop|blur-bg]` (default: blur-bg): portrait conversion style — `blur-bg` creates blurred background + sharp smart crop overlay; `crop` does tighter POI-centered smart crop; passed as `reels_style` kwarg to `assemble_video` and all social AssemblyJobs
 - Smart crop: `musicvid/pipeline/smart_crop.py` — `detect_poi(image_path) -> (x, y)` (Haar face detection → saliency map → center fallback); `smart_crop(image_path, target_w, target_h, poi=None) -> PIL.Image`; `blur_bg_composite(image_path, target_w, target_h) -> PIL.Image`; `convert_for_platform(image_path, platform, style) -> str` (saves to `smart_{stem}.jpg` alongside source)
 - Assembler `_load_scene_clip` uses `convert_for_platform` for portrait images (target_size==(1080,1920)) before creating ImageClip; video files and landscape images bypass smart crop; mock target: `@patch("musicvid.pipeline.assembler.convert_for_platform")`
 - cv2 import in `smart_crop.py` uses `try/except ImportError` fallback (cv2=None) so module loads even when opencv-python not installed; tests mock `@patch("musicvid.pipeline.smart_crop.cv2")`
-- BFL image generator: `generate_images()` accepts `platform=None`; when `platform=="reels"`, uses 768×1360 (native 9:16) and `"portrait 9:16"` prompt hint instead of `"cinematic 16:9"`; `_submit_task()` accepts `width` and `height` params; CLI passes `platform="reels"` only when `preset=="social"`
+- BFL image generator: `generate_images()` accepts `platform=None`; when `platform=="reels"`, uses 768×1360 (native 9:16) and `"portrait 9:16"` prompt hint instead of `"cinematic 16:9"`; `_submit_task()` accepts `width` and `height` params; `generate_single_image()` always uses 1360×768 + `"cinematic 16:9"` (landscape only)
 - Clip analysis filter: `_filter_analysis_to_clip(analysis, clip_start, clip_end)` in `musicvid.py` — offsets lyrics/beats/sections to clip-relative t=0 before passing to director
 - Lyrics parser: `musicvid/pipeline/lyrics_parser.py` — `merge_whisper_with_lyrics_file(whisper_segments, lyrics_lines, audio_duration)` for deterministic sync (3 cases: N==M 1:1, N>M groups segments, N<M splits time); `align_with_claude()` kept but not used in CLI; `parse()` for variant A (plain text) and B (MM:SS timestamps)
 - Visual effects: `musicvid/pipeline/effects.py` — `apply_effects(clip, level)` orchestrates per-frame transforms (warm grade, vignette, film grain) and overlay effects (cinematic bars, light leak)

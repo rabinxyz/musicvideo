@@ -24,6 +24,16 @@ def _make_poll_response(status, video_url=None):
     return resp
 
 
+def _make_poll_response_str(status, video_url=None):
+    """Runway response where output is a list of URL strings, not dicts."""
+    resp = MagicMock()
+    if status == "SUCCEEDED":
+        resp.json.return_value = {"status": "SUCCEEDED", "output": [video_url]}
+    else:
+        resp.json.return_value = {"status": status}
+    return resp
+
+
 def _make_download_response():
     resp = MagicMock()
     resp.iter_content.return_value = [b"fake", b"video", b"data"]
@@ -176,3 +186,49 @@ class TestAnimateImage:
         assert payload["ratio"] == "1280:720"
         assert payload["promptText"] == "Camera rises slowly"
         assert payload["promptImage"].startswith("data:image/jpeg;base64,")
+
+
+class TestPollAnimationOutputFormats:
+    """Tests that _poll_animation handles both output formats from Runway API."""
+
+    @patch("musicvid.pipeline.video_animator.requests")
+    @patch("musicvid.pipeline.video_animator.time")
+    def test_string_list_output(self, mock_time, mock_requests):
+        from musicvid.pipeline.video_animator import _poll_animation
+
+        mock_time.monotonic.side_effect = [0.0, 1.0]
+        mock_time.sleep = MagicMock()
+        mock_requests.get.return_value = _make_poll_response_str(
+            "SUCCEEDED", "https://runway.ai/video.mp4"
+        )
+
+        url = _poll_animation("task-xyz")
+        assert url == "https://runway.ai/video.mp4"
+
+    @patch("musicvid.pipeline.video_animator.requests")
+    @patch("musicvid.pipeline.video_animator.time")
+    def test_dict_list_output(self, mock_time, mock_requests):
+        from musicvid.pipeline.video_animator import _poll_animation
+
+        mock_time.monotonic.side_effect = [0.0, 1.0]
+        mock_time.sleep = MagicMock()
+        mock_requests.get.return_value = _make_poll_response(
+            "SUCCEEDED", "https://runway.ai/video.mp4"
+        )
+
+        url = _poll_animation("task-xyz")
+        assert url == "https://runway.ai/video.mp4"
+
+    @patch("musicvid.pipeline.video_animator.requests")
+    @patch("musicvid.pipeline.video_animator.time")
+    def test_unexpected_output_raises(self, mock_time, mock_requests):
+        from musicvid.pipeline.video_animator import _poll_animation
+
+        mock_time.monotonic.side_effect = [0.0, 1.0]
+        mock_time.sleep = MagicMock()
+        resp = MagicMock()
+        resp.json.return_value = {"status": "SUCCEEDED", "output": []}
+        mock_requests.get.return_value = resp
+
+        with pytest.raises(RuntimeError, match="Unexpected output structure"):
+            _poll_animation("task-xyz")

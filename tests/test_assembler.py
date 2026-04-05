@@ -1,6 +1,7 @@
 """Tests for assembler module."""
 
 import json
+import unittest
 from unittest.mock import patch, MagicMock, call
 from pathlib import Path
 
@@ -670,6 +671,68 @@ class TestLoadSceneClipAnimated:
 
         # transform (Ken Burns) SHOULD be called for non-animated video
         mock_clip.transform.assert_called()
+
+
+class TestLoadSceneClipSmartCrop(unittest.TestCase):
+    """Tests that _load_scene_clip uses smart crop for portrait images."""
+
+    def setUp(self):
+        self.scene = {
+            "start": 0.0,
+            "end": 5.0,
+            "motion": "pan_up",
+            "animate": False,
+            "transition": "crossfade",
+        }
+        self.portrait_size = (1080, 1920)
+
+    @patch("musicvid.pipeline.assembler.convert_for_platform")
+    @patch("musicvid.pipeline.assembler.ImageClip")
+    def test_portrait_image_calls_convert_for_platform(self, mock_ImageClip, mock_convert):
+        mock_convert.return_value = "/fake/smart_scene.jpg"
+        mock_clip = MagicMock()
+        mock_clip.size = (1080, 1920)
+        mock_clip.w = 1080
+        mock_clip.h = 1920
+        mock_clip.cropped.return_value = mock_clip
+        mock_ImageClip.return_value = mock_clip
+
+        from musicvid.pipeline.assembler import _load_scene_clip
+        _load_scene_clip("/fake/scene.jpg", self.scene, self.portrait_size, reels_style="blur-bg")
+
+        mock_convert.assert_called_once_with("/fake/scene.jpg", "reels", style="blur-bg")
+        mock_ImageClip.assert_called_once_with("/fake/smart_scene.jpg")
+
+    @patch("musicvid.pipeline.assembler.convert_for_platform")
+    @patch("musicvid.pipeline.assembler.ImageClip")
+    def test_portrait_image_uses_crop_style_when_specified(self, mock_ImageClip, mock_convert):
+        mock_convert.return_value = "/fake/smart_scene.jpg"
+        mock_clip = MagicMock()
+        mock_clip.size = (1080, 1920)
+        mock_clip.w = 1080
+        mock_clip.h = 1920
+        mock_clip.cropped.return_value = mock_clip
+        mock_ImageClip.return_value = mock_clip
+
+        from musicvid.pipeline.assembler import _load_scene_clip
+        _load_scene_clip("/fake/scene.jpg", self.scene, self.portrait_size, reels_style="crop")
+
+        mock_convert.assert_called_once_with("/fake/scene.jpg", "reels", style="crop")
+
+    @patch("musicvid.pipeline.assembler.convert_for_platform")
+    @patch("musicvid.pipeline.assembler.ImageClip")
+    def test_landscape_image_does_not_call_convert_for_platform(self, mock_ImageClip, mock_convert):
+        mock_clip = MagicMock()
+        mock_clip.size = (1920, 1080)
+        mock_clip.w = 1920
+        mock_clip.h = 1080
+        mock_clip.cropped.return_value = mock_clip
+        mock_ImageClip.return_value = mock_clip
+
+        from musicvid.pipeline.assembler import _load_scene_clip
+        _load_scene_clip("/fake/scene.jpg", self.scene, (1920, 1080), reels_style="blur-bg")
+
+        mock_convert.assert_not_called()
 
 
 class TestPortraitKenBurns:

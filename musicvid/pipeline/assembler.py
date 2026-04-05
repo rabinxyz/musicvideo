@@ -17,6 +17,7 @@ from moviepy import (
 from musicvid.pipeline.effects import apply_effects, create_cinematic_bars, create_light_leak
 from musicvid.pipeline.logo_overlay import apply_logo
 from musicvid.pipeline.color_grade import prepare_lut_ffmpeg_params
+from musicvid.pipeline.smart_crop import convert_for_platform
 
 
 RESOLUTION_MAP = {
@@ -219,13 +220,18 @@ def _create_title_card(text, size, duration=2.0):
     return CompositeVideoClip([bg, txt], size=size)
 
 
-def _load_scene_clip(video_path, scene, target_size):
+def _load_scene_clip(video_path, scene, target_size, reels_style="blur-bg"):
     """Load a video or image clip for a scene."""
     path = Path(video_path)
     duration = scene["end"] - scene["start"]
+    is_portrait = target_size == (1080, 1920)
 
     if path.suffix.lower() in (".png", ".jpg", ".jpeg", ".bmp"):
-        clip = ImageClip(str(path))
+        if is_portrait:
+            processed_path = convert_for_platform(str(path), "reels", style=reels_style)
+            clip = ImageClip(processed_path)
+        else:
+            clip = ImageClip(str(path))
     else:
         clip = VideoFileClip(str(path))
         if clip.duration < duration:
@@ -240,7 +246,7 @@ def _load_scene_clip(video_path, scene, target_size):
     return _create_ken_burns_clip(clip, duration, scene.get("motion", "static"), target_size)
 
 
-def assemble_video(analysis, scene_plan, fetch_manifest, audio_path, output_path, resolution="1080p", font_path=None, effects_level="minimal", clip_start=None, clip_end=None, title_card_text=None, audio_fade_out=1.0, subtitle_margin_bottom=80, cinematic_bars=False, logo_path=None, logo_position="top-left", logo_size=None, logo_opacity=0.85, lut_path=None, lut_style=None, lut_intensity=0.85):
+def assemble_video(analysis, scene_plan, fetch_manifest, audio_path, output_path, resolution="1080p", font_path=None, effects_level="minimal", clip_start=None, clip_end=None, title_card_text=None, audio_fade_out=1.0, subtitle_margin_bottom=80, cinematic_bars=False, logo_path=None, logo_position="top-left", logo_size=None, logo_opacity=0.85, lut_path=None, lut_style=None, lut_intensity=0.85, reels_style="blur-bg"):
     """Assemble the final music video.
 
     Args:
@@ -259,7 +265,7 @@ def assemble_video(analysis, scene_plan, fetch_manifest, audio_path, output_path
     for manifest_entry in fetch_manifest:
         idx = manifest_entry["scene_index"]
         scene = scenes[idx]
-        clip = _load_scene_clip(manifest_entry["video_path"], scene, target_size)
+        clip = _load_scene_clip(manifest_entry["video_path"], scene, target_size, reels_style=reels_style)
         clip = apply_effects(clip, level=effects_level)
         scene_clips.append(clip)
 

@@ -11,6 +11,7 @@ CLI tool that generates synchronized MP4 music videos from audio files using sto
 
 ## Architecture
 4-stage pipeline: audio_analyzer → director → visual_router/stock_fetcher → assembler, orchestrated by Click CLI in `musicvid/musicvid.py`.
+- Audio analyzer: Whisper transcribe uses `language="pl"`, `initial_prompt` (Polish Christian vocabulary), `temperature=0.0`, `condition_on_previous_text=True`; default model is "small" (not "base"); segment filtering skips segments with stripped text < 2 chars
 - `--mode ai` (default): Stage 3 uses `VisualRouter` (hybrid per-scene sourcing — Pexels/Unsplash/BFL/Runway), caches to `image_manifest.json`; `--mode stock` uses `stock_fetcher` (Pexels API for all scenes)
 - Hybrid visual sourcing: director outputs `visual_source` (TYPE_VIDEO_STOCK|TYPE_PHOTO_STOCK|TYPE_AI|TYPE_ANIMATED) and `search_query` per scene; `VisualRouter` in `musicvid/pipeline/visual_router.py` dispatches to the correct API; `_validate_scene_plan` defaults `visual_source="TYPE_AI"`, `search_query=""`, `visual_prompt=""`
 - Stock content filtering: `sanitize_query(query)` in `visual_router.py` checks search queries against `BLOCKED_WORDS` (returns "BLOCKED") and `SAFE_QUERY_MAP` (returns safe alternative); `SAFE_QUERY_MAP` is ordered longest-first so "worship hands raised" matches before "worship"; called in `_route_video_stock` and `_route_photo_stock` before any API call; blocked queries skip stock APIs entirely and fall back to BFL

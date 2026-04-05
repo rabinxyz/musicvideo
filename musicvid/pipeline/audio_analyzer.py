@@ -92,7 +92,14 @@ def analyze_audio(audio_path, output_dir=None, whisper_model="base"):
         dict with keys: lyrics, beats, bpm, duration, sections, mood_energy, language
     """
     model = whisper.load_model(whisper_model)
-    transcription = model.transcribe(audio_path, word_timestamps=True)
+    transcription = model.transcribe(
+        audio_path,
+        word_timestamps=True,
+        language="pl",
+        initial_prompt="Polska pieśń chrześcijańska. Słowa: tylko, Bogu, zbawienie, Pan, dusza, serce, chwała.",
+        temperature=0.0,
+        condition_on_previous_text=True,
+    )
 
     lyrics = []
     for segment in transcription.get("segments", []):

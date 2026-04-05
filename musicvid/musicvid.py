@@ -113,6 +113,38 @@ def _filter_manifest_to_clip(manifest, scenes, clip_start, clip_end):
     return filtered
 
 
+def find_nearest_scene(start, end, fetch_manifest):
+    """Return the fetch_manifest entry whose time range best overlaps [start, end].
+
+    Skips entries where video_path is None or the file doesn't exist.
+    When no overlap exists, falls back to the entry whose scene center is closest
+    to the clip center. Returns None if no valid entry is found.
+    """
+    clip_center = (start + end) / 2
+    best = None
+    best_overlap = -1
+    best_center_dist = float("inf")
+
+    for entry in fetch_manifest:
+        if not entry.get("video_path"):
+            continue
+        if not os.path.exists(entry["video_path"]):
+            continue
+        scene_start = entry.get("start", 0)
+        scene_end = entry.get("end", 0)
+        overlap = min(end, scene_end) - max(start, scene_start)
+        if overlap > best_overlap:
+            best_overlap = overlap
+            best = entry
+        elif overlap <= 0 and best_overlap <= 0:
+            center_dist = abs((scene_start + scene_end) / 2 - clip_center)
+            if center_dist < best_center_dist:
+                best_center_dist = center_dist
+                best = entry
+
+    return best
+
+
 @dataclass
 class AssemblyJob:
     name: str          # e.g. "youtube", "rolka_A_15s"

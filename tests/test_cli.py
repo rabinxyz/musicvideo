@@ -2802,3 +2802,62 @@ def test_apply_beat_sync_no_snap_outside_window():
     }
     result = _apply_beat_sync(scene_plan, beats)
     assert abs(result["scenes"][0]["end"] - 3.2) < 0.01
+
+
+class TestFindNearestScene(unittest.TestCase):
+    def _make_entry(self, scene_index, start, end, path):
+        return {"scene_index": scene_index, "start": start, "end": end, "video_path": path}
+
+    def test_returns_entry_with_best_overlap(self):
+        from musicvid.musicvid import find_nearest_scene
+        manifest = [
+            self._make_entry(0, 0.0, 10.0, "/fake/a.jpg"),
+            self._make_entry(1, 10.0, 20.0, "/fake/b.jpg"),
+            self._make_entry(2, 20.0, 30.0, "/fake/c.jpg"),
+        ]
+        with patch("os.path.exists", return_value=True):
+            result = find_nearest_scene(8.0, 15.0, manifest)
+        # overlap with entry 1 (10-20): min(15,20)-max(8,10)=5 is best
+        assert result == manifest[1]
+
+    def test_skips_none_video_path(self):
+        from musicvid.musicvid import find_nearest_scene
+        manifest = [
+            {"scene_index": 0, "start": 0.0, "end": 10.0, "video_path": None},
+            {"scene_index": 1, "start": 5.0, "end": 15.0, "video_path": "/fake/b.jpg"},
+        ]
+        with patch("os.path.exists", return_value=True):
+            result = find_nearest_scene(0.0, 10.0, manifest)
+        assert result["scene_index"] == 1
+
+    def test_skips_missing_file(self):
+        from musicvid.musicvid import find_nearest_scene
+        manifest = [
+            {"scene_index": 0, "start": 0.0, "end": 10.0, "video_path": "/missing/a.jpg"},
+            {"scene_index": 1, "start": 5.0, "end": 15.0, "video_path": "/exists/b.jpg"},
+        ]
+        def fake_exists(p):
+            return p == "/exists/b.jpg"
+        with patch("os.path.exists", side_effect=fake_exists):
+            result = find_nearest_scene(0.0, 10.0, manifest)
+        assert result["scene_index"] == 1
+
+    def test_returns_none_when_no_valid_entries(self):
+        from musicvid.musicvid import find_nearest_scene
+        manifest = [
+            {"scene_index": 0, "start": 0.0, "end": 10.0, "video_path": None},
+        ]
+        with patch("os.path.exists", return_value=False):
+            result = find_nearest_scene(0.0, 10.0, manifest)
+        assert result is None
+
+    def test_returns_closest_center_when_no_overlap(self):
+        from musicvid.musicvid import find_nearest_scene
+        manifest = [
+            {"scene_index": 0, "start": 0.0, "end": 5.0, "video_path": "/fake/a.jpg"},
+            {"scene_index": 1, "start": 50.0, "end": 60.0, "video_path": "/fake/b.jpg"},
+        ]
+        with patch("os.path.exists", return_value=True):
+            result = find_nearest_scene(10.0, 15.0, manifest)
+        # No overlap; center of clip = 12.5; center of entry 0 = 2.5 (dist=10), entry 1 = 55 (dist=42.5)
+        assert result["scene_index"] == 0

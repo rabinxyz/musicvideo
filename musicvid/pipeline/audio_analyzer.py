@@ -80,7 +80,7 @@ def _estimate_mood(tempo, energy_mean):
         return "powerful"
 
 
-def analyze_audio(audio_path, output_dir=None, whisper_model="base"):
+def analyze_audio(audio_path, output_dir=None, whisper_model="small"):
     """Analyze audio file and return structured analysis.
 
     Args:

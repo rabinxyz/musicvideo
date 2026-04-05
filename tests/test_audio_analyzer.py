@@ -201,3 +201,24 @@ class TestAnalyzeAudio:
         assert call_kwargs["condition_on_previous_text"] is True
         assert "initial_prompt" in call_kwargs
         assert "Polska" in call_kwargs["initial_prompt"]
+
+    @patch("musicvid.pipeline.audio_analyzer.whisper")
+    @patch("musicvid.pipeline.audio_analyzer.librosa")
+    def test_default_whisper_model_is_small(self, mock_librosa, mock_whisper, mock_whisper_result, mock_audio_signal, tmp_path):
+        y, sr = mock_audio_signal
+
+        mock_model = MagicMock()
+        mock_model.transcribe.return_value = mock_whisper_result
+        mock_whisper.load_model.return_value = mock_model
+
+        mock_librosa.load.return_value = (y, sr)
+        mock_librosa.beat.beat_track.return_value = (120.0, np.array([0]))
+        mock_librosa.get_duration.return_value = 10.0
+        mock_librosa.frames_to_time.return_value = np.array([0.0])
+
+        audio_file = tmp_path / "test.mp3"
+        audio_file.write_bytes(b"fake audio data")
+
+        analyze_audio(str(audio_file))
+
+        mock_whisper.load_model.assert_called_once_with("small")

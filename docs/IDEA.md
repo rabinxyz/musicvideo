@@ -1,40 +1,67 @@
 # Idea
 
-# Spec: Zmiana domyślnej długości rolek na 30 sekund
+# Spec: Naprawa montażu rolek — NoneType imread
 
-## Uzasadnienie
-Analiza danych z 2025-2026 pokazuje że dla muzyki chrześcijańskiej
-optymalny czas rolki promującej teledysk to 30 sekund:
-- 15s za krótko żeby pieśń uwielbienia "weszła" emocjonalnie
-- 30s pozwala pokazać pełny refren z napisami i obrazem AI
-- 30s mieści się w "Goldilocks zone" algorytmu Instagram/FB
-- Wyższy completion rate niż 60s przy zachowaniu pełnego przekazu
+## Problem
+Montaż rolek (rolka_A, rolka_B, rolka_C) rzuca:
+'NoneType' object has no attribute 'imread'
 
-## Zmiana w musicvid.py
+Przyczyna: assembler szuka zdjęcia dla sceny w określonym przedziale
+czasowym ale video_path w fetch_manifest dla tej sceny jest None
+lub plik nie istnieje na dysku.
 
-Zmień domyślną wartość --reel-duration z 15 na 30:
-  --reel-duration [15|20|25|30|45|60]  default=30
+## Poprawki
 
-Dodaj do dostępnych opcji: 45 i 60 sekund.
+### 1. Walidacja video_path przed montażem rolek
+W _run_preset_mode() lub assembler.py przed montażem każdej rolki:
 
-## Zmiana w clip_selections — logika wyboru fragmentu
+for entry in fetch_manifest:
+    if entry.get("video_path") is None:
+        print(f"WARN: brak video_path dla sceny {entry.get('scene_index')}")
+        continue
+    if not os.path.exists(entry["video_path"]):
+        print(f"WARN: plik nie istnieje: {entry['video_path']}")
+        continue
 
-Gdy reel_duration=30 Claude wybiera fragment który zawiera:
-- Pełny refren (priorytet najwyższy)
-- Wyraźny hook melodyczny
-- Kompletną myśl tekstową (nie urwane zdanie)
-- Zaczyna się na początku frazy muzycznej
-- Kończy na naturalnej pauzie lub końcu frazy
+### 2. Fallback gdy brak zdjęcia dla sceny rolki
+Gdy scena wymagana przez rolkę nie ma zdjęcia:
+- Użyj najbliższej dostępnej sceny z fetch_manifest
+- Znajdź scenę której przedział czasowy najbardziej pokrywa się
+  z żądanym przedziałem rolki
 
-## Zmiana w komunikacie startowym
+def find_nearest_scene(start, end, fetch_manifest):
+    best = None
+    best_overlap = 0
+    for entry in fetch_manifest:
+        if not entry.get("video_path"):
+            continue
+        if not os.path.exists(entry["video_path"]):
+            continue
+        scene_start = entry.get("start", 0)
+        scene_end = entry.get("end", 0)
+        overlap = min(end, scene_end) - max(start, scene_start)
+        if overlap > best_overlap:
+            best_overlap = overlap
+            best = entry
+    return best
 
-Zaktualizuj _print_startup_summary():
-  "Rolki social:   3 × 30s z różnych fragmentów"
-  zamiast:
-  "Rolki social:   3 × 15s z różnych fragmentów"
+### 3. Logowanie przed każdą rolką
+Przed montażem każdej rolki wypisz:
+  print(f"Rolka {name}: start={clip_start:.1f}s end={clip_end:.1f}s")
+  print(f"  Dostępne sceny: {[(e['scene_index'], e['video_path']) for e in fetch_manifest]}")
+
+Pomoże to zdiagnozować dokładnie które sceny brakuje.
+
+### 4. Sprawdź clip_selections.json
+Plik output/tmp/{hash}/clip_selections.json może wskazywać
+na przedziały czasowe które nie pokrywają się z żadną sceną.
+
+Gdy clip start/end nie pokrywa się z żadną sceną w fetch_manifest:
+  Rozszerz okno szukania: znajdź scenę której środek jest
+  najbliżej środka clip (start+end)/2.
 
 ## Acceptance Criteria
-- python3 -m musicvid.musicvid --help pokazuje domyślnie 30 dla --reel-duration
-- Generowane rolki mają długość ~30 sekund
-- Dostępne opcje: 15, 20, 25, 30, 45, 60
-- Komunikat startowy pokazuje poprawną długość
+- --preset all nie rzuca 'NoneType' imread dla żadnej rolki
+- Gdy brak idealnego dopasowania: użyj najbliższej dostępnej sceny
+- Logowanie pokazuje które sceny są używane dla każdej rolki
+- python3 -m pytest tests/ -v przechodzi

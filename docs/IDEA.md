@@ -1,155 +1,209 @@
 # Idea
 
-# Spec 3: Jakość zdjęć — dokumentalny realizm zamiast cukierkowego AI
+# Spec 4: Dynamika teledysku — zróżnicowanie długości, ruchów, przejść
 
 ## Kontekst i historia problemu
 
-Obecne zdjęcia generowane przez BFL Flux Pro są:
-- Zbyt nasycone kolorystycznie (oversaturated)
-- Zbyt "magiczne" i bajkowe
-- Widać że to AI — brak autentyczności
-- Bokeh na wszystkim — niepotrzebne
-- Zbyt perfekcyjne oświetlenie — nierealistyczne
+Obecny teledysk jest monotonny bo:
+1. Wszystkie sceny mają podobną długość (~równe odcinki)
+2. Dominuje slow_zoom_in dla wszystkich scen
+3. Wszystkie przejścia są takie same (fade lub cut)
+4. Brak poczucia "oddechu" i kulminacji
 
-Dla pieśni chrześcijańskich protestanckich potrzebujemy:
-- Styl dokumentalnej fotografii
-- Autentyczne emocje i miejsca
-- Naturalne oświetlenie
-- Subtelne, nie przesadzone efekty
+Dobry teledysk muzyczny ma dynamiczną krzywą napięcia:
+intro (spokój) → zwrotka (budowanie) → refren (szczyt) → ...
 
-## Zmiany w director_system.txt (system prompt Claude-reżysera)
+## Problem 1: Zróżnicowanie długości scen
 
-### Usuń kompletnie te słowa/frazy z generowanych promptów:
-(Claude nie może ich używać w visual_prompt)
+### Zasada: długość sceny zależy od sekcji i energii
 
-Zakazane słowa:
-magical, mystical, ethereal, dreamy, fantasy, otherworldly,
-glowing, radiant glow, divine light rays, heavenly glow,
-surreal, cinematic fantasy, epic, majestic (używaj rzadko),
-bokeh everywhere, heavy bokeh, extreme bokeh,
-oversaturated, vivid colors, vibrant, ultra sharp,
-perfect lighting, studio lighting, professional lighting,
-HDR, ultra-realistic (paradoksalnie wygląda nierealnie),
-8K, ultra HD, hyper-detailed
+Mapowanie sekcja → docelowa długość (w taktach muzycznych):
 
-### Dodaj obowiązkowy styl fotograficzny do każdego promptu:
+  "intro":   6-8 taktów (spokojne, długie)
+  "verse":   4-6 taktów (budowanie, średnie)
+  "chorus":  2-3 takty (energia, krótkie i dynamiczne)
+  "bridge":  4-8 taktów (emocjonalny szczyt, zmienne)
+  "outro":   6-10 taktów (wyciszenie, długie)
+  default:   4 takty
 
-Suffix dodawany automatycznie do KAŻDEGO visual_prompt (w image_generator.py):
-"Shot on Sony A7III, 35mm f/2.8 lens, natural available light only,
-documentary photography style, authentic and unposed,
-slight film grain, natural color grading, no heavy filters,
-real location feel, photojournalism aesthetic"
+Dla BPM=84: 1 takt = 4 × (60/84) = 2.86s
+  chorus: 2-3 takty = 5.7s - 8.6s (krótkie cięcia!)
+  verse:  4-6 taktów = 11.4s - 17.1s
+  intro:  6-8 taktów = 17.1s - 22.8s
 
-### Nowe wzorce dla różnych typów scen:
+### Implementacja w director.py
 
-Dla przyrody:
-"[opis sceny], actual landscape photography, no HDR enhancement,
-natural colors slightly desaturated, authentic weather conditions,
-real sky with natural clouds, shot on location feel"
+Oblicz przed promptem Claude:
+  bar_duration = 4 * (60 / bpm)
+  section_lengths = {
+      "intro":  (6*bar_duration, 8*bar_duration),
+      "verse":  (4*bar_duration, 6*bar_duration),
+      "chorus": (2*bar_duration, 3*bar_duration),
+      "bridge": (4*bar_duration, 8*bar_duration),
+      "outro":  (6*bar_duration, 10*bar_duration),
+  }
 
-Dla ludzi (sylwetki, ręce, ogólne):
-"[opis], documentary portrait style, authentic human emotion,
-natural skin tones, available light, candid feel, no posing,
-real worship moment not staged"
+Dodaj do promptu Claude:
+"DŁUGOŚCI SCEN (KRYTYCZNE — stosuj się dokładnie):
+BPM={bpm}, jeden takt = {bar_duration:.2f}s
 
-Dla abstrakcji duchowej (gdy tekst wymaga):
-"[opis], fine art photography, long exposure, minimal post-processing,
-subtle and restrained, atmospheric not overwhelming"
+Każda sekcja ma narzuconą długość:
+- intro: {section_lengths['intro'][0]:.1f}s - {section_lengths['intro'][1]:.1f}s
+- verse: {section_lengths['verse'][0]:.1f}s - {section_lengths['verse'][1]:.1f}s
+- chorus: {section_lengths['chorus'][0]:.1f}s - {section_lengths['chorus'][1]:.1f}s (KRÓTKIE = ENERGIA)
+- bridge: {section_lengths['bridge'][0]:.1f}s - {section_lengths['bridge'][1]:.1f}s
+- outro: {section_lengths['outro'][0]:.1f}s - {section_lengths['outro'][1]:.1f}s
 
-### Zmień Visual Bible w visual_bible.py
+NIE rób równych odcinków. Refren MUSI być krótszy niż zwrotka."
 
-Nowy master_style (zastąp obecny):
-"Documentary worship photography aesthetic. Natural available light,
-film grain present, colors slightly desaturated and warm,
-authentic unposed moments, Sony A7III 35mm feel,
-no artificial enhancements, real and human."
+### Post-processing: snap do downbeatów
 
-### Nowe przykłady promptów w director_system.txt
+Po otrzymaniu planu od Claude:
+  for scene in scenes:
+      scene["start"] = snap_to_downbeat(scene["start"], downbeats, window=0.8)
+      scene["end"] = snap_to_downbeat(scene["end"], downbeats, window=0.8)
 
-Zastąp obecne przykłady tymi (każdy jest wzorcem do naśladowania):
+def snap_to_downbeat(t, downbeats, window=0.8):
+    candidates = [(abs(d - t), d) for d in downbeats if abs(d - t) <= window]
+    if candidates:
+        return min(candidates)[1]
+    return t
 
-Dla "Tylko w Bogu jest moja dusza":
-"Person sitting alone on wooden dock overlooking misty lake at dawn,
-back to camera, legs hanging over water, complete stillness,
-documentary style, natural morning light, slight mist on water,
-Sony A7III 35mm, film grain, authentic solitude and trust"
+## Problem 2: Zróżnicowanie ruchów kamery
 
-Dla "Pan jest moim pasterzem":
-"Vast open meadow at golden hour, single figure walking in distance,
-long grass moving in wind, wide establishing shot, natural colors,
-documentary landscape photography, real weather, no filters"
+### Zasada: nigdy dwa razy ten sam ruch pod rząd
 
-Dla "Nawet przez ciemną dolinę":
-"Rocky mountain path at dusk, dramatic but real clouds,
-dark foreground with lighter sky, lone figure on path seen from behind,
-photojournalism style, available light only, natural shadows"
+Mapowanie sekcja → dozwolone ruchy:
+  "intro":  ["static", "slow_zoom_in", "pan_right"]
+  "verse":  ["slow_zoom_in", "slow_zoom_out", "pan_left", "pan_right"]
+  "chorus": ["slow_zoom_in", "cut_zoom", "pan_left", "pan_right"]
+  "bridge": ["slow_zoom_out", "static", "diagonal_drift"]
+  "outro":  ["slow_zoom_out", "static"]
 
-Dla refrenu/kulminacji:
-"Outdoor worship gathering at sunset, people with hands raised,
-wide shot showing community, authentic emotion on faces,
-documentary photography, warm natural backlight, no staging"
+### Implementacja
 
-## Zmiany w image_generator.py
+Walidacja po otrzymaniu planu:
+  last_motion = None
+  for scene in scenes:
+      if scene.get("motion") == last_motion:
+          # Wybierz inny ruch z dozwolonych dla tej sekcji
+          allowed = motion_map.get(scene["section"], ["slow_zoom_in", "pan_left"])
+          alternative = [m for m in allowed if m != last_motion]
+          if alternative:
+              scene["motion"] = alternative[0]
+      last_motion = scene["motion"]
 
-### Dodaj negatywny kontekst do każdego promptu (jako część głównego promptu, nie osobny parametr)
+### Dodaj nowe typy ruchów w assembler.py
 
-W funkcji generate_images() przed wysłaniem do BFL:
-Dodaj na końcu full_prompt:
-", documentary style, no Catholic imagery, no religious figures,
-no rosary, no crucifix, no saints, authentic not staged,
-natural light not artificial, film grain not oversaturated"
+Obecne: slow_zoom_in, slow_zoom_out, pan_left, pan_right, static
+Dodaj:
+  "diagonal_drift": powolne przesunięcie po skosie (x i y jednocześnie)
+  "cut_zoom": szybszy zoom (1.0 → 1.25 zamiast 1.15) dla refrenu
 
-### Zmień wymiary dla lepszej kompozycji 16:9
+def apply_diagonal_drift(clip, direction="tl_to_br"):
+  Przesuwa crop window po skosie przez czas trwania klipu.
+  direction: "tl_to_br" (góra-lewo → dół-prawo) lub odwrotnie.
 
-Obecne: width=1024, height=768 (4:3 — złe proporcje!)
-Zmień na: width=1360, height=768 (bliższe 16:9)
+def apply_cut_zoom(clip):
+  Agresywniejszy zoom in (1.0 → 1.25) dla dynamicznych scen refrenu.
 
-BFL akceptuje te wymiary i dają lepszą kompozycję panoramiczną
-która po przycięciu do 1920x1080 wygląda lepiej.
+## Problem 3: Zróżnicowanie przejść
 
-## Zmiany w assembler.py — post-processing
+### Mapowanie sekcja→sekcja → typ przejścia
 
-### Dodaj subtelne filmowe przetwarzanie do każdego obrazu
+transitions_map = {
+    ("intro", "verse"):   "cross_dissolve",  # płynne wejście
+    ("verse", "chorus"):  "cut",              # uderzenie w refren
+    ("chorus", "verse"):  "fade",             # oddech po refrenie
+    ("chorus", "chorus"): "dip_white",        # świetlisty między refrenem
+    ("verse", "verse"):   "cross_dissolve",   # płynność w zwrotce
+    ("verse", "bridge"):  "cross_dissolve",   # narastanie
+    ("bridge", "chorus"): "cut",              # dramatyczne wejście
+    ("chorus", "outro"):  "fade",             # wyciszenie
+    ("outro", "outro"):   "cross_dissolve",   # spokojne zakończenie
+}
 
-W apply_effects() dla poziomu "minimal" i "full":
-Po warm_grade dodaj subtle_film_look():
+default_transition = "cross_dissolve"
 
-def subtle_film_look(frame):
-  # Lekka desaturacja (bardziej filmowy look)
-  # Konwertuj do HSV, zmniejsz S o 8%
-  hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV).astype(float)
-  hsv[:,:,1] *= 0.92  # -8% saturacji
-  hsv = np.clip(hsv, 0, 255).astype(np.uint8)
-  result = cv2.cvtColor(hsv, cv2.COLOR_HSV2BGR)
+### Implementacja
 
-  # Bardzo subtelny film grain (sigma=4, opacity=0.08)
-  noise = np.random.normal(0, 4, frame.shape).astype(np.float32)
-  result = np.clip(result.astype(float) + noise * 0.08, 0, 255).astype(np.uint8)
+Po snapowaniu scen do downbeatów:
+  for i in range(len(scenes) - 1):
+      current_section = scenes[i]["section"]
+      next_section = scenes[i+1]["section"]
+      key = (current_section, next_section)
+      scenes[i]["transition_to_next"] = transitions_map.get(key, default_transition)
 
-  return result
+### Czas trwania przejść zależny od BPM
 
-Używaj tylko gdy --effects minimal lub full.
-NIE używaj dla --effects none.
+  beat_duration = 60 / bpm
+  transitions_duration = {
+      "cut":           0.0,
+      "cross_dissolve": round(beat_duration / 2, 2),  # pół beatu
+      "fade":          round(beat_duration, 2),         # jeden beat
+      "dip_white":     round(beat_duration * 0.75, 2), # 3/4 beatu
+  }
+  Wszystkie czasy w zakresie 0.2s - 0.8s (min/max clamp)
+
+## Problem 4: Dynamika napisów
+
+### Rozmiar fontu zależy od sekcji
+
+  font_sizes = {
+      "chorus":  64,  # duże — energia refrenu
+      "verse":   54,  # standardowe
+      "bridge":  48,  # mniejsze — intymność
+      "intro":   50,  # wstęp
+      "outro":   46,  # wyciszenie
+  }
+  default_font_size = 54
+
+### Animacja wejścia zależy od sekcji
+
+  "chorus": animacja "pop" (scale 0→1.05→1.0, fade 0.2s)
+  "verse":  animacja "fade" (0.3s)
+  "bridge": animacja "slide_up" (0.4s)
+  "outro":  animacja "fade" (0.5s — wolniejsze)
+
+### Implementacja w assembler.py
+
+Pobierz section dla danego timestamp:
+def get_section_for_time(t, sections):
+    for section in sections:
+        if section["start"] <= t < section["end"]:
+            return section["label"]
+    return "verse"
+
+Przy tworzeniu TextClip:
+    section = get_section_for_time(lyric["start"], analysis["sections"])
+    font_size = font_sizes.get(section, 54)
+    # Użyj font_size przy tworzeniu TextClip
 
 ## Testy
 
-test_no_banned_words:
-  Sprawdź że visual_prompt nie zawiera żadnego z zakazanych słów
-  ["magical", "mystical", "dreamy", "fantasy", "glowing", "ethereal", "HDR", "8K"]
+test_chorus_shorter_than_verse:
+  Dla dowolnej piosenki: avg(chorus_durations) < avg(verse_durations)
 
-test_documentary_suffix:
-  Każdy prompt wysyłany do BFL zawiera "documentary photography style"
+test_no_same_motion_twice:
+  Żadne dwie sąsiednie sceny nie mają tego samego motion
 
-test_dimensions:
-  BFL request ma width=1360, height=768
+test_transitions_map:
+  verse→chorus daje "cut"
+  chorus→verse daje "fade"
+  bridge→chorus daje "cut"
 
-test_film_look:
-  subtle_film_look() zwraca frame o nieco niższej saturacji
+test_font_sizes:
+  Scena chorus: TextClip ma font_size=64
+  Scena verse: TextClip ma font_size=54
+
+test_snap_to_downbeat:
+  t=44.3, downbeats=[44.0, 44.7] → returns 44.0 (bliższy)
+  t=10.0, downbeats=[8.0, 13.0] → returns 10.0 (poza oknem 0.8)
 
 ## Acceptance Criteria
-- Żaden prompt nie zawiera zakazanych słów
-- Każdy prompt kończy się dokumentalnym suffixem
-- Wymiary 1360x768 zamiast 1024x768
-- Wygenerowane zdjęcia wyglądają jak fotografia dokumentalna
-- Subtelny film grain i desaturacja gdy --effects minimal
-- python3 -m pytest tests/test_image_generator.py -v przechodzi
+- Sceny refrenu są wyraźnie krótsze niż sceny zwrotki
+- Każda sąsiednia para scen ma inny typ ruchu kamery
+- Przejście verse→chorus to cut (nie fade)
+- Napisy refrenu są większe niż napisy zwrotki
+- Cięcia trafiają w downbeat muzyczny (±0.8s)
+- python3 -m pytest tests/test_dynamics.py -v przechodzi

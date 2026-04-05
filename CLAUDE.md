@@ -4,7 +4,7 @@
 CLI tool that generates synchronized MP4 music videos from audio files using stock footage, beat-synced cuts, and whisper-based subtitles.
 
 ## Commands
-- `python3 -m pytest tests/ -v` - run all tests (~371 tests)
+- `python3 -m pytest tests/ -v` - run all tests (~395 tests)
 - `python3 -m musicvid.musicvid song.mp3` - run the CLI (uses cache by default)
 - `python3 -m musicvid.musicvid song.mp3 --new` - force recalculation, ignore cache
 - `python3 -c "import musicvid; print(musicvid.__version__)"` - check version
@@ -48,6 +48,9 @@ CLI tool that generates synchronized MP4 music videos from audio files using sto
 - Reel manifest validation: `find_nearest_scene(start, end, fetch_manifest)` and `_validate_clip_manifest(clip_manifest, full_manifest)` in `musicvid.py` — called in `_run_preset_mode` after `_filter_manifest_to_clip` to replace None/missing video_path entries with nearest valid fallback; entries with no fallback are dropped with `click.echo(WARN ...)`; fetch_manifest entries must include `start`/`end` keys for fallback to work (stock manifest has them; image manifest also carries them)
 - Assembler social mode kwargs: `audio_fade_out=1.0` (social uses 1.5), `subtitle_margin_bottom=80` (social uses 200), `cinematic_bars=False` (default); standard/preset-full passes `cinematic_bars=(effects == "full")`, social explicitly passes `False`
 - Ken Burns `pan_up`/`pan_down` motions added; `_remap_motion_for_portrait(motion)` maps horizontal pans to vertical for 9:16
+- Ken Burns motions also include `diagonal_drift` (top-left → bottom-right pan) and `cut_zoom` (aggressive 1.0→1.25 zoom for chorus energy)
+- Assembler `_concatenate_with_transitions(scene_clips, scenes, bpm, target_size)` replaces direct `concatenate_videoclips` in `assemble_video`; handles cut/cross_dissolve/fade/dip_white using `scene["transition_to_next"]`; mock target: `@patch("musicvid.pipeline.assembler._concatenate_with_transitions")`
+- Dynamics post-processing in `cli()` after `_apply_beat_sync`: `_enforce_motion_variety(scenes)` (always, deduplicates adjacent same motions) → `_assign_dynamic_transitions(scenes, bpm)` (when `transitions_mode=="auto"`, sets `transition_to_next` per section pair); both mutate scenes list in-place
 - `--reels-style [crop|blur-bg]` (default: blur-bg): portrait conversion style — `blur-bg` creates blurred background + sharp smart crop overlay; `crop` does tighter POI-centered smart crop; passed as `reels_style` kwarg to `assemble_video` and all social AssemblyJobs
 - Smart crop: `musicvid/pipeline/smart_crop.py` — `detect_poi(image_path) -> (x, y)` (Haar face detection → saliency map → center fallback); `smart_crop(image_path, target_w, target_h, poi=None) -> PIL.Image`; `blur_bg_composite(image_path, target_w, target_h) -> PIL.Image`; `convert_for_platform(image_path, platform, style) -> str` (saves to `smart_{stem}.jpg` alongside source)
 - Assembler `_load_scene_clip` uses `convert_for_platform` for portrait images (target_size==(1080,1920)) before creating ImageClip; video files and landscape images bypass smart crop; mock target: `@patch("musicvid.pipeline.assembler.convert_for_platform")`
@@ -108,7 +111,7 @@ CLI tool that generates synchronized MP4 music videos from audio files using sto
 - Effects per-frame transforms use `clip.transform(fn)` where `fn(get_frame, t)` returns numpy array; test by extracting transform_fn from `mock_clip.transform.call_args[0][0]`
 - `_create_ken_burns_clip` test mocks need `mock_clip.size=(w,h)`, `mock_clip.w=w`, `mock_clip.h=h`, `mock_clip.cropped.return_value=mock_clip` — omitting breaks the mock chain since `cropped()` returns an unconfigured auto-MagicMock
 - MoviePy 2.x cover-scale: `scale = max(tw/iw, th/ih); clip = clip.resized(scale); clip = clip.cropped(x1=x1, y1=y1, x2=x1+tw, y2=y1+th)` — scalar for proportional resize, explicit pixel coords for crop
-- `_create_subtitle_clips` has try/except around `TextClip` creation — silently skips failed segments; logs each lyric line; falls back to `font=None` if named font fails
+- `_create_subtitle_clips` has try/except around `TextClip` creation — silently skips failed segments; logs each lyric line; falls back to `font=None` if named font fails; accepts `sections=None` kwarg — when provided, looks up per-lyric font size via `_get_section_for_time`; `_SECTION_FONT_SIZES`: chorus=64, verse=54, bridge=48, intro=50, outro=46; `assemble_video` passes `analysis.get("sections")`
 - Subtitle descender fix: `TextClip` height is set to `font_size + int(font_size * 0.35)` (35% pad) so j/g/y/p/q/ą/ę aren't clipped; `y_pos` is adjusted so padded clip bottom lands at `margin_bottom` from frame bottom; test count is now 308
 - Subtitle pre-display offset: `_create_subtitle_clips` applies `-0.1s` to `segment["start"]` (clamped to 0) and extends duration — so subtitles appear before the word
 - Subtitle timing: `with_start(segment["start"])` uses **global** absolute timestamps, composited over the full concatenated video — correct; do NOT subtract `scene["start"]`

@@ -1,8 +1,6 @@
 """Font loader with auto-download and fallback chain."""
 
-import io
 import logging
-import zipfile
 from pathlib import Path
 
 import requests
@@ -11,7 +9,7 @@ logger = logging.getLogger(__name__)
 
 ASSETS_FONTS_DIR = Path(__file__).resolve().parent.parent / "assets" / "fonts"
 MONTSERRAT_FILENAME = "Montserrat-Light.ttf"
-MONTSERRAT_URL = "https://fonts.google.com/download?family=Montserrat"
+MONTSERRAT_URL = "https://github.com/google/fonts/raw/main/ofl/montserrat/Montserrat-Light.ttf"
 
 SYSTEM_FONT_PATHS = [
     # macOS
@@ -37,24 +35,17 @@ def _find_system_fallback():
 
 
 def _download_montserrat():
-    """Download Montserrat font family ZIP and extract Light variant."""
+    """Download Montserrat-Light.ttf directly from GitHub."""
     ASSETS_FONTS_DIR.mkdir(parents=True, exist_ok=True)
     target = ASSETS_FONTS_DIR / MONTSERRAT_FILENAME
 
     try:
-        logger.info("Downloading Montserrat font from Google Fonts...")
+        logger.info("Downloading Montserrat font from GitHub...")
         resp = requests.get(MONTSERRAT_URL, timeout=30)
         resp.raise_for_status()
-
-        with zipfile.ZipFile(io.BytesIO(resp.content)) as zf:
-            for name in zf.namelist():
-                if name.endswith(MONTSERRAT_FILENAME):
-                    target.write_bytes(zf.read(name))
-                    logger.info("Saved font to %s", target)
-                    return str(target)
-
-        logger.warning("Montserrat-Light.ttf not found in downloaded ZIP")
-        return None
+        target.write_bytes(resp.content)
+        logger.info("Saved font to %s", target)
+        return str(target)
     except Exception as exc:
         logger.warning("Failed to download Montserrat: %s", exc)
         return None
@@ -66,7 +57,7 @@ def get_font_path(custom_path=None):
     Priority:
     1. custom_path (if provided and exists)
     2. Local Montserrat-Light.ttf (cached)
-    3. Download Montserrat from Google Fonts
+    3. Download Montserrat from GitHub
     4. System DejaVuSans.ttf or Liberation Sans
 
     Returns:

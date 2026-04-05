@@ -2,8 +2,6 @@
 
 from unittest.mock import patch, MagicMock
 from pathlib import Path
-import io
-import zipfile
 
 import pytest
 
@@ -71,14 +69,10 @@ class TestDownloadMontserrat:
     """Tests for the download helper."""
 
     @patch("musicvid.pipeline.font_loader.requests.get")
-    def test_downloads_and_extracts_ttf(self, mock_get, tmp_path):
-        buf = io.BytesIO()
-        with zipfile.ZipFile(buf, "w") as zf:
-            zf.writestr("static/Montserrat-Light.ttf", b"fake ttf data")
-        buf.seek(0)
-
+    def test_downloads_ttf_directly(self, mock_get, tmp_path):
+        fake_ttf = b"fake ttf data"
         mock_resp = MagicMock()
-        mock_resp.content = buf.read()
+        mock_resp.content = fake_ttf
         mock_resp.raise_for_status = MagicMock()
         mock_get.return_value = mock_resp
 
@@ -86,9 +80,17 @@ class TestDownloadMontserrat:
             result = _download_montserrat()
 
         assert result is not None
-        assert (tmp_path / "Montserrat-Light.ttf").exists()
+        assert result == str(tmp_path / "Montserrat-Light.ttf")
+        assert (tmp_path / "Montserrat-Light.ttf").read_bytes() == fake_ttf
+        mock_get.assert_called_once_with(
+            "https://github.com/google/fonts/raw/main/ofl/montserrat/Montserrat-Light.ttf",
+            timeout=30,
+        )
 
-    @patch("musicvid.pipeline.font_loader.requests.get", side_effect=Exception("network error"))
+    @patch(
+        "musicvid.pipeline.font_loader.requests.get",
+        side_effect=Exception("network error"),
+    )
     def test_returns_none_on_failure(self, mock_get, tmp_path):
         with patch("musicvid.pipeline.font_loader.ASSETS_FONTS_DIR", tmp_path):
             result = _download_montserrat()

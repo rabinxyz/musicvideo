@@ -418,6 +418,28 @@ def test_build_user_message_scene_count_based_on_bpm():
     assert "22" in msg
 
 
+def test_section_length_guidance_included():
+    analysis = {
+        "duration": 120.0,
+        "bpm": 84.0,
+        "beats": [i * (60/84) for i in range(200)],
+        "sections": [
+            {"label": "intro", "start": 0.0, "end": 20.0},
+            {"label": "verse", "start": 20.0, "end": 60.0},
+            {"label": "chorus", "start": 60.0, "end": 80.0},
+            {"label": "outro", "start": 80.0, "end": 120.0},
+        ],
+        "lyrics": [],
+        "mood_energy": "contemplative",
+        "language": "en",
+    }
+    from musicvid.pipeline.director import _build_user_message
+    msg = _build_user_message(analysis)
+    assert "DŁUGOŚCI SCEN" in msg
+    assert "chorus" in msg.lower()
+    assert "KRÓTKIE" in msg
+
+
 def test_validate_scene_plan_defaults_lyrics_in_scene():
     """_validate_scene_plan adds lyrics_in_scene=[] when field is absent."""
     plan = {

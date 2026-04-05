@@ -42,6 +42,25 @@ def _build_user_message(analysis, style_override=None):
     msg += f"\n- Target: {suggested_scene_count} scenes of ~{bar_duration * 4:.1f}s each"
     msg += f"\n- Each scene start/end should align with a downbeat from the list above"
     msg += f"\n\nGenerate approximately {suggested_scene_count} scenes (maximum {suggested_scene_count + 4})."
+
+    # Section-based length guidance
+    bar_duration_val = bar_duration
+    section_lengths = {
+        "intro":  (6 * bar_duration_val, 8 * bar_duration_val),
+        "verse":  (4 * bar_duration_val, 6 * bar_duration_val),
+        "chorus": (2 * bar_duration_val, 3 * bar_duration_val),
+        "bridge": (4 * bar_duration_val, 8 * bar_duration_val),
+        "outro":  (6 * bar_duration_val, 10 * bar_duration_val),
+    }
+    msg += f"\n\nDŁUGOŚCI SCEN (KRYTYCZNE — stosuj się dokładnie):"
+    msg += f"\nBPM={bpm:.0f}, jeden takt = {bar_duration_val:.2f}s"
+    msg += f"\n- intro:  {section_lengths['intro'][0]:.1f}s - {section_lengths['intro'][1]:.1f}s"
+    msg += f"\n- verse:  {section_lengths['verse'][0]:.1f}s - {section_lengths['verse'][1]:.1f}s"
+    msg += f"\n- chorus: {section_lengths['chorus'][0]:.1f}s - {section_lengths['chorus'][1]:.1f}s (KRÓTKIE = ENERGIA)"
+    msg += f"\n- bridge: {section_lengths['bridge'][0]:.1f}s - {section_lengths['bridge'][1]:.1f}s"
+    msg += f"\n- outro:  {section_lengths['outro'][0]:.1f}s - {section_lengths['outro'][1]:.1f}s"
+    msg += f"\nNIE rób równych odcinków. Refren MUSI być krótszy niż zwrotka."
+
     if style_override and style_override != "auto":
         msg += f"\n\nIMPORTANT: Override the style to be '{style_override}' regardless of the mood detected in the audio."
     return msg

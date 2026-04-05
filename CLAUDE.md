@@ -4,7 +4,7 @@
 CLI tool that generates synchronized MP4 music videos from audio files using stock footage, beat-synced cuts, and whisper-based subtitles.
 
 ## Commands
-- `python3 -m pytest tests/ -v` - run all tests (~322 tests)
+- `python3 -m pytest tests/ -v` - run all tests (~341 tests)
 - `python3 -m musicvid.musicvid song.mp3` - run the CLI (uses cache by default)
 - `python3 -m musicvid.musicvid song.mp3 --new` - force recalculation, ignore cache
 - `python3 -c "import musicvid; print(musicvid.__version__)"` - check version
@@ -54,7 +54,7 @@ CLI tool that generates synchronized MP4 music videos from audio files using sto
 - cv2 import in `smart_crop.py` uses `try/except ImportError` fallback (cv2=None) so module loads even when opencv-python not installed; tests mock `@patch("musicvid.pipeline.smart_crop.cv2")`
 - BFL image generator: `generate_images()` accepts `platform=None`; when `platform=="reels"`, uses 768×1360 (native 9:16) and `"portrait 9:16"` prompt hint instead of `"cinematic 16:9"`; `_submit_task()` accepts `width` and `height` params; CLI passes `platform="reels"` only when `preset=="social"`
 - Clip analysis filter: `_filter_analysis_to_clip(analysis, clip_start, clip_end)` in `musicvid.py` — offsets lyrics/beats/sections to clip-relative t=0 before passing to director
-- Lyrics parser: `musicvid/pipeline/lyrics_parser.py` — `align_with_claude(whisper_segments, file_lines)` for AI alignment via Claude API; also has `parse()` with variant A (plain text, even distribution) and B (MM:SS/HH:MM:SS timestamps)
+- Lyrics parser: `musicvid/pipeline/lyrics_parser.py` — `merge_whisper_with_lyrics_file(whisper_segments, lyrics_lines, audio_duration)` for deterministic sync (3 cases: N==M 1:1, N>M groups segments, N<M splits time); `align_with_claude()` kept but not used in CLI; `parse()` for variant A (plain text) and B (MM:SS timestamps)
 - Visual effects: `musicvid/pipeline/effects.py` — `apply_effects(clip, level)` orchestrates per-frame transforms (warm grade, vignette, film grain) and overlay effects (cinematic bars, light leak)
 - `--logo PATH`: overlay logo (SVG/PNG/JPG) on video as topmost layer with broadcast safe-zone margin (5% of shorter dimension)
 - `--logo-position [top-left|top-right|bottom-left|bottom-right]` (default: top-left): logo placement corner
@@ -91,7 +91,8 @@ CLI tool that generates synchronized MP4 music videos from audio files using sto
 - Image generator polling tests mock `time.monotonic` and `time.sleep` to control timing
 - Image generator retry tests must patch tenacity wait to `wait_none()` to avoid slow tests
 - AI lyrics alignment: `align_with_claude` in `lyrics_parser.py` mocks `anthropic` at module level: `@patch("musicvid.pipeline.lyrics_parser.anthropic")`; uses manual retry loop (2 attempts) instead of tenacity
-- CLI tests with `--lyrics` must also mock `@patch("musicvid.musicvid.align_with_claude")` since lyrics flow now uses AI alignment instead of `parse_lyrics`
+- CLI tests with `--lyrics` must mock `@patch("musicvid.musicvid.merge_whisper_with_lyrics_file")` (deterministic, no API call)
+- Lyrics timing corrections order: min/max duration (0.8s/8s) → 0.15s gap → −0.05s pre-display offset (clamped to 0) → clamp to audio_duration; effective post-offset gap is ~0.10s minimum
 - Font loader: `musicvid/pipeline/font_loader.py` auto-downloads Montserrat-Light.ttf directly from GitHub as TTF, falls back to system DejaVuSans
 - CLI tests that run the full pipeline must mock `get_font_path` via `@patch("musicvid.musicvid.get_font_path", return_value="/fake/font.ttf")`
 - Assembler tests must mock effects imports: `@patch("musicvid.pipeline.assembler.apply_effects")`, `@patch("musicvid.pipeline.assembler.create_cinematic_bars")`, `@patch("musicvid.pipeline.assembler.create_light_leak")`

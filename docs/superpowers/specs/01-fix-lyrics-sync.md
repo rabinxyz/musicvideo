@@ -1,5 +1,3 @@
-# Idea
-
 # Spec 1: Synchronizacja tekstu — sekwencyjne dopasowanie Whisper + plik lyrics
 
 ## Kontekst i historia problemu

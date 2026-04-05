@@ -374,5 +374,5 @@ class TestCreateScenePlan:
         """System prompt must instruct Claude to keep visual_prompt under 200 chars."""
         from musicvid.pipeline.director import _load_system_prompt
         prompt = _load_system_prompt()
-        assert "200" in prompt
+        assert "200 char" in prompt
         assert "visual_prompt" in prompt

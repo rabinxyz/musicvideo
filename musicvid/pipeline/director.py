@@ -33,6 +33,16 @@ def _build_user_message(analysis, style_override=None):
     return msg
 
 
+def _strip_markdown(text):
+    """Strip markdown code fence from text if present."""
+    text = text.strip()
+    if text.startswith("```"):
+        text = text.split("```")[1]
+        if text.startswith("json"):
+            text = text[4:]
+    return text.strip()
+
+
 @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=30))
 def _call_claude(system_prompt, user_message):
     """Call Claude API with retry logic."""
@@ -185,32 +195,25 @@ def create_scene_plan(analysis, style_override=None, output_dir=None):
 
     response_text = _call_claude(system_prompt, user_message)
 
-    text = response_text.strip()
-    if text.startswith("```"):
-        text = text.split("```")[1]
-        if text.startswith("json"):
-            text = text[4:]
-    text = text.strip()
+    text = _strip_markdown(response_text)
 
     try:
         plan = json.loads(text)
     except json.JSONDecodeError:
+        plan = None
         basic = _repair_truncated_json(text)
-        if basic is not None and json.loads(basic).get("scenes"):
-            repaired = basic
-        else:
-            repaired = _repair_truncated_json_aggressive(text)
-        if repaired is not None:
-            plan = json.loads(repaired)
-        else:
+        if basic is not None:
+            parsed = json.loads(basic)
+            if parsed.get("scenes"):
+                plan = parsed
+        if plan is None:
+            aggressive = _repair_truncated_json_aggressive(text)
+            if aggressive is not None:
+                plan = json.loads(aggressive)
+        if plan is None:
             retry_message = user_message + "\n\nIMPORTANT: Your previous response was truncated. Be more concise: keep visual_prompt under 100 characters and limit to 8 scenes maximum."
             response_text = _call_claude(system_prompt, retry_message)
-            text = response_text.strip()
-            if text.startswith("```"):
-                text = text.split("```")[1]
-                if text.startswith("json"):
-                    text = text[4:]
-            text = text.strip()
+            text = _strip_markdown(response_text)
             plan = json.loads(text)
     plan = _validate_scene_plan(plan, analysis["duration"])
 

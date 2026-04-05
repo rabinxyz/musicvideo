@@ -40,8 +40,8 @@ CLI tool that generates synchronized MP4 music videos from audio files using sto
 - `--quick`: shortcut that sets mode=stock, preset=full, effects=none, animate=never, lut_style=None, transitions=cut, beat_sync=off
 - `--economy`: shortcut that sets mode=ai, provider=flux-dev, preset=full, effects=minimal, animate=never, lut_style=warm
 - API key fallbacks: checked early in `cli()` after --quick/--economy overrides — missing BFL_API_KEY falls back to mode=stock, missing RUNWAY_API_KEY falls back to animate=never, both with printed messages
-- Startup summary: `_print_startup_summary()` called before pipeline stages; displays active settings in a formatted table
-- `--reel-duration [15|20|30]` (default: 15): duration of social reels; invalidates social clips cache
+- Startup summary: `_print_startup_summary()` called before pipeline stages; displays active settings in a formatted table; shows `Rolki social: 3 × {reel_duration}s z różnych fragmentów` line when preset is "social" or "all"
+- `--reel-duration [15|20|25|30|45|60]` (default: 30): duration of social reels; invalidates social clips cache; for ≥30s reels, Claude prompt includes chorus/refrain priority rules
 - Social clip selector: `musicvid/pipeline/social_clip_selector.py` — `select_social_clips(analysis, clip_duration)` asks Claude for 3 non-overlapping clips from different sections; mock: `@patch("musicvid.pipeline.social_clip_selector.anthropic")`
 - CLI tests for `--preset` must mock `@patch("musicvid.musicvid.select_social_clips")` in addition to the usual pipeline mocks
 - Scene plan/manifest clip filters: `_filter_scene_plan_to_clip(scene_plan, clip_start, clip_end)` and `_filter_manifest_to_clip(manifest, scenes, clip_start, clip_end)` in `musicvid.py` — filter and offset scenes/manifest entries to a clip time window

@@ -1,29 +1,40 @@
 # Idea
 
-# Spec: Naprawa pobierania czcionki Montserrat
+# Spec: Zmiana domyślnej długości rolek na 30 sekund
 
-## Problem
-font_loader.py próbuje pobrać Montserrat z Google Fonts jako ZIP
-ale API zwraca HTML lub inny format — "File is not a zip file"
+## Uzasadnienie
+Analiza danych z 2025-2026 pokazuje że dla muzyki chrześcijańskiej
+optymalny czas rolki promującej teledysk to 30 sekund:
+- 15s za krótko żeby pieśń uwielbienia "weszła" emocjonalnie
+- 30s pozwala pokazać pełny refren z napisami i obrazem AI
+- 30s mieści się w "Goldilocks zone" algorytmu Instagram/FB
+- Wyższy completion rate niż 60s przy zachowaniu pełnego przekazu
 
-## Poprawka w font_loader.py
+## Zmiana w musicvid.py
 
-Zmień URL pobierania z Google Fonts ZIP na bezpośredni plik TTF z GitHub:
+Zmień domyślną wartość --reel-duration z 15 na 30:
+  --reel-duration [15|20|25|30|45|60]  default=30
 
-MONTSERRAT_URL = "https://github.com/google/fonts/raw/main/ofl/montserrat/Montserrat-Light.ttf"
+Dodaj do dostępnych opcji: 45 i 60 sekund.
 
-Pobierz bezpośrednio jako plik TTF bez rozpakowywania:
-  response = requests.get(MONTSERRAT_URL, timeout=30)
-  response.raise_for_status()
-  font_path.write_bytes(response.content)
+## Zmiana w clip_selections — logika wyboru fragmentu
 
-Usuń cały kod który rozpakowuje ZIP — nie jest potrzebny.
+Gdy reel_duration=30 Claude wybiera fragment który zawiera:
+- Pełny refren (priorytet najwyższy)
+- Wyraźny hook melodyczny
+- Kompletną myśl tekstową (nie urwane zdanie)
+- Zaczyna się na początku frazy muzycznej
+- Kończy na naturalnej pauzie lub końcu frazy
 
-## Fallback
-Jeśli pobieranie się nie uda: użyj DejaVuSans przez ImageMagick.
-Nie rzucaj wyjątku — kontynuuj z fallback fontem.
+## Zmiana w komunikacie startowym
+
+Zaktualizuj _print_startup_summary():
+  "Rolki social:   3 × 30s z różnych fragmentów"
+  zamiast:
+  "Rolki social:   3 × 15s z różnych fragmentów"
 
 ## Acceptance Criteria
-- Montserrat-Light.ttf pobierany bezpośrednio jako TTF z GitHub
-- Brak błędu "File is not a zip file"
-- Fallback do DejaVuSans gdy pobieranie się nie uda
+- python3 -m musicvid.musicvid --help pokazuje domyślnie 30 dla --reel-duration
+- Generowane rolki mają długość ~30 sekund
+- Dostępne opcje: 15, 20, 25, 30, 45, 60
+- Komunikat startowy pokazuje poprawną długość

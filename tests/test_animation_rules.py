@@ -122,24 +122,32 @@ class TestEnforceAnimationRules:
 
     def test_short_scene_disabled(self):
         scenes = [
-            _make_scene("chorus", True, 0, 4),  # 4s < 6s
+            _make_scene("chorus", True, 0, 2),  # 2s < 3s
         ]
         result = enforce_animation_rules(scenes)
         assert result[0]["animate"] is False
 
-    def test_exactly_6s_allowed(self):
+    def test_exactly_3s_allowed(self):
         scenes = [
-            _make_scene("chorus", True, 0, 6),  # exactly 6s
+            _make_scene("chorus", True, 0, 3),  # exactly 3s
         ]
         result = enforce_animation_rules(scenes)
         assert result[0]["animate"] is True
 
-    def test_short_scene_under_6s_disabled(self):
+    def test_short_scene_under_3s_disabled(self):
         scenes = [
-            _make_scene("chorus", True, 0.0, 5.9),  # 5.9s < 6s
+            _make_scene("chorus", True, 0.0, 2.9),  # 2.9s < 3s
         ]
         result = enforce_animation_rules(scenes)
         assert result[0]["animate"] is False
+
+    def test_4s_chorus_scene_animated(self):
+        """Regression: 4-5s chorus scenes must be animated, not Ken Burns fallback."""
+        scenes = [
+            _make_scene("chorus", True, 0, 4.5),  # 4.5s >= 3s — should animate
+        ]
+        result = enforce_animation_rules(scenes)
+        assert result[0]["animate"] is True
 
     # ---- outro ----
 
@@ -171,7 +179,7 @@ class TestEnforceAnimationRules:
     # ---- log output ----
 
     def test_short_scene_prints_warning(self, capsys):
-        scenes = [_make_scene("chorus", True, 0, 4)]
+        scenes = [_make_scene("chorus", True, 0, 2)]
         enforce_animation_rules(scenes)
         captured = capsys.readouterr()
         assert "WARN" in captured.out or "za krótka" in captured.out

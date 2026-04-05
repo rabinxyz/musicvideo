@@ -318,7 +318,7 @@ def enforce_animation_rules(scenes: list) -> list:
 
     # Rule 3: max animated = max(1, total // 4)
     animated_indices = [i for i, s in enumerate(scenes) if s.get("animate")]
-    max_animated = max(2, len(scenes) // 4)
+    max_animated = max(1, len(scenes) // 4)
     if len(animated_indices) > max_animated:
         # Sort by priority descending, keep top max_animated
         animated_indices.sort(key=lambda i: get_section_priority(scenes[i]["section"]), reverse=True)

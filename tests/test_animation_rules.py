@@ -35,17 +35,22 @@ class TestEnforceAnimationRules:
     # ---- adjacency ----
 
     def test_adjacent_animated_lower_priority_disabled(self):
+        # 8 scenes so max(1, 8//4) = 2; after adjacency pass: chorus[0] and chorus[3] remain
         scenes = [
             _make_scene("chorus", True, 0, 10),
             _make_scene("verse", True, 10, 20),
             _make_scene("verse", False, 20, 30),
             _make_scene("chorus", True, 30, 40),
+            _make_scene("verse", False, 40, 50),
+            _make_scene("verse", False, 50, 60),
+            _make_scene("verse", False, 60, 70),
+            _make_scene("verse", False, 70, 80),
         ]
         result = enforce_animation_rules(scenes)
         assert result[0]["animate"] is True   # chorus keeps
         assert result[1]["animate"] is False  # verse loses to adjacent chorus
         assert result[2]["animate"] is False  # already false
-        assert result[3]["animate"] is True   # chorus keeps
+        assert result[3]["animate"] is True   # chorus keeps (non-adjacent now, within cap)
 
     def test_two_adjacent_same_priority_second_disabled(self):
         scenes = [
@@ -57,10 +62,16 @@ class TestEnforceAnimationRules:
         assert result[1]["animate"] is False
 
     def test_non_adjacent_both_keep_animation(self):
+        # 8 scenes: max(1, 8//4) = 2 — both non-adjacent animated scenes should be kept
         scenes = [
             _make_scene("chorus", True, 0, 10),
             _make_scene("verse", False, 10, 20),
             _make_scene("bridge", True, 20, 30),
+            _make_scene("verse", False, 30, 40),
+            _make_scene("verse", False, 40, 50),
+            _make_scene("verse", False, 50, 60),
+            _make_scene("verse", False, 60, 70),
+            _make_scene("verse", False, 70, 80),
         ]
         result = enforce_animation_rules(scenes)
         assert result[0]["animate"] is True

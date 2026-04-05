@@ -1,5 +1,3 @@
-# Idea
-
 # Spec: Naprawa wyświetlania wideo — pasy, skalowanie, napisy
 
 ## Problem 1 — czarne pasy góra i dół

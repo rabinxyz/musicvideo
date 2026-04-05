@@ -1587,6 +1587,26 @@ class TestPresetMode:
         result = runner.invoke(cli, [str(audio_file), "--reel-duration", "30", "--help"])
         assert result.exit_code == 0
 
+    def test_reel_duration_45_accepted(self, runner, tmp_path):
+        audio_file = tmp_path / "test.mp3"
+        audio_file.write_bytes(b"fake audio")
+        result = runner.invoke(cli, [str(audio_file), "--reel-duration", "45", "--help"])
+        assert result.exit_code == 0
+
+    def test_reel_duration_60_accepted(self, runner, tmp_path):
+        audio_file = tmp_path / "test.mp3"
+        audio_file.write_bytes(b"fake audio")
+        result = runner.invoke(cli, [str(audio_file), "--reel-duration", "60", "--help"])
+        assert result.exit_code == 0
+
+    def test_reel_duration_default_is_30(self, runner, tmp_path):
+        audio_file = tmp_path / "test.mp3"
+        audio_file.write_bytes(b"fake audio")
+        result = runner.invoke(cli, [str(audio_file), "--help"])
+        assert result.exit_code == 0
+        # Click renders default as "[default: 30]" or "default=30" in help text
+        assert "30" in result.output
+
     def test_preset_invalid_value_rejected(self, runner, tmp_path):
         audio_file = tmp_path / "test.mp3"
         audio_file.write_bytes(b"fake audio")
@@ -2114,12 +2134,12 @@ class TestPresetMode:
 
         output_dir = tmp_path / "output"
 
-        # Run with 15s
+        # Run with 30s (default)
         runner.invoke(cli, [str(audio_file), "--output", str(output_dir), "--preset", "social", "--mode", "stock"])
         assert mock_social.call_count == 1
 
-        # Run with 30s — different cache key
-        runner.invoke(cli, [str(audio_file), "--output", str(output_dir), "--preset", "social", "--reel-duration", "30", "--mode", "stock"])
+        # Run with 15s — different cache key
+        runner.invoke(cli, [str(audio_file), "--output", str(output_dir), "--preset", "social", "--reel-duration", "15", "--mode", "stock"])
         assert mock_social.call_count == 2  # called again because different duration
 
 

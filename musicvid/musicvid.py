@@ -293,7 +293,7 @@ def _print_startup_summary(mode, provider, preset, effects, animate_mode, lut_st
 @click.option("--title-card", is_flag=True, default=False, help="Add 2-second title card with song name at start of clip.")
 @click.option("--animate", "animate_mode", type=click.Choice(["auto", "always", "never"]), default="auto", help="Animated video via Runway Gen-4.")
 @click.option("--preset", type=click.Choice(["full", "social", "all"]), default="all", help="Preset mode: full (YouTube), social (3 reels), all (both).")
-@click.option("--reel-duration", type=click.Choice(["15", "20", "30"]), default="15", help="Duration of social media reels in seconds.")
+@click.option("--reel-duration", type=click.Choice(["15", "20", "25", "30", "45", "60"]), default="30", help="Duration of social media reels in seconds.")
 @click.option("--logo", "logo_path", type=click.Path(), default=None, help="Path to logo file (SVG/PNG) to overlay on video.")
 @click.option("--logo-position", type=click.Choice(["top-left", "top-right", "bottom-left", "bottom-right"]), default="top-left", help="Logo position on screen.")
 @click.option("--logo-size", type=int, default=None, help="Logo width in pixels (default: auto 12%% of frame width).")

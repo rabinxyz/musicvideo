@@ -215,11 +215,13 @@ def _print_startup_summary(mode, provider, preset, effects, animate_mode, lut_st
 @click.option("--yes", "skip_confirm", is_flag=True, default=False, help="Skip confirmation prompt.")
 @click.option("--quick", "quick_mode", is_flag=True, default=False, help="Quick mode: stock images, no animation, cut transitions, no LUT.")
 @click.option("--economy", "economy_mode", is_flag=True, default=False, help="Economy mode: flux-dev AI images, no Runway animation, warm LUT.")
+@click.option("--sequential-assembly", is_flag=True, default=False,
+              help="Disable parallel Stage 4 assembly (use on low-RAM Macs)")
 def cli(audio_file, mode, provider, style, output, resolution, lang, new, font_path, lyrics_path,
         effects, clip_duration, platform, title_card, animate_mode, preset, reel_duration,
         logo_path, logo_position, logo_size, logo_opacity,
         lut_style, lut_intensity, subtitle_style_override, transitions_mode, beat_sync,
-        skip_confirm, quick_mode, economy_mode):
+        skip_confirm, quick_mode, economy_mode, sequential_assembly):
     """Generate a music video from AUDIO_FILE."""
     # Apply --quick mode overrides
     if quick_mode:
@@ -465,6 +467,7 @@ def cli(audio_file, mode, provider, style, output, resolution, lang, new, font_p
             logo_opacity=logo_opacity,
             lut_style=lut_style,
             lut_intensity=lut_intensity,
+            sequential_assembly=sequential_assembly,
         )
         return
 
@@ -510,7 +513,7 @@ def cli(audio_file, mode, provider, style, output, resolution, lang, new, font_p
 def _run_preset_mode(preset, reel_duration, analysis, scene_plan, fetch_manifest,
                      audio_path, output_dir, stem, font, effects, cache_dir, new,
                      logo_path=None, logo_position="top-left", logo_size=None, logo_opacity=0.85,
-                     lut_style=None, lut_intensity=0.85):
+                     lut_style=None, lut_intensity=0.85, sequential_assembly=False):
     """Handle --preset flag: generate full video and/or social reels."""
     generate_full = preset in ("full", "all")
     generate_social = preset in ("social", "all")

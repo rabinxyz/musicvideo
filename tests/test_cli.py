@@ -3,6 +3,7 @@
 import json
 import os
 import unittest
+from contextlib import ExitStack
 from unittest.mock import patch, MagicMock
 from pathlib import Path
 
@@ -2564,3 +2565,57 @@ class TestParallelAssembly(unittest.TestCase):
         results = assemble_all_parallel(jobs)
         self.assertIn("/tmp/a.mp4", results)
         self.assertIn("/tmp/b.mp4", results)
+
+
+class TestSequentialAssemblyFlag(unittest.TestCase):
+    """--sequential-assembly forces one-at-a-time assembly."""
+
+    def _make_patches(self):
+        return [
+            patch("musicvid.musicvid.get_audio_hash", return_value="abc123"),
+            patch("musicvid.musicvid.load_cache", return_value=None),
+            patch("musicvid.musicvid.save_cache"),
+            patch("musicvid.musicvid.analyze_audio", return_value={
+                "duration": 60, "lyrics": [], "beats": [], "sections": []
+            }),
+            patch("musicvid.musicvid.create_scene_plan", return_value={
+                "scenes": [], "subtitle_style": {"animation": "fade"}, "master_style": ""
+            }),
+            patch("musicvid.musicvid.fetch_videos", return_value={}),
+            patch("musicvid.musicvid.select_social_clips", return_value={"clips": [
+                {"id": "A", "start": 0.0, "end": 15.0, "section": "verse"},
+                {"id": "B", "start": 20.0, "end": 35.0, "section": "chorus"},
+                {"id": "C", "start": 40.0, "end": 55.0, "section": "bridge"},
+            ]}),
+            patch("musicvid.musicvid.assemble_video"),
+            patch("musicvid.musicvid.assemble_all_parallel", return_value=[]),
+            patch("musicvid.musicvid.get_font_path", return_value="/fake/font.ttf"),
+        ]
+
+    def test_default_preset_all_uses_parallel(self):
+        from musicvid.musicvid import cli
+        runner = CliRunner()
+        patches = self._make_patches()
+        with ExitStack() as stack:
+            mocks = [stack.enter_context(p) for p in patches]
+            mock_parallel = mocks[8]   # assemble_all_parallel
+            mock_serial = mocks[7]     # assemble_video
+            with runner.isolated_filesystem():
+                open("song.mp3", "w").close()
+                runner.invoke(cli, ["song.mp3", "--mode", "stock", "--preset", "all"])
+            mock_parallel.assert_called_once()
+            mock_serial.assert_not_called()
+
+    def test_sequential_assembly_flag_skips_parallel(self):
+        from musicvid.musicvid import cli
+        runner = CliRunner()
+        patches = self._make_patches()
+        with ExitStack() as stack:
+            mocks = [stack.enter_context(p) for p in patches]
+            mock_parallel = mocks[8]   # assemble_all_parallel
+            mock_serial = mocks[7]     # assemble_video
+            with runner.isolated_filesystem():
+                open("song.mp3", "w").close()
+                runner.invoke(cli, ["song.mp3", "--mode", "stock", "--preset", "all", "--sequential-assembly"])
+            mock_parallel.assert_not_called()
+            self.assertGreater(mock_serial.call_count, 0)

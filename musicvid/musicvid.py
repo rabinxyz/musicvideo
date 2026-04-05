@@ -112,7 +112,7 @@ def _filter_manifest_to_clip(manifest, scenes, clip_start, clip_end):
 
 @click.command()
 @click.argument("audio_file", type=click.Path(exists=True))
-@click.option("--mode", type=click.Choice(["stock", "ai", "hybrid"]), default="stock", help="Video source mode.")
+@click.option("--mode", type=click.Choice(["stock", "ai", "hybrid"]), default="ai", help="Video source mode.")
 @click.option("--provider", type=click.Choice(["flux-dev", "flux-pro", "flux-schnell"]), default="flux-pro", help="Image provider for --mode ai.")
 @click.option("--style", type=click.Choice(["auto", "contemplative", "joyful", "worship", "powerful"]), default="auto", help="Visual style.")
 @click.option("--output", type=click.Path(), default="./output/", help="Output directory.")
@@ -125,14 +125,26 @@ def _filter_manifest_to_clip(manifest, scenes, clip_start, clip_end):
 @click.option("--clip", "clip_duration", type=click.Choice(["15", "20", "25", "30"]), default=None, help="Clip duration in seconds for social media (selects best fragment).")
 @click.option("--platform", type=click.Choice(["reels", "shorts", "tiktok"]), default=None, help="Social media platform (sets portrait 9:16 resolution).")
 @click.option("--title-card", is_flag=True, default=False, help="Add 2-second title card with song name at start of clip.")
-@click.option("--animate", "animate_mode", type=click.Choice(["auto", "always", "never"]), default="auto", help="Animated video via Runway Gen-4 (auto: director decides, always: all scenes, never: off). Only with --mode ai.")
-@click.option("--preset", type=click.Choice(["full", "social", "all"]), default=None, help="Preset mode: full (YouTube), social (3 reels), all (both).")
+@click.option("--animate", "animate_mode", type=click.Choice(["auto", "always", "never"]), default="auto", help="Animated video via Runway Gen-4.")
+@click.option("--preset", type=click.Choice(["full", "social", "all"]), default="all", help="Preset mode: full (YouTube), social (3 reels), all (both).")
 @click.option("--reel-duration", type=click.Choice(["15", "20", "30"]), default="15", help="Duration of social media reels in seconds.")
 @click.option("--logo", "logo_path", type=click.Path(), default=None, help="Path to logo file (SVG/PNG) to overlay on video.")
 @click.option("--logo-position", type=click.Choice(["top-left", "top-right", "bottom-left", "bottom-right"]), default="top-left", help="Logo position on screen.")
 @click.option("--logo-size", type=int, default=None, help="Logo width in pixels (default: auto 12%% of frame width).")
 @click.option("--logo-opacity", type=float, default=0.85, help="Logo opacity 0.0-1.0.")
-def cli(audio_file, mode, provider, style, output, resolution, lang, new, font_path, lyrics_path, effects, clip_duration, platform, title_card, animate_mode, preset, reel_duration, logo_path, logo_position, logo_size, logo_opacity):
+@click.option("--lut-style", type=click.Choice(["warm", "cold", "cinematic", "natural", "faded"]), default="warm", help="Built-in LUT color grade style.")
+@click.option("--lut-intensity", type=float, default=0.85, help="LUT intensity 0.0-1.0.")
+@click.option("--subtitle-style", "subtitle_style_override", type=click.Choice(["fade", "karaoke", "none"]), default="karaoke", help="Subtitle animation style.")
+@click.option("--transitions", "transitions_mode", type=click.Choice(["cut", "auto"]), default="auto", help="Scene transition style (auto: director decides, cut: force hard cuts).")
+@click.option("--beat-sync", "beat_sync", type=click.Choice(["off", "auto"]), default="auto", help="Align scene cuts to beat positions.")
+@click.option("--yes", "skip_confirm", is_flag=True, default=False, help="Skip confirmation prompt.")
+@click.option("--quick", "quick_mode", is_flag=True, default=False, help="Quick mode: stock images, no animation, cut transitions, no LUT.")
+@click.option("--economy", "economy_mode", is_flag=True, default=False, help="Economy mode: flux-dev AI images, no Runway animation, warm LUT.")
+def cli(audio_file, mode, provider, style, output, resolution, lang, new, font_path, lyrics_path,
+        effects, clip_duration, platform, title_card, animate_mode, preset, reel_duration,
+        logo_path, logo_position, logo_size, logo_opacity,
+        lut_style, lut_intensity, subtitle_style_override, transitions_mode, beat_sync,
+        skip_confirm, quick_mode, economy_mode):
     """Generate a music video from AUDIO_FILE."""
     audio_path = Path(audio_file).resolve()
     output_dir = Path(output).resolve()

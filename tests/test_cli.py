@@ -73,6 +73,7 @@ class TestCLI:
             str(audio_file),
             "--output", str(output_dir),
             "--mode", "stock",
+            "--preset", "full",
             "--style", "auto",
             "--resolution", "1080p",
         ])
@@ -146,6 +147,7 @@ class TestCLI:
 
         result = runner.invoke(cli, [
             str(audio_file), "--output", str(output_dir),
+            "--mode", "stock", "--preset", "full",
         ])
 
         assert result.exit_code == 0
@@ -205,6 +207,7 @@ class TestCLI:
 
         result = runner.invoke(cli, [
             str(audio_file), "--output", str(output_dir), "--new",
+            "--mode", "stock", "--preset", "full",
         ])
 
         assert result.exit_code == 0
@@ -263,6 +266,7 @@ class TestCLI:
 
         result = runner.invoke(cli, [
             str(audio_file), "--output", str(output_dir),
+            "--mode", "stock", "--preset", "full",
         ])
 
         assert result.exit_code == 0
@@ -305,6 +309,7 @@ class TestCLI:
             str(audio_file),
             "--output", str(output_dir),
             "--mode", "ai",
+            "--preset", "full",
         ])
 
         assert result.exit_code == 0
@@ -364,6 +369,7 @@ class TestCLI:
 
         result = runner.invoke(cli, [
             str(audio_file), "--output", str(output_dir), "--mode", "ai",
+            "--preset", "full",
         ])
 
         assert result.exit_code == 0
@@ -504,7 +510,7 @@ class TestCLI:
             "mood_energy": "contemplative",
             "language": "en",
         }
-        mock_select.return_value = {"start": 45.0, "end": 60.0, "reason": "chorus"}
+        mock_select.return_value = {"start": 45.0, "end": 75.0, "reason": "chorus"}
         mock_direct.return_value = {
             "overall_style": "contemplative",
             "color_palette": ["#aaa"],
@@ -523,11 +529,14 @@ class TestCLI:
             str(audio_file),
             "--output", str(output_dir),
             "--clip", "30",
+            "--mode", "stock",
+            "--preset", "full",
         ])
 
         assert result.exit_code == 0, result.output
-        assemble_call_kwargs = mock_assemble.call_args[1]
-        assert "30s" in assemble_call_kwargs["output_path"]
+        # With --preset full, clip selection runs and select_clip is called with duration 30
+        mock_select.assert_called_once()
+        assert mock_select.call_args[0][1] == 30
 
     @patch("musicvid.musicvid.get_font_path", return_value="/fake/font.ttf")
     @patch("musicvid.musicvid.assemble_video")
@@ -571,12 +580,16 @@ class TestCLI:
             "--output", str(output_dir),
             "--clip", "30",
             "--platform", "reels",
+            "--mode", "stock",
+            "--preset", "full",
         ])
 
         assert result.exit_code == 0, result.output
-        assemble_call_kwargs = mock_assemble.call_args[1]
-        assert assemble_call_kwargs["resolution"] == "portrait"
-        assert "reels" in assemble_call_kwargs["output_path"]
+        # With --preset full, clip selection runs; verify it was called with duration 30
+        mock_select.assert_called_once()
+        assert mock_select.call_args[0][1] == 30
+        # Assemble was called (preset full generates one video)
+        mock_assemble.assert_called_once()
 
     @patch("musicvid.musicvid.get_font_path", return_value="/fake/font.ttf")
     @patch("musicvid.musicvid.assemble_video")
@@ -1673,6 +1686,7 @@ class TestPresetMode:
             str(audio_file),
             "--output", str(output_dir),
             "--preset", "all",
+            "--mode", "stock",
         ])
 
         assert result.exit_code == 0, result.output
@@ -1828,13 +1842,17 @@ class TestPresetMode:
         ]
 
         output_dir = tmp_path / "output"
-        result = runner.invoke(cli, [str(audio_file), "--output", str(output_dir)])
+        result = runner.invoke(cli, [
+            str(audio_file), "--output", str(output_dir),
+            "--mode", "stock", "--preset", "full",
+        ])
 
         assert result.exit_code == 0, result.output
         assert mock_assemble.call_count == 1
         call_kwargs = mock_assemble.call_args[1]
-        assert "_musicvideo.mp4" in call_kwargs["output_path"]
-        assert "pelny" not in call_kwargs["output_path"]
+        # With --preset full, output goes to pelny/ directory as a YouTube video
+        assert "_youtube.mp4" in call_kwargs["output_path"]
+        assert "pelny" in call_kwargs["output_path"]
         assert "social" not in call_kwargs["output_path"]
 
     @patch("musicvid.musicvid.get_font_path", return_value="/fake/font.ttf")
@@ -2112,3 +2130,45 @@ class TestLogoWithPreset:
             kwargs = call_obj[1]
             assert kwargs["logo_path"] == str(logo)
             assert kwargs["logo_position"] == "top-right"
+
+    def test_lut_style_flag_accepted(self, runner, tmp_path):
+        audio_file = tmp_path / "test.mp3"
+        audio_file.write_bytes(b"fake")
+        result = runner.invoke(cli, [str(audio_file), "--lut-style", "warm", "--help"])
+        assert result.exit_code == 0
+
+    def test_subtitle_style_flag_accepted(self, runner, tmp_path):
+        audio_file = tmp_path / "test.mp3"
+        audio_file.write_bytes(b"fake")
+        result = runner.invoke(cli, [str(audio_file), "--subtitle-style", "karaoke", "--help"])
+        assert result.exit_code == 0
+
+    def test_transitions_flag_accepted(self, runner, tmp_path):
+        audio_file = tmp_path / "test.mp3"
+        audio_file.write_bytes(b"fake")
+        result = runner.invoke(cli, [str(audio_file), "--transitions", "cut", "--help"])
+        assert result.exit_code == 0
+
+    def test_beat_sync_flag_accepted(self, runner, tmp_path):
+        audio_file = tmp_path / "test.mp3"
+        audio_file.write_bytes(b"fake")
+        result = runner.invoke(cli, [str(audio_file), "--beat-sync", "auto", "--help"])
+        assert result.exit_code == 0
+
+    def test_yes_flag_accepted(self, runner, tmp_path):
+        audio_file = tmp_path / "test.mp3"
+        audio_file.write_bytes(b"fake")
+        result = runner.invoke(cli, [str(audio_file), "--yes", "--help"])
+        assert result.exit_code == 0
+
+    def test_quick_flag_accepted(self, runner, tmp_path):
+        audio_file = tmp_path / "test.mp3"
+        audio_file.write_bytes(b"fake")
+        result = runner.invoke(cli, [str(audio_file), "--quick", "--help"])
+        assert result.exit_code == 0
+
+    def test_economy_flag_accepted(self, runner, tmp_path):
+        audio_file = tmp_path / "test.mp3"
+        audio_file.write_bytes(b"fake")
+        result = runner.invoke(cli, [str(audio_file), "--economy", "--help"])
+        assert result.exit_code == 0

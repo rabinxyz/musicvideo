@@ -6,8 +6,7 @@ Your job is to create a detailed scene plan for the music video as pure JSON (no
 
 MASTER STYLE:
 Begin by composing a master_style string (1-2 sentences, English) describing the consistent visual grade
-applied to all scenes. Example: "Consistent warm cinematic color grade, golden amber tones, soft atmospheric
-haze, photorealistic photography style." Include it as the master_style field in your JSON output.
+applied to all scenes. Example: "Documentary worship photography aesthetic. Natural available light, film grain present, colors slightly desaturated and warm, authentic unposed moments, Sony A7III 35mm feel, no artificial enhancements, real and human." Include it as the master_style field in your JSON output.
 
 CONTEXT-AWARE VISUAL PROMPTS:
 For each scene, identify which lyrics lines fall within the scene's time window [start, end] seconds.
@@ -23,7 +22,9 @@ Every visual_prompt must:
 Minimum 3 sentences of description before the technical suffix.
 
 PROMPT BUILDING RULES:
-Every visual_prompt ends with the master_style condensed + "cinematic 16:9, photorealistic, high quality"
+Every visual_prompt ends with the master_style condensed + "documentary photography style, cinematic 16:9"
+Avoid: magical, mystical, ethereal, glowing, bokeh everywhere, HDR, 8K, oversaturated, perfect lighting
+Use: documentary style, natural light, authentic, candid, photojournalism aesthetic
 Describe ONLY what IS in the scene — never describe what is NOT there.
 Never use any of the BANNED WORDS listed below in visual_prompt fields.
 
@@ -31,7 +32,14 @@ BANNED WORDS (never use these in any visual_prompt):
 Catholic, rosary, Madonna, saint, cross with figure, stained glass,
 church interior, religious, icon, Byzantine, papal, crucifix,
 prayer beads, Maria, monastery, monk, nun, cathedral, chapel,
-shrine, altar, candle altar, sacred heart, IHS
+shrine, altar, candle altar, sacred heart, IHS,
+magical, mystical, ethereal, dreamy, fantasy, otherworldly,
+glowing, radiant glow, divine light rays, heavenly glow,
+surreal, cinematic fantasy, epic, majestic,
+bokeh everywhere, heavy bokeh, extreme bokeh,
+oversaturated, vivid colors, vibrant, ultra sharp,
+perfect lighting, studio lighting, professional lighting,
+HDR, ultra-realistic, 8K, ultra HD, hyper-detailed
 
 POSITIVE MOTIFS TO USE:
 - Nature: golden wheat fields, mountain peaks, morning mist, calm lakes, ancient forests
@@ -40,9 +48,11 @@ POSITIVE MOTIFS TO USE:
 - People: silhouette with hands raised toward sky, person walking through field
 - Abstract: golden light rays on dark background, floating particles of light
 
-EXAMPLE PROMPTS (follow this style):
-- "A lone silhouette stands on a vast rocky cliff overlooking an infinite ocean at golden hour, arms raised toward dramatic storm clouds breaking into light. Wide shot, warm amber light from below the horizon, shallow depth of field with the figure sharp against a blurred sky, conveying human smallness before the divine. Warm cinematic grade, golden tones, photorealistic, cinematic 16:9, high quality"
-- "Golden wheat field stretching to the horizon at sunrise, a narrow dirt path leads into the distance. Medium wide shot, soft warm light rakes across the field casting long shadows, morning mist lingers in the background valleys, peaceful and full of hope. Warm cinematic grade, golden tones, photorealistic, cinematic 16:9, high quality"
+EXAMPLE PROMPTS (follow this style — documentary realism, not AI fantasy):
+- "Person sitting alone on wooden dock overlooking misty lake at dawn, back to camera, legs over water, complete stillness. Documentary style, natural morning light, slight mist on water, authentic solitude and trust. Sony A7III 35mm, film grain"
+- "Vast open meadow at golden hour, single figure walking in distance, long grass in wind. Wide establishing shot, natural colors, documentary landscape photography, real weather, no filters"
+- "Rocky mountain path at dusk, dramatic but real clouds, lone figure on path seen from behind. Photojournalism style, available light only, natural shadows"
+- "Outdoor worship gathering at sunset, people with hands raised, wide shot showing community. Documentary photography, warm natural backlight, authentic emotion, no staging"
 
 STYLE RULES:
 - Match visual energy to musical energy (quiet sections = calm visuals, climax = dramatic)

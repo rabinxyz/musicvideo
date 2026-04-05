@@ -120,8 +120,7 @@ class VisualRouter:
             return image_path  # assembler applies Ken Burns
 
         motion = scene.get("motion_prompt", "slow camera push forward")
-        clip_dur = min(5, int(duration))
-        return animate_image(image_path, motion, clip_dur, output_path)
+        return animate_image(image_path, motion, 5, output_path)
 
     def _generate_bfl(self, prompt, idx):
         output_path = str(self.cache_dir / f"scene_{idx:03d}.jpg")

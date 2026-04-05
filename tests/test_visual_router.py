@@ -325,6 +325,30 @@ class TestVisualRouterAnimated:
         assert result == str(cached_video)
 
 
+class TestVisualRouterAnimatedDuration:
+    def test_route_animated_always_sends_duration_5(self, tmp_path):
+        """Runway always receives duration=5, assembler trims to scene length."""
+        from musicvid.pipeline.visual_router import VisualRouter
+        router = VisualRouter(str(tmp_path), provider="flux-pro")
+        scene = {
+            "index": 0,
+            "visual_source": "TYPE_ANIMATED",
+            "visual_prompt": "sunset",
+            "motion_prompt": "slow pan",
+            "start": 0,
+            "end": 3.5,  # 3.5s scene — should still send 5 to Runway
+        }
+        with patch.dict(os.environ, {"RUNWAY_API_KEY": "test-key", "BFL_API_KEY": "test-key"}):
+            with patch.object(router, "_generate_bfl", return_value=str(tmp_path / "img.jpg")):
+                with patch("musicvid.pipeline.visual_router.animate_image") as mock_animate:
+                    mock_animate.return_value = str(tmp_path / "animated_scene_000.mp4")
+                    router.route(scene)
+                    mock_animate.assert_called_once()
+                    call_args = mock_animate.call_args
+                    # duration is the 3rd positional arg (image_path, motion_prompt, duration, output_path)
+                    assert call_args[0][2] == 5
+
+
 class TestVisualRouterDefaultSource:
     @patch.dict(os.environ, {"BFL_API_KEY": "test-key"})
     def test_route_missing_visual_source_defaults_to_type_ai(self, tmp_path):

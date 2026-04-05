@@ -4,7 +4,7 @@
 CLI tool that generates synchronized MP4 music videos from audio files using stock footage, beat-synced cuts, and whisper-based subtitles.
 
 ## Commands
-- `python3 -m pytest tests/ -v` - run all tests (~416 tests)
+- `python3 -m pytest tests/ -v` - run all tests (~431 tests)
 - `python3 -m musicvid.musicvid song.mp3` - run the CLI (uses cache by default)
 - `python3 -m musicvid.musicvid song.mp3 --new` - force recalculation, ignore cache
 - `python3 -c "import musicvid; print(musicvid.__version__)"` - check version
@@ -13,8 +13,8 @@ CLI tool that generates synchronized MP4 music videos from audio files using sto
 4-stage pipeline: audio_analyzer → director → visual_router/stock_fetcher → assembler, orchestrated by Click CLI in `musicvid/musicvid.py`.
 - `--mode ai` (default): Stage 3 uses `VisualRouter` (hybrid per-scene sourcing — Pexels/Unsplash/BFL/Runway), caches to `image_manifest.json`; `--mode stock` uses `stock_fetcher` (Pexels API for all scenes)
 - Hybrid visual sourcing: director outputs `visual_source` (TYPE_VIDEO_STOCK|TYPE_PHOTO_STOCK|TYPE_AI|TYPE_ANIMATED) and `search_query` per scene; `VisualRouter` in `musicvid/pipeline/visual_router.py` dispatches to the correct API; `_validate_scene_plan` defaults `visual_source="TYPE_AI"`, `search_query=""`, `visual_prompt=""`
-- VisualRouter fallback chain: TYPE_VIDEO_STOCK → simplified query (2 words) → BFL (visual_prompt or "nature landscape peaceful"); TYPE_PHOTO_STOCK → Unsplash → Pexels video → BFL; TYPE_ANIMATED no RUNWAY_API_KEY → static image (Ken Burns)
-- VisualRouter `_route_animated` always passes `duration=5` to Runway API — assembler trims to actual scene length via `subclipped()`
+- VisualRouter fallback chain: TYPE_VIDEO_STOCK → simplified query (2 words) → BFL (visual_prompt or "nature landscape peaceful"); TYPE_PHOTO_STOCK → Unsplash → Pexels video → BFL; TYPE_ANIMATED no RUNWAY_API_KEY → static BFL image (Ken Burns); TYPE_ANIMATED Runway failure → static BFL image (Ken Burns)
+- VisualRouter `_route_animated` uses Runway text-to-video (`generate_video_from_text`) — no BFL image step; builds video_prompt from `visual_prompt` + `motion_prompt`; truncates visual_prompt to 400 chars if >500; always passes `duration=5` — assembler trims to actual scene length via `subclipped()`
 - `--animate` with VisualRouter: `never` converts TYPE_ANIMATED→TYPE_AI; `always` converts all→TYPE_ANIMATED + enforce_animation_rules; `auto` keeps director's visual_source + enforce_animation_rules
 - CLI tests for mode=ai must mock `@patch("musicvid.musicvid.VisualRouter")` — `generate_images` and `animate_image` are no longer called directly from `cli()` in ai mode
 - `fetch_manifest` entries in ai mode now include `start`, `end`, `source` keys (in addition to `scene_index`, `video_path`)
@@ -32,7 +32,8 @@ CLI tool that generates synchronized MP4 music videos from audio files using sto
 - Director scene plan: now includes `master_style`, `animate`, `motion_prompt`, `visual_source`, `search_query` per scene; `_validate_scene_plan` defaults all missing fields
 - Director JSON robustness: `max_tokens=8192`; `_strip_markdown(text)` strips ` ``` ` / ` ```json ` fences; on `JSONDecodeError` tries `_repair_truncated_json` (brace counting) then `_repair_truncated_json_aggressive` (stack-based) before retrying Claude with brevity instruction
 - Director scene limits: `_build_user_message` passes `max_scenes` to Claude based on duration (≤3 min→10, 3-5 min→12, >5 min→15); system prompt caps `visual_prompt` at 200 chars
-- Runway animator: `musicvid/pipeline/video_animator.py` — `animate_image(image_path, motion_prompt, duration, output_path)` calls Runway Gen-4; model=`gen4.5`, ratio=`1280:720` (16:9); POLL_INTERVAL=3s, POLL_TIMEOUT=300s; cache check via output_path exists; mock target: `@patch("musicvid.pipeline.video_animator.requests")` + `@patch("musicvid.pipeline.video_animator.time")`; Runway Gen-4 returns `output` as a list of URL strings (not dicts) — `_poll_animation` handles both formats; test helper `_make_poll_response_str` simulates the string-list format
+- Runway animator: `musicvid/pipeline/video_animator.py` — `animate_image(image_path, motion_prompt, duration, output_path)` calls Runway Gen-4 image-to-video; `generate_video_from_text(prompt, duration=5, output_path=None)` calls Runway Gen-4.5 text-to-video (no input image, payload has no `promptImage`); both use model=`gen4.5`, ratio=`1280:720` (16:9), endpoint `/v1/image_to_video`; POLL_INTERVAL=3s, POLL_TIMEOUT=300s; cache check via output_path exists; mock target: `@patch("musicvid.pipeline.video_animator.requests")` + `@patch("musicvid.pipeline.video_animator.time")`; Runway Gen-4 returns `output` as a list of URL strings (not dicts) — `_poll_animation` handles both formats; test helper `_make_poll_response_str` simulates the string-list format
+- Runway text-to-video tests in `test_visual_router.py`: mock `@patch("musicvid.pipeline.visual_router.generate_video_from_text")` — the old `animate_image` mock is no longer needed for TYPE_ANIMATED tests
 - Runway animation error tests: use `requests.exceptions.HTTPError` with `.response` mock (`status_code`, `text`) to test the Runway error detail output — these are in `test_visual_router.py` now, not `test_cli.py`
 - CLI tests for `--animate` must mock `@patch("musicvid.musicvid.VisualRouter")` — animation is handled inside VisualRouter._route_animated(), not in cli() directly
 - Assembler `_load_scene_clip`: skips Ken Burns for scenes with `animate=True` and `.mp4` suffix — just resizes to target_size

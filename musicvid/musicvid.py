@@ -3,6 +3,8 @@
 import hashlib
 import os
 import shutil
+from dataclasses import dataclass, field
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
 import click
@@ -108,6 +110,33 @@ def _filter_manifest_to_clip(manifest, scenes, clip_start, clip_end):
             new_idx += 1
 
     return filtered
+
+
+@dataclass
+class AssemblyJob:
+    name: str          # e.g. "youtube", "rolka_A_15s"
+    kwargs: dict = field(default_factory=dict)
+
+
+def assemble_all_parallel(jobs, max_workers=4):
+    """Run multiple assemble_video calls in parallel.
+
+    Returns list of output_path strings for successful jobs.
+    A failing job is logged but does not abort remaining jobs.
+    """
+    results = []
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        futures = {executor.submit(assemble_video, **job.kwargs): job for job in jobs}
+        for future in as_completed(futures):
+            job = futures[future]
+            try:
+                future.result()
+                output_path = job.kwargs["output_path"]
+                results.append(output_path)
+                click.echo(f"  \u2705 Gotowe: {job.name}")
+            except Exception as exc:
+                click.echo(f"  \u274c B\u0142\u0105d: {job.name} \u2014 {exc}")
+    return results
 
 
 def _snap_to_nearest_beat(t, beats):

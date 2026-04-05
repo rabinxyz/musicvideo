@@ -2,6 +2,7 @@
 
 import json
 import os
+import unittest
 from unittest.mock import patch, MagicMock
 from pathlib import Path
 
@@ -2510,3 +2511,56 @@ class TestLogoWithPreset:
         assert abs(passed_scene_plan["scenes"][0]["end"] - 1.5) < 0.01
         # Scene 1 starts at 1.3 → snaps to nearest beat (1.5)
         assert abs(passed_scene_plan["scenes"][1]["start"] - 1.5) < 0.01
+
+
+class TestParallelAssembly(unittest.TestCase):
+    """Tests for assemble_all_parallel helper."""
+
+    def _make_job(self, name, output_path="/tmp/out.mp4"):
+        from musicvid.musicvid import AssemblyJob
+        return AssemblyJob(
+            name=name,
+            kwargs={"output_path": output_path, "audio_path": "/tmp/audio.mp3"},
+        )
+
+    @patch("musicvid.musicvid.assemble_video")
+    def test_parallel_calls_all_jobs(self, mock_av):
+        from musicvid.musicvid import assemble_all_parallel
+        jobs = [self._make_job(f"job{i}") for i in range(3)]
+        results = assemble_all_parallel(jobs)
+        self.assertEqual(mock_av.call_count, 3)
+        self.assertEqual(len(results), 3)
+
+    @patch("musicvid.musicvid.assemble_video")
+    def test_parallel_runs_concurrently(self, mock_av):
+        import threading
+        from musicvid.musicvid import assemble_all_parallel
+        barrier = threading.Barrier(3, timeout=5)
+        def side_effect(**kwargs):
+            barrier.wait()
+        mock_av.side_effect = side_effect
+        jobs = [self._make_job(f"job{i}") for i in range(3)]
+        assemble_all_parallel(jobs)
+
+    @patch("musicvid.musicvid.assemble_video")
+    def test_one_failure_does_not_stop_others(self, mock_av):
+        from musicvid.musicvid import assemble_all_parallel
+        def side_effect(**kwargs):
+            if kwargs.get("output_path") == "/tmp/fail.mp4":
+                raise RuntimeError("boom")
+        mock_av.side_effect = side_effect
+        jobs = [
+            self._make_job("good1", "/tmp/good1.mp4"),
+            self._make_job("fail",  "/tmp/fail.mp4"),
+            self._make_job("good2", "/tmp/good2.mp4"),
+        ]
+        results = assemble_all_parallel(jobs)
+        self.assertEqual(len(results), 2)
+
+    @patch("musicvid.musicvid.assemble_video")
+    def test_results_contain_output_paths(self, mock_av):
+        from musicvid.musicvid import assemble_all_parallel
+        jobs = [self._make_job("j1", "/tmp/a.mp4"), self._make_job("j2", "/tmp/b.mp4")]
+        results = assemble_all_parallel(jobs)
+        self.assertIn("/tmp/a.mp4", results)
+        self.assertIn("/tmp/b.mp4", results)

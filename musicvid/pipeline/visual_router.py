@@ -6,7 +6,7 @@ from pathlib import Path
 
 from musicvid.pipeline.stock_fetcher import fetch_video_by_query
 from musicvid.pipeline.image_generator import generate_single_image
-from musicvid.pipeline.video_animator import animate_image
+from musicvid.pipeline.video_animator import animate_image, generate_video_from_text
 
 
 class VisualRouter:
@@ -110,17 +110,22 @@ class VisualRouter:
         if Path(output_path).exists():
             return output_path
 
-        image_path = self._generate_bfl(scene.get("visual_prompt", "nature landscape"), idx)
-        if image_path is None:
-            return None
-
         runway_key = os.environ.get("RUNWAY_API_KEY", "")
         if not runway_key:
             print(f"  Fallback: scene {idx} TYPE_ANIMATED → TYPE_AI (no RUNWAY_API_KEY)")
-            return image_path  # assembler applies Ken Burns
+            return self._generate_bfl(scene.get("visual_prompt", "nature landscape"), idx)
 
+        visual = scene.get("visual_prompt", "")
         motion = scene.get("motion_prompt", "slow camera push forward")
-        return animate_image(image_path, motion, 5, output_path)
+        if len(visual) > 400:
+            visual = visual[:400]
+        video_prompt = f"{visual} {motion}".strip()
+
+        try:
+            return generate_video_from_text(video_prompt, duration=5, output_path=output_path)
+        except Exception as exc:
+            print(f"  WARN: Runway text-to-video failed for scene {idx} — fallback TYPE_AI ({exc})")
+            return self._generate_bfl(scene.get("visual_prompt", "nature landscape"), idx)
 
     def _generate_bfl(self, prompt, idx):
         output_path = str(self.cache_dir / f"scene_{idx:03d}.jpg")

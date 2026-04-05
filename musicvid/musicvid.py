@@ -284,7 +284,54 @@ def get_section_priority(section: str) -> int:
 
 
 def enforce_animation_rules(scenes: list) -> list:
-    """Placeholder — full implementation in next task."""
+    """Enforce animation placement rules on director's scene plan.
+
+    Rules applied in order:
+    1. Disable short scenes (< 6s) — Runway minimum
+    2. Disable outro scenes — should always be calm
+    3. Fix adjacency — no two animated scenes side by side (lower priority loses)
+    4. Enforce max 25% animated (max(1, total//4)), keeping highest priority
+    5. Print animation plan summary
+    """
+    # Rule 1: short scenes and outro
+    for scene in scenes:
+        if scene.get("animate"):
+            duration = scene["end"] - scene["start"]
+            if duration < 6.0:
+                scene["animate"] = False
+                print(
+                    f"WARN: Scena {scene['section']} za krótka"
+                    f" ({duration:.1f}s) — Ken Burns fallback"
+                )
+            elif scene["section"] == "outro":
+                scene["animate"] = False
+
+    # Rule 2: adjacency — iterate forward, disable lower-priority neighbour
+    for i in range(len(scenes) - 1):
+        if scenes[i].get("animate") and scenes[i + 1].get("animate"):
+            p_i = get_section_priority(scenes[i]["section"])
+            p_next = get_section_priority(scenes[i + 1]["section"])
+            if p_i >= p_next:
+                scenes[i + 1]["animate"] = False
+            else:
+                scenes[i]["animate"] = False
+
+    # Rule 3: max animated = max(1, total // 4)
+    animated_indices = [i for i, s in enumerate(scenes) if s.get("animate")]
+    max_animated = max(2, len(scenes) // 4)
+    if len(animated_indices) > max_animated:
+        # Sort by priority descending, keep top max_animated
+        animated_indices.sort(key=lambda i: get_section_priority(scenes[i]["section"]), reverse=True)
+        for idx in animated_indices[max_animated:]:
+            scenes[idx]["animate"] = False
+
+    # Rule 4: print summary
+    animated = [i for i, s in enumerate(scenes) if s.get("animate")]
+    print(f"Plan animacji Runway: {len(animated)} scen z {len(scenes)}")
+    for i in animated:
+        s = scenes[i]
+        print(f"  Scena {i}: {s['section']} @ {s['start']:.1f}-{s['end']:.1f}s")
+
     return scenes
 
 

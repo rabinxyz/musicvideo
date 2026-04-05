@@ -193,8 +193,10 @@ def _create_subtitle_clips(lyrics, subtitle_style, size, font_path=None, subtitl
             else:
                 continue
 
-        txt_clip = txt_clip.with_duration(duration)
-        txt_clip = txt_clip.with_start(segment["start"])
+        offset_start = max(0.0, segment["start"] - 0.1)
+        offset_duration = duration + (segment["start"] - offset_start)
+        txt_clip = txt_clip.with_duration(offset_duration)
+        txt_clip = txt_clip.with_start(offset_start)
         txt_clip = txt_clip.with_position(("center", y_pos))
 
         fade_duration = min(0.3, duration / 3)

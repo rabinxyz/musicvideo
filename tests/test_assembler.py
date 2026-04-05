@@ -80,6 +80,27 @@ class TestCreateSubtitleClips:
         call_kwargs = mock_text_clip.call_args[1]
         assert call_kwargs["font"] == "/custom/font.ttf"
 
+    @patch("musicvid.pipeline.assembler.vfx")
+    @patch("musicvid.pipeline.assembler.TextClip")
+    def test_subtitle_predisplay_offset(self, mock_text_clip, mock_vfx):
+        """Subtitle clips start 0.1s before segment start, duration extended."""
+        mock_clip = MagicMock()
+        mock_clip.with_duration.return_value = mock_clip
+        mock_clip.with_start.return_value = mock_clip
+        mock_clip.with_position.return_value = mock_clip
+        mock_clip.with_effects.return_value = mock_clip
+        mock_text_clip.return_value = mock_clip
+
+        lyrics = [{"start": 5.0, "end": 6.5, "text": "Hello"}]
+        subtitle_style = {"font_size": 48, "color": "#FFFFFF", "outline_color": "#000000"}
+
+        _create_subtitle_clips(lyrics, subtitle_style, (1920, 1080))
+
+        # Should start 0.1s earlier: 5.0 - 0.1 = 4.9
+        mock_clip.with_start.assert_called_once_with(4.9)
+        # Duration: 1.5 + 0.1 = 1.6s
+        mock_clip.with_duration.assert_called_once_with(pytest.approx(1.6, abs=0.001))
+
 
 class TestAssembleVideo:
     """Tests for the main assemble_video function."""

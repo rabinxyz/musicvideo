@@ -19,15 +19,29 @@ def _load_system_prompt():
 def _build_user_message(analysis, style_override=None):
     """Build the user message for Claude with analysis data."""
     duration = analysis.get("duration", 0)
-    if duration > 300:  # over 5 minutes
-        max_scenes = 15
-    elif duration > 180:  # 3-5 minutes
-        max_scenes = 12
-    else:  # under 3 minutes
-        max_scenes = 10
+    bpm = analysis.get("bpm", 120.0)
+    beats = analysis.get("beats", [])
+
+    bar_duration = 4 * (60.0 / bpm)
+    suggested_scene_count = max(4, int(duration / (bar_duration * 4)))
+
+    # Downbeats: every 4th beat starting from index 0
+    downbeats = beats[::4] if beats else []
+    downbeats_preview = [round(d, 2) for d in downbeats[:20]]
 
     msg = f"Here is the audio analysis for the music video:\n\n{json.dumps(analysis, indent=2)}"
-    msg += f"\n\nGenerate a maximum of {max_scenes} scenes."
+    msg += f"\n\nBPM: {bpm:.0f}"
+    msg += f"\nBar duration (4 beats): {bar_duration:.2f}s"
+    msg += f"\nOptimal scene duration (4 bars): {bar_duration * 4:.2f}s"
+    msg += f"\nSuggested scene count for this song: {suggested_scene_count}"
+    msg += f"\nDownbeats (every 4th beat, first 20): {downbeats_preview}"
+    msg += f"\n\nSCENE LENGTH RULES:"
+    msg += f"\n- Minimum scene: 2 bars = {bar_duration * 2:.2f}s"
+    msg += f"\n- Optimal scene: 4 bars = {bar_duration * 4:.2f}s"
+    msg += f"\n- Maximum scene: 8 bars = {bar_duration * 8:.2f}s"
+    msg += f"\n- Target: {suggested_scene_count} scenes of ~{bar_duration * 4:.1f}s each"
+    msg += f"\n- Each scene start/end should align with a downbeat from the list above"
+    msg += f"\n\nGenerate approximately {suggested_scene_count} scenes (maximum {suggested_scene_count + 4})."
     if style_override and style_override != "auto":
         msg += f"\n\nIMPORTANT: Override the style to be '{style_override}' regardless of the mood detected in the audio."
     return msg
@@ -65,12 +79,14 @@ def _validate_scene_plan(plan, duration):
     if "master_style" not in plan:
         plan["master_style"] = ""
 
-    # Default animate/motion_prompt fields if Claude omitted them
+    # Default animate/motion_prompt/lyrics_in_scene fields if Claude omitted them
     for scene in plan["scenes"]:
         if "animate" not in scene:
             scene["animate"] = False
         if "motion_prompt" not in scene:
             scene["motion_prompt"] = ""
+        if "lyrics_in_scene" not in scene:
+            scene["lyrics_in_scene"] = []
 
     plan["scenes"].sort(key=lambda s: s["start"])
     plan["scenes"][0]["start"] = 0.0

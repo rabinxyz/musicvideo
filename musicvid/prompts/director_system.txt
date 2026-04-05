@@ -11,6 +11,7 @@ haze, photorealistic photography style." Include it as the master_style field in
 
 CONTEXT-AWARE VISUAL PROMPTS:
 For each scene, identify which lyrics lines fall within the scene's time window [start, end] seconds.
+You MUST populate "lyrics_in_scene" with the exact lyrics text from this window before writing visual_prompt.
 The visual_prompt MUST directly reference the metaphor, image, or emotion from those lyrics.
 
 Every visual_prompt must:
@@ -75,6 +76,7 @@ OUTPUT FORMAT (pure JSON):
       "section": "intro|verse|chorus|bridge|outro",
       "start": 0.0,
       "end": 15.0,
+      "lyrics_in_scene": ["lyrics line 1 that appears in this scene", "lyrics line 2"],
       "visual_prompt": "Detailed positive description following the rules above (min 3 sentences + technical suffix)",
       "motion": "slow_zoom_in|slow_zoom_out|pan_left|pan_right|static",
       "transition": "crossfade|cut|fade_black",

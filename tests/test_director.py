@@ -5,7 +5,11 @@ from unittest.mock import patch, MagicMock
 
 import pytest
 
-from musicvid.pipeline.director import create_scene_plan
+from musicvid.pipeline.director import (
+    create_scene_plan,
+    _build_user_message,
+    _validate_scene_plan,
+)
 
 
 class TestCreateScenePlan:
@@ -322,33 +326,36 @@ class TestCreateScenePlan:
 
     @patch("musicvid.pipeline.director.anthropic")
     def test_scene_limit_short_song(self, mock_anthropic, sample_analysis):
-        """Songs under 3 minutes: limit 10 scenes in prompt."""
-        short_analysis = dict(sample_analysis, duration=150.0)  # 2.5 min
+        """Songs under 3 minutes: BPM-based suggested count in prompt (120 BPM, 150s → 18 scenes)."""
+        short_analysis = dict(sample_analysis, duration=150.0)  # 2.5 min, 120 BPM → bar=2s, suggested=18
         mock_client = self._make_mock_client(mock_anthropic, self._base_plan())
         create_scene_plan(short_analysis)
         call_kwargs = mock_client.messages.create.call_args[1]
         user_msg = call_kwargs["messages"][0]["content"]
-        assert "10 scenes" in user_msg
+        assert "Suggested scene count" in user_msg
+        assert "18" in user_msg
 
     @patch("musicvid.pipeline.director.anthropic")
     def test_scene_limit_medium_song(self, mock_anthropic, sample_analysis):
-        """Songs 3-5 minutes: limit 12 scenes in prompt."""
-        medium_analysis = dict(sample_analysis, duration=240.0)  # 4 min
+        """Songs 3-5 minutes: BPM-based suggested count in prompt (120 BPM, 240s → 30 scenes)."""
+        medium_analysis = dict(sample_analysis, duration=240.0)  # 4 min, 120 BPM → bar=2s, suggested=30
         mock_client = self._make_mock_client(mock_anthropic, self._base_plan())
         create_scene_plan(medium_analysis)
         call_kwargs = mock_client.messages.create.call_args[1]
         user_msg = call_kwargs["messages"][0]["content"]
-        assert "12 scenes" in user_msg
+        assert "Suggested scene count" in user_msg
+        assert "30" in user_msg
 
     @patch("musicvid.pipeline.director.anthropic")
     def test_scene_limit_long_song(self, mock_anthropic, sample_analysis):
-        """Songs over 5 minutes: limit 15 scenes in prompt."""
-        long_analysis = dict(sample_analysis, duration=360.0)  # 6 min
+        """Songs over 5 minutes: BPM-based suggested count in prompt (120 BPM, 360s → 45 scenes)."""
+        long_analysis = dict(sample_analysis, duration=360.0)  # 6 min, 120 BPM → bar=2s, suggested=45
         mock_client = self._make_mock_client(mock_anthropic, self._base_plan())
         create_scene_plan(long_analysis)
         call_kwargs = mock_client.messages.create.call_args[1]
         user_msg = call_kwargs["messages"][0]["content"]
-        assert "15 scenes" in user_msg
+        assert "Suggested scene count" in user_msg
+        assert "45" in user_msg
 
     @patch("musicvid.pipeline.director.anthropic")
     def test_retries_when_json_unreparable(self, mock_anthropic, sample_analysis):
@@ -376,3 +383,51 @@ class TestCreateScenePlan:
         prompt = _load_system_prompt()
         assert "200 char" in prompt
         assert "visual_prompt" in prompt
+
+
+def test_build_user_message_includes_bpm_guidance():
+    """User message contains BPM, bar_duration, and suggested scene count."""
+    analysis = {
+        "duration": 240.0,
+        "bpm": 84.0,
+        "beats": [i * (60.0 / 84.0) for i in range(200)],
+        "lyrics": [],
+        "sections": [],
+        "mood_energy": "medium",
+    }
+    msg = _build_user_message(analysis)
+
+    assert "BPM: 84" in msg
+    assert "Bar duration" in msg
+    assert "Suggested scene count" in msg
+
+
+def test_build_user_message_scene_count_based_on_bpm():
+    """Suggested scene count is derived from BPM and duration."""
+    # 180s song at 120 BPM: bar = 2s, suggested = int(180/(2*4)) = 22
+    analysis = {
+        "duration": 180.0,
+        "bpm": 120.0,
+        "beats": [i * 0.5 for i in range(360)],
+        "lyrics": [],
+        "sections": [],
+        "mood_energy": "high",
+    }
+    msg = _build_user_message(analysis)
+    # suggested_scene_count = max(4, int(180 / (2.0 * 4))) = 22
+    assert "22" in msg
+
+
+def test_validate_scene_plan_defaults_lyrics_in_scene():
+    """_validate_scene_plan adds lyrics_in_scene=[] when field is absent."""
+    plan = {
+        "overall_style": "worship",
+        "master_style": "",
+        "color_palette": [],
+        "subtitle_style": {},
+        "scenes": [
+            {"start": 0.0, "end": 10.0, "visual_prompt": "test", "animate": False, "motion_prompt": ""},
+        ],
+    }
+    validated = _validate_scene_plan(plan, 10.0)
+    assert validated["scenes"][0]["lyrics_in_scene"] == []

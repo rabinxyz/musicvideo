@@ -150,3 +150,26 @@ class TestSectionFontSizes:
 
         call_kwargs = mock_text_clip.call_args[1]
         assert call_kwargs["font_size"] == 48
+
+
+from musicvid.musicvid import _snap_to_downbeat
+
+
+class TestSnapToDownbeat:
+    def test_returns_nearest_downbeat_within_window(self):
+        # |44.3-44.0|=0.3, |44.3-44.7|=0.4 — both within 0.8, 44.0 is closer
+        result = _snap_to_downbeat(44.3, [44.0, 44.7], window=0.8)
+        assert result == 44.0
+
+    def test_returns_t_when_all_outside_window(self):
+        # |10.0-8.0|=2.0 > 0.8, |10.0-13.0|=3.0 > 0.8 — both outside window
+        result = _snap_to_downbeat(10.0, [8.0, 13.0], window=0.8)
+        assert result == 10.0
+
+    def test_returns_exact_match(self):
+        result = _snap_to_downbeat(5.0, [4.0, 5.0, 6.0], window=0.8)
+        assert result == 5.0
+
+    def test_empty_downbeats_returns_t(self):
+        result = _snap_to_downbeat(10.0, [], window=0.8)
+        assert result == 10.0

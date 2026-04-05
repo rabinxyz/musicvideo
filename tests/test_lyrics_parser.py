@@ -80,3 +80,104 @@ class TestVariantB:
         result = parse(str(lyrics_file), 800.0)
         assert result[0]["start"] == 0.0
         assert result[1]["start"] == 750.0
+
+
+from musicvid.pipeline.lyrics_parser import merge_whisper_with_lyrics_file
+
+
+class TestMergeWhisperWithLyricsFile:
+    """Tests for deterministic Whisper+lyrics alignment."""
+
+    def _make_segments(self, count, start=0.0, duration=2.0):
+        """Create N evenly-spaced whisper segments."""
+        return [
+            {"start": start + i * duration, "end": start + i * duration + duration - 0.2, "text": f"seg{i}"}
+            for i in range(count)
+        ]
+
+    def _make_lines(self, count):
+        return [f"Line {i+1}" for i in range(count)]
+
+    def test_equal_segments_and_lines_maps_one_to_one(self):
+        segments = self._make_segments(8)
+        lines = self._make_lines(8)
+        result = merge_whisper_with_lyrics_file(segments, lines, 20.0)
+        assert len(result) == 8
+        assert result[3]["text"] == "Line 4"
+        assert result[3]["start"] == pytest.approx(segments[3]["start"] - 0.05, abs=0.01)
+
+    def test_more_segments_than_lines_groups_proportionally(self):
+        segments = self._make_segments(12)
+        lines = self._make_lines(6)
+        result = merge_whisper_with_lyrics_file(segments, lines, 30.0)
+        assert len(result) == 6
+        assert result[0]["start"] == pytest.approx(segments[0]["start"] - 0.05, abs=0.01)
+        assert result[5]["end"] == pytest.approx(segments[11]["end"], abs=0.01)
+        for item in result:
+            assert item["text"] in lines
+
+    def test_fewer_segments_than_lines_splits_time(self):
+        segments = self._make_segments(4, duration=3.0)
+        lines = self._make_lines(12)
+        result = merge_whisper_with_lyrics_file(segments, lines, 12.0)
+        assert len(result) == 12
+        for item in result:
+            assert item["start"] >= 0.0
+            assert item["end"] > item["start"]
+
+    def test_no_overlap_between_subtitles(self):
+        segments = [
+            {"start": 0.0, "end": 5.0, "text": "seg0"},
+            {"start": 5.0, "end": 10.0, "text": "seg1"},
+        ]
+        lines = ["Line one", "Line two"]
+        result = merge_whisper_with_lyrics_file(segments, lines, 10.0)
+        for i in range(len(result) - 1):
+            gap = result[i+1]["start"] - result[i]["end"]
+            assert gap >= 0.15 - 0.001
+
+    def test_minimum_subtitle_duration(self):
+        segments = [{"start": 0.0, "end": 0.3, "text": "short"}]
+        lines = ["Short line"]
+        result = merge_whisper_with_lyrics_file(segments, lines, 10.0)
+        assert result[0]["end"] - result[0]["start"] >= 0.8
+
+    def test_maximum_subtitle_duration(self):
+        segments = [{"start": 0.0, "end": 20.0, "text": "very long"}]
+        lines = ["Long line"]
+        result = merge_whisper_with_lyrics_file(segments, lines, 25.0)
+        assert result[0]["end"] - result[0]["start"] <= 8.0
+
+    def test_empty_lines_raises_value_error(self):
+        segments = [{"start": 0.0, "end": 2.0, "text": "seg"}]
+        with pytest.raises(ValueError, match="empty"):
+            merge_whisper_with_lyrics_file(segments, [], 10.0)
+
+    def test_empty_whisper_segments_filtered_before_matching(self):
+        segments = [
+            {"start": 0.0, "end": 1.0, "text": "  "},
+            {"start": 1.0, "end": 3.0, "text": "real"},
+        ]
+        lines = ["Correct line"]
+        result = merge_whisper_with_lyrics_file(segments, lines, 5.0)
+        assert len(result) == 1
+        assert result[0]["text"] == "Correct line"
+
+    def test_result_sorted_chronologically(self):
+        segments = self._make_segments(4)
+        lines = self._make_lines(4)
+        result = merge_whisper_with_lyrics_file(segments, lines, 10.0)
+        starts = [r["start"] for r in result]
+        assert starts == sorted(starts)
+
+    def test_pre_display_offset_applied(self):
+        segments = [{"start": 1.0, "end": 3.0, "text": "seg"}]
+        lines = ["Line"]
+        result = merge_whisper_with_lyrics_file(segments, lines, 5.0)
+        assert result[0]["start"] == pytest.approx(0.95, abs=0.01)
+
+    def test_pre_display_offset_clamped_to_zero(self):
+        segments = [{"start": 0.03, "end": 2.0, "text": "seg"}]
+        lines = ["Line"]
+        result = merge_whisper_with_lyrics_file(segments, lines, 5.0)
+        assert result[0]["start"] >= 0.0

@@ -156,3 +156,102 @@ def align_with_claude(whisper_segments, file_lines):
         return result
 
     raise ValueError(f"Failed to parse Claude alignment response after 2 attempts: {last_error}")
+
+
+def merge_whisper_with_lyrics_file(whisper_segments, lyrics_lines, audio_duration):
+    """Deterministically align lyrics file lines to Whisper timing.
+
+    Uses proportional grouping: maps N Whisper segments to M lyrics lines
+    handling N==M, N>M, and N<M cases. Timing corrections applied after.
+
+    Args:
+        whisper_segments: list of dicts with start/end/text from Whisper.
+        lyrics_lines: list of non-empty lyrics strings from the .txt file.
+        audio_duration: total audio duration in seconds.
+
+    Returns:
+        list[dict] with keys: start (float), end (float), text (str),
+        sorted chronologically.
+
+    Raises:
+        ValueError: If lyrics_lines is empty.
+    """
+    if not lyrics_lines:
+        raise ValueError("lyrics_lines is empty — no lines to align")
+
+    # Filter empty Whisper segments
+    segments = [s for s in whisper_segments if s["text"].strip()]
+
+    if not segments:
+        count = len(lyrics_lines)
+        seg_dur = audio_duration / count
+        result = [
+            {"start": i * seg_dur, "end": (i + 1) * seg_dur, "text": lyrics_lines[i]}
+            for i in range(count)
+        ]
+        return _apply_timing_corrections(result, audio_duration)
+
+    n_seg = len(segments)
+    n_lines = len(lyrics_lines)
+
+    if n_seg == n_lines:
+        result = [
+            {"start": segments[i]["start"], "end": segments[i]["end"], "text": lyrics_lines[i]}
+            for i in range(n_lines)
+        ]
+    elif n_seg > n_lines:
+        segments_per_line = n_seg / n_lines
+        result = []
+        for i, line in enumerate(lyrics_lines):
+            seg_start_idx = round(i * segments_per_line)
+            seg_end_idx = min(round((i + 1) * segments_per_line), n_seg)
+            group = segments[seg_start_idx:seg_end_idx]
+            if not group:
+                continue
+            result.append({"start": group[0]["start"], "end": group[-1]["end"], "text": line})
+    else:
+        lines_per_seg = n_lines / n_seg
+        result = []
+        for i, seg in enumerate(segments):
+            line_start_idx = round(i * lines_per_seg)
+            line_end_idx = min(round((i + 1) * lines_per_seg), n_lines)
+            group_lines = lyrics_lines[line_start_idx:line_end_idx]
+            if not group_lines:
+                continue
+            seg_duration = seg["end"] - seg["start"]
+            time_per_line = seg_duration / len(group_lines)
+            for j, line in enumerate(group_lines):
+                result.append({
+                    "start": seg["start"] + j * time_per_line,
+                    "end": seg["start"] + (j + 1) * time_per_line,
+                    "text": line,
+                })
+
+    return _apply_timing_corrections(result, audio_duration)
+
+
+def _apply_timing_corrections(result, audio_duration):
+    """Apply timing corrections to aligned subtitle list."""
+    # 1. Apply pre-display offset first (shift start back 0.05s), clamp to 0
+    for item in result:
+        item["start"] = max(0.0, item["start"] - 0.05)
+
+    # 3. Enforce min/max duration
+    for item in result:
+        duration = item["end"] - item["start"]
+        if duration < 0.8:
+            item["end"] = item["start"] + 0.8
+        elif duration > 8.0:
+            item["end"] = item["start"] + 8.0
+
+    # 4. Enforce minimum gap between subtitles (after offset is applied)
+    for i in range(len(result) - 1):
+        if result[i]["end"] > result[i + 1]["start"] - 0.15:
+            result[i]["end"] = result[i + 1]["start"] - 0.15
+
+    # 5. Clamp ends to audio duration
+    for item in result:
+        item["end"] = min(item["end"], audio_duration)
+
+    result.sort(key=lambda x: x["start"])
+    return result

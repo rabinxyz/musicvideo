@@ -48,6 +48,28 @@ def apply_film_grain(clip):
     return clip.transform(_grain)
 
 
+def apply_subtle_film_look(clip):
+    """Apply subtle film look: -8% saturation desaturation + very subtle grain (sigma=4, opacity=0.08).
+
+    Uses luminance-weighted desaturation (pure numpy, no cv2 required).
+    """
+    def _film_look(get_frame, t):
+        frame = get_frame(t).astype(np.float32)
+        # Luminance channel for desaturation blend
+        gray = (
+            0.299 * frame[:, :, 0]
+            + 0.587 * frame[:, :, 1]
+            + 0.114 * frame[:, :, 2]
+        )[:, :, np.newaxis]
+        # -8% saturation: blend 92% original + 8% gray
+        result = 0.92 * frame + 0.08 * gray
+        # Very subtle grain: sigma=4, opacity=0.08
+        noise = np.random.normal(0, 4, frame.shape).astype(np.float32)
+        result = result + noise * 0.08
+        return np.clip(result, 0, 255).astype(np.uint8)
+    return clip.transform(_film_look)
+
+
 def create_light_leak(duration, size):
     """Create an animated light leak overlay for a scene.
 
@@ -94,6 +116,7 @@ def apply_effects(clip, level="minimal"):
 
     clip = apply_warm_grade(clip)
     clip = apply_vignette(clip)
+    clip = apply_subtle_film_look(clip)
 
     if level == "full":
         clip = apply_film_grain(clip)

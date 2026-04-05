@@ -10,6 +10,7 @@ from musicvid.pipeline.effects import create_cinematic_bars
 from musicvid.pipeline.effects import apply_film_grain
 from musicvid.pipeline.effects import create_light_leak
 from musicvid.pipeline.effects import apply_effects
+from musicvid.pipeline.effects import apply_subtle_film_look
 
 
 class TestApplyWarmGrade:
@@ -195,33 +196,39 @@ class TestApplyEffects:
         assert result is mock_clip
         mock_clip.transform.assert_not_called()
 
+    @patch("musicvid.pipeline.effects.apply_subtle_film_look")
     @patch("musicvid.pipeline.effects.apply_vignette")
     @patch("musicvid.pipeline.effects.apply_warm_grade")
-    def test_minimal_applies_warm_and_vignette(self, mock_warm, mock_vignette):
-        """Level 'minimal' should apply warm grade and vignette."""
+    def test_minimal_applies_warm_and_vignette(self, mock_warm, mock_vignette, mock_film):
+        """Level 'minimal' should apply warm grade, vignette, and subtle film look."""
         mock_clip = MagicMock()
         mock_warm.return_value = mock_clip
         mock_vignette.return_value = mock_clip
+        mock_film.return_value = mock_clip
 
         apply_effects(mock_clip, level="minimal")
 
         mock_warm.assert_called_once_with(mock_clip)
         mock_vignette.assert_called_once()
+        mock_film.assert_called_once()
 
     @patch("musicvid.pipeline.effects.apply_film_grain")
+    @patch("musicvid.pipeline.effects.apply_subtle_film_look")
     @patch("musicvid.pipeline.effects.apply_vignette")
     @patch("musicvid.pipeline.effects.apply_warm_grade")
-    def test_full_applies_all_frame_effects(self, mock_warm, mock_vignette, mock_grain):
-        """Level 'full' should apply warm grade, vignette, and film grain."""
+    def test_full_applies_all_frame_effects(self, mock_warm, mock_vignette, mock_film, mock_grain):
+        """Level 'full' should apply warm grade, vignette, subtle film look, and film grain."""
         mock_clip = MagicMock()
         mock_warm.return_value = mock_clip
         mock_vignette.return_value = mock_clip
+        mock_film.return_value = mock_clip
         mock_grain.return_value = mock_clip
 
         apply_effects(mock_clip, level="full")
 
         mock_warm.assert_called_once()
         mock_vignette.assert_called_once()
+        mock_film.assert_called_once()
         mock_grain.assert_called_once()
 
     def test_default_level_is_minimal(self):
@@ -230,6 +237,118 @@ class TestApplyEffects:
         mock_clip.transform.return_value = mock_clip
 
         with patch("musicvid.pipeline.effects.apply_warm_grade", return_value=mock_clip) as mock_warm, \
-             patch("musicvid.pipeline.effects.apply_vignette", return_value=mock_clip):
+             patch("musicvid.pipeline.effects.apply_vignette", return_value=mock_clip), \
+             patch("musicvid.pipeline.effects.apply_subtle_film_look", return_value=mock_clip):
             apply_effects(mock_clip)
             mock_warm.assert_called_once()
+
+
+class TestApplySubtleFilmLook:
+    """Tests for subtle film look (desaturation + grain)."""
+
+    def test_reduces_saturation(self):
+        """Output should have lower saturation than fully saturated input."""
+        # Create a purely red frame (max saturation)
+        frame = np.zeros((100, 100, 3), dtype=np.uint8)
+        frame[:, :, 0] = 200  # R
+        frame[:, :, 1] = 50   # G
+        frame[:, :, 2] = 50   # B
+
+        mock_clip = MagicMock()
+        mock_clip.transform.return_value = mock_clip
+
+        apply_subtle_film_look(mock_clip)
+
+        transform_fn = mock_clip.transform.call_args[0][0]
+        get_frame = lambda t: frame.copy()
+
+        np.random.seed(42)
+        output = transform_fn(get_frame, 0)
+
+        # Saturation = chroma / max. After desaturation, R-G gap should shrink
+        orig_chroma = int(frame[0, 0, 0]) - int(frame[0, 0, 1])  # 150
+        out_chroma = int(output[0, 0, 0]) - int(output[0, 0, 1])
+        assert out_chroma < orig_chroma, (
+            f"Output chroma {out_chroma} should be less than input chroma {orig_chroma}"
+        )
+
+    def test_desaturation_is_subtle(self):
+        """Only ~8% saturation reduction — channels should stay close to original."""
+        frame = np.full((100, 100, 3), 128, dtype=np.uint8)
+        frame[:, :, 0] = 200  # skew red channel
+
+        mock_clip = MagicMock()
+        mock_clip.transform.return_value = mock_clip
+
+        apply_subtle_film_look(mock_clip)
+
+        transform_fn = mock_clip.transform.call_args[0][0]
+        get_frame = lambda t: frame.copy()
+
+        np.random.seed(42)
+        output = transform_fn(get_frame, 0)
+
+        # Mean pixel value should be close to original (within 15 per channel)
+        diff = np.abs(output.astype(int) - frame.astype(int))
+        assert diff.mean() < 15, f"Film look too aggressive: mean diff {diff.mean()}"
+
+    def test_returns_clip(self):
+        """apply_subtle_film_look returns a clip (result of clip.transform)."""
+        mock_clip = MagicMock()
+        mock_clip.transform.return_value = mock_clip
+
+        result = apply_subtle_film_look(mock_clip)
+
+        assert result is mock_clip
+        mock_clip.transform.assert_called_once()
+
+
+class TestApplyEffectsWithFilmLook:
+    """Tests that apply_effects includes subtle_film_look for minimal and full."""
+
+    @patch("musicvid.pipeline.effects.apply_subtle_film_look")
+    @patch("musicvid.pipeline.effects.apply_vignette")
+    @patch("musicvid.pipeline.effects.apply_warm_grade")
+    def test_minimal_applies_film_look(self, mock_warm, mock_vignette, mock_film):
+        """Level 'minimal' applies warm grade, vignette, and subtle film look."""
+        mock_clip = MagicMock()
+        mock_warm.return_value = mock_clip
+        mock_vignette.return_value = mock_clip
+        mock_film.return_value = mock_clip
+
+        apply_effects(mock_clip, level="minimal")
+
+        mock_warm.assert_called_once()
+        mock_vignette.assert_called_once()
+        mock_film.assert_called_once()
+
+    @patch("musicvid.pipeline.effects.apply_film_grain")
+    @patch("musicvid.pipeline.effects.apply_subtle_film_look")
+    @patch("musicvid.pipeline.effects.apply_vignette")
+    @patch("musicvid.pipeline.effects.apply_warm_grade")
+    def test_full_applies_film_look_and_grain(self, mock_warm, mock_vignette, mock_film, mock_grain):
+        """Level 'full' applies all including subtle film look and film grain."""
+        mock_clip = MagicMock()
+        mock_warm.return_value = mock_clip
+        mock_vignette.return_value = mock_clip
+        mock_film.return_value = mock_clip
+        mock_grain.return_value = mock_clip
+
+        apply_effects(mock_clip, level="full")
+
+        mock_warm.assert_called_once()
+        mock_vignette.assert_called_once()
+        mock_film.assert_called_once()
+        mock_grain.assert_called_once()
+
+    @patch("musicvid.pipeline.effects.apply_subtle_film_look")
+    @patch("musicvid.pipeline.effects.apply_vignette")
+    @patch("musicvid.pipeline.effects.apply_warm_grade")
+    def test_none_skips_film_look(self, mock_warm, mock_vignette, mock_film):
+        """Level 'none' does not apply subtle film look."""
+        mock_clip = MagicMock()
+
+        apply_effects(mock_clip, level="none")
+
+        mock_film.assert_not_called()
+        mock_warm.assert_not_called()

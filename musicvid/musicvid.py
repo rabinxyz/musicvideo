@@ -335,6 +335,34 @@ def enforce_animation_rules(scenes: list) -> list:
     return scenes
 
 
+_MOTION_MAP = {
+    "intro":  ["static", "slow_zoom_in", "pan_right"],
+    "verse":  ["slow_zoom_in", "slow_zoom_out", "pan_left", "pan_right"],
+    "chorus": ["cut_zoom", "slow_zoom_in", "pan_left", "pan_right"],
+    "bridge": ["slow_zoom_out", "static", "diagonal_drift"],
+    "outro":  ["slow_zoom_out", "static"],
+}
+_DEFAULT_MOTIONS = ["slow_zoom_in", "slow_zoom_out", "pan_left", "pan_right", "static"]
+
+
+def _enforce_motion_variety(scenes):
+    """Ensure no two adjacent scenes have the same motion type.
+
+    For each scene that matches the previous one, picks the first allowed motion
+    from the section map that differs from the previous scene's motion.
+    Mutates and returns the list.
+    """
+    for i in range(1, len(scenes)):
+        if scenes[i].get("motion") == scenes[i - 1].get("motion"):
+            section = scenes[i].get("section", "verse")
+            allowed = _MOTION_MAP.get(section, _DEFAULT_MOTIONS)
+            prev_motion = scenes[i - 1].get("motion")
+            alternatives = [m for m in allowed if m != prev_motion]
+            if alternatives:
+                scenes[i]["motion"] = alternatives[0]
+    return scenes
+
+
 @click.command()
 @click.argument("audio_file", type=click.Path(exists=True))
 @click.option("--mode", type=click.Choice(["stock", "ai", "hybrid"]), default="ai", help="Video source mode.")
@@ -531,6 +559,9 @@ def cli(audio_file, mode, provider, style, output, resolution, lang, new, font_p
     # Snap scene cuts to beat positions if --beat-sync auto
     if beat_sync == "auto":
         scene_plan = _apply_beat_sync(scene_plan, analysis.get("beats", []))
+
+    # Enforce motion variety: no two adjacent scenes with same motion
+    scene_plan["scenes"] = _enforce_motion_variety(scene_plan["scenes"])
 
     # Stage 3: Fetch Videos or Generate Images
     manifest_suffix = f"_clip_{clip_duration}s" if clip_duration else ""

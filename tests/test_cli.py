@@ -655,6 +655,76 @@ class TestCLI:
         # Times should be offset relative to clip_start=45.0
         assert filtered_lyrics[0]["start"] == pytest.approx(0.0, abs=0.5)
 
+    @patch("musicvid.musicvid.get_font_path", return_value="/fake/font.ttf")
+    @patch("musicvid.musicvid.assemble_video")
+    @patch("musicvid.musicvid.fetch_videos")
+    @patch("musicvid.musicvid.create_scene_plan")
+    @patch("musicvid.musicvid.analyze_audio")
+    def test_missing_bfl_api_key_falls_back_to_stock(
+        self, mock_analyze, mock_direct, mock_fetch, mock_assemble, mock_font, runner, tmp_path
+    ):
+        audio_file = tmp_path / "test.mp3"
+        audio_file.write_bytes(b"fake audio")
+        mock_analyze.return_value = {
+            "lyrics": [], "beats": [0.0, 0.5], "bpm": 120.0,
+            "duration": 10.0, "sections": [{"label": "verse", "start": 0.0, "end": 10.0}],
+            "mood_energy": "contemplative", "language": "en",
+        }
+        mock_direct.return_value = {
+            "overall_style": "contemplative", "color_palette": ["#aaa"],
+            "subtitle_style": {"font_size": 48, "color": "#FFF", "outline_color": "#000",
+                               "position": "center-bottom", "animation": "fade"},
+            "scenes": [{"section": "verse", "start": 0.0, "end": 10.0,
+                        "visual_prompt": "test", "motion": "static",
+                        "transition": "cut", "overlay": "none"}],
+        }
+        mock_fetch.return_value = [{"scene_index": 0, "video_path": "/fake/v.mp4", "search_query": "test"}]
+        output_dir = tmp_path / "output"
+        import os
+        env_without_bfl = {k: v for k, v in os.environ.items() if k != "BFL_API_KEY"}
+        with patch.dict("os.environ", env_without_bfl, clear=True):
+            result = runner.invoke(cli, [
+                str(audio_file), "--output", str(output_dir), "--mode", "ai", "--preset", "full",
+            ])
+        assert result.exit_code == 0, result.output
+        assert "BFL_API_KEY" in result.output
+        mock_fetch.assert_called_once()  # fell back to stock
+
+    @patch("musicvid.musicvid.get_font_path", return_value="/fake/font.ttf")
+    @patch("musicvid.musicvid.assemble_video")
+    @patch("musicvid.musicvid.fetch_videos")
+    @patch("musicvid.musicvid.create_scene_plan")
+    @patch("musicvid.musicvid.analyze_audio")
+    def test_missing_runway_api_key_shows_message(
+        self, mock_analyze, mock_direct, mock_fetch, mock_assemble, mock_font, runner, tmp_path
+    ):
+        audio_file = tmp_path / "test.mp3"
+        audio_file.write_bytes(b"fake audio")
+        mock_analyze.return_value = {
+            "lyrics": [], "beats": [0.0, 0.5], "bpm": 120.0,
+            "duration": 10.0, "sections": [{"label": "verse", "start": 0.0, "end": 10.0}],
+            "mood_energy": "contemplative", "language": "en",
+        }
+        mock_direct.return_value = {
+            "overall_style": "contemplative", "color_palette": ["#aaa"],
+            "subtitle_style": {"font_size": 48, "color": "#FFF", "outline_color": "#000",
+                               "position": "center-bottom", "animation": "fade"},
+            "scenes": [{"section": "verse", "start": 0.0, "end": 10.0,
+                        "visual_prompt": "test", "motion": "static",
+                        "transition": "cut", "overlay": "none"}],
+        }
+        mock_fetch.return_value = [{"scene_index": 0, "video_path": "/fake/v.mp4", "search_query": "test"}]
+        import os
+        env_without_runway = {k: v for k, v in os.environ.items() if k != "RUNWAY_API_KEY"}
+        output_dir = tmp_path / "output"
+        with patch.dict("os.environ", env_without_runway, clear=True):
+            result = runner.invoke(cli, [
+                str(audio_file), "--output", str(output_dir),
+                "--mode", "stock", "--animate", "auto", "--preset", "full",
+            ])
+        assert result.exit_code == 0, result.output
+        assert "RUNWAY_API_KEY" in result.output
+
 
 class TestLyricsFlag:
     """Tests for --lyrics CLI option and auto-detection."""

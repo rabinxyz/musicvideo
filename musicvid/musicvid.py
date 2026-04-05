@@ -167,6 +167,23 @@ def cli(audio_file, mode, provider, style, output, resolution, lang, new, font_p
         transitions_mode = "auto"
         beat_sync = "auto"
 
+    # API key fallbacks
+    if mode == "ai" and not os.environ.get("BFL_API_KEY"):
+        click.echo(
+            "Brak BFL_API_KEY — przełączam na tryb stock (Pexels).\n"
+            "Aby używać AI obrazów: dodaj BFL_API_KEY do .env\n"
+            "Rejestracja: https://bfl.ai/dashboard"
+        )
+        mode = "stock"
+
+    if animate_mode in ("auto", "always") and not os.environ.get("RUNWAY_API_KEY"):
+        click.echo(
+            "Brak RUNWAY_API_KEY — animacje wyłączone (Ken Burns zamiast Runway).\n"
+            "Aby używać Runway: dodaj RUNWAY_API_KEY do .env\n"
+            "Rejestracja: https://app.runwayml.com"
+        )
+        animate_mode = "never"
+
     audio_path = Path(audio_file).resolve()
     output_dir = Path(output).resolve()
     output_dir.mkdir(parents=True, exist_ok=True)

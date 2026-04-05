@@ -1,5 +1,3 @@
-# Idea
-
 # Spec: Naprawa visual_router i wymiarów BFL
 
 ## Problem 1 — wymiary 1360x768 odrzucane przez BFL (błąd 422)

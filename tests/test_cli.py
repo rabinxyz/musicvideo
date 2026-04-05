@@ -2861,3 +2861,57 @@ class TestFindNearestScene(unittest.TestCase):
             result = find_nearest_scene(10.0, 15.0, manifest)
         # No overlap; center of clip = 12.5; center of entry 0 = 2.5 (dist=10), entry 1 = 55 (dist=42.5)
         assert result["scene_index"] == 0
+
+
+class TestValidateClipManifest(unittest.TestCase):
+    def test_passes_through_valid_manifest(self):
+        from musicvid.musicvid import _validate_clip_manifest
+        manifest = [
+            {"scene_index": 0, "start": 0.0, "end": 10.0, "video_path": "/fake/a.jpg"},
+        ]
+        with patch("os.path.exists", return_value=True):
+            result = _validate_clip_manifest(manifest, manifest)
+        assert result == manifest
+
+    def test_replaces_none_path_with_fallback(self):
+        from musicvid.musicvid import _validate_clip_manifest
+        fallback_entry = {"scene_index": 1, "start": 5.0, "end": 15.0, "video_path": "/fake/b.jpg"}
+        clip_manifest = [
+            {"scene_index": 0, "start": 0.0, "end": 5.0, "video_path": None},
+        ]
+        full_manifest = [
+            {"scene_index": 0, "start": 0.0, "end": 5.0, "video_path": None},
+            fallback_entry,
+        ]
+        with patch("os.path.exists", return_value=True):
+            result = _validate_clip_manifest(clip_manifest, full_manifest)
+        assert len(result) == 1
+        assert result[0]["video_path"] == "/fake/b.jpg"
+        assert result[0]["scene_index"] == 0  # preserves original scene_index
+
+    def test_drops_entry_when_no_fallback(self):
+        from musicvid.musicvid import _validate_clip_manifest
+        clip_manifest = [
+            {"scene_index": 0, "start": 0.0, "end": 5.0, "video_path": None},
+        ]
+        full_manifest = [
+            {"scene_index": 0, "start": 0.0, "end": 5.0, "video_path": None},
+        ]
+        with patch("os.path.exists", return_value=False):
+            result = _validate_clip_manifest(clip_manifest, full_manifest)
+        assert result == []
+
+    def test_replaces_missing_file_with_fallback(self):
+        from musicvid.musicvid import _validate_clip_manifest
+        clip_manifest = [
+            {"scene_index": 0, "start": 0.0, "end": 5.0, "video_path": "/missing/a.jpg"},
+        ]
+        full_manifest = [
+            {"scene_index": 0, "start": 0.0, "end": 5.0, "video_path": "/missing/a.jpg"},
+            {"scene_index": 1, "start": 3.0, "end": 10.0, "video_path": "/exists/b.jpg"},
+        ]
+        def fake_exists(p):
+            return p == "/exists/b.jpg"
+        with patch("os.path.exists", side_effect=fake_exists):
+            result = _validate_clip_manifest(clip_manifest, full_manifest)
+        assert result[0]["video_path"] == "/exists/b.jpg"

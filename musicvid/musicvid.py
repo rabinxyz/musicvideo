@@ -145,6 +145,38 @@ def find_nearest_scene(start, end, fetch_manifest):
     return best
 
 
+def _validate_clip_manifest(clip_manifest, full_manifest):
+    """Return a copy of clip_manifest with None/missing video_path entries replaced.
+
+    For each entry whose video_path is None or points to a non-existent file,
+    find_nearest_scene is used to locate the closest valid entry in full_manifest.
+    Entries with no fallback are dropped with a warning.
+    The original scene_index is preserved in the replacement entry.
+    """
+    validated = []
+    for entry in clip_manifest:
+        path = entry.get("video_path")
+        if path and os.path.exists(path):
+            validated.append(entry)
+            continue
+        # Invalid path — find nearest fallback
+        start = entry.get("start", 0)
+        end = entry.get("end", 0)
+        fallback = find_nearest_scene(start, end, full_manifest)
+        if fallback is None:
+            click.echo(
+                f"  WARN: brak video_path dla sceny {entry.get('scene_index')} "
+                f"(start={start:.1f}s end={end:.1f}s) — pomijam scenę"
+            )
+            continue
+        click.echo(
+            f"  WARN: video_path dla sceny {entry.get('scene_index')} "
+            f"jest None/brak — używam sceny {fallback.get('scene_index')} jako zastępstwa"
+        )
+        validated.append({**entry, "video_path": fallback["video_path"]})
+    return validated
+
+
 @dataclass
 class AssemblyJob:
     name: str          # e.g. "youtube", "rolka_A_15s"

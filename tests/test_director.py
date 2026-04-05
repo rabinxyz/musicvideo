@@ -368,3 +368,11 @@ class TestCreateScenePlan:
         result = create_scene_plan(sample_analysis)
         assert "scenes" in result
         assert mock_client.messages.create.call_count == 2
+
+    @staticmethod
+    def test_system_prompt_contains_visual_prompt_length_constraint():
+        """System prompt must instruct Claude to keep visual_prompt under 200 chars."""
+        from musicvid.pipeline.director import _load_system_prompt
+        prompt = _load_system_prompt()
+        assert "200" in prompt
+        assert "visual_prompt" in prompt

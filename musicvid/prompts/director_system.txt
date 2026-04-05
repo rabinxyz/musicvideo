@@ -91,3 +91,4 @@ IMPORTANT:
 - Transitions should align with beat times when possible
 - Visual prompts must reference the scene's lyrics — be specific, not generic
 - Match the number of scenes to the song structure
+- Each visual_prompt must be at most 200 characters. Be concise and specific — do not write long descriptions.

@@ -1,5 +1,3 @@
-# Idea
-
 # Spec: Zmiana domyślnej długości rolek na 30 sekund
 
 ## Uzasadnienie

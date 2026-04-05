@@ -92,7 +92,7 @@ CLI tool that generates synchronized MP4 music videos from audio files using sto
 - Image generator retry tests must patch tenacity wait to `wait_none()` to avoid slow tests
 - AI lyrics alignment: `align_with_claude` in `lyrics_parser.py` mocks `anthropic` at module level: `@patch("musicvid.pipeline.lyrics_parser.anthropic")`; uses manual retry loop (2 attempts) instead of tenacity
 - CLI tests with `--lyrics` must also mock `@patch("musicvid.musicvid.align_with_claude")` since lyrics flow now uses AI alignment instead of `parse_lyrics`
-- Font loader: `musicvid/pipeline/font_loader.py` auto-downloads Montserrat from Google Fonts ZIP, falls back to system DejaVuSans
+- Font loader: `musicvid/pipeline/font_loader.py` auto-downloads Montserrat-Light.ttf directly from GitHub as TTF, falls back to system DejaVuSans
 - CLI tests that run the full pipeline must mock `get_font_path` via `@patch("musicvid.musicvid.get_font_path", return_value="/fake/font.ttf")`
 - Assembler tests must mock effects imports: `@patch("musicvid.pipeline.assembler.apply_effects")`, `@patch("musicvid.pipeline.assembler.create_cinematic_bars")`, `@patch("musicvid.pipeline.assembler.create_light_leak")`
 - Assembler clip mode tests must also mock `@patch("musicvid.pipeline.assembler.afx")` and `@patch("musicvid.pipeline.assembler.ColorClip")` to test fades and title card

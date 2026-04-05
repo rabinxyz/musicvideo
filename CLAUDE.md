@@ -4,15 +4,14 @@
 CLI tool that generates synchronized MP4 music videos from audio files using stock footage, beat-synced cuts, and whisper-based subtitles.
 
 ## Commands
-- `python3 -m pytest tests/ -v` - run all tests (~250 tests)
+- `python3 -m pytest tests/ -v` - run all tests (~271 tests)
 - `python3 -m musicvid.musicvid song.mp3` - run the CLI (uses cache by default)
 - `python3 -m musicvid.musicvid song.mp3 --new` - force recalculation, ignore cache
 - `python3 -c "import musicvid; print(musicvid.__version__)"` - check version
 
 ## Architecture
 4-stage pipeline: audio_analyzer → director → stock_fetcher/image_generator → assembler, orchestrated by Click CLI in `musicvid/musicvid.py`.
-- `--mode stock` (default): Stage 3 uses `stock_fetcher` (Pexels API)
-- `--mode ai`: Stage 3 uses `image_generator` (BFL API: flux-dev/flux-pro-1.1/flux-2-klein-4b), caches to `image_manifest.json`
+- `--mode ai` (default): Stage 3 uses `image_generator` (BFL API: flux-dev/flux-pro-1.1/flux-2-klein-4b), caches to `image_manifest.json`; `--mode stock` uses `stock_fetcher` (Pexels API)
 - `--provider [flux-dev|flux-pro|flux-schnell]` (default: flux-pro): selects BFL model for `--mode ai`
 - `--font PATH`: custom .ttf font for subtitles (optional, defaults to auto-downloaded Montserrat Light)
 - `--lyrics PATH`: custom .txt lyrics file (optional); auto-detects single .txt in audio dir. When provided, Whisper still runs for timing, then Claude API aligns file text to Whisper segments
@@ -28,7 +27,16 @@ CLI tool that generates synchronized MP4 music videos from audio files using sto
 - CLI tests for `--animate` must mock `@patch("musicvid.musicvid.animate_image")` since animate_image is imported at module level
 - Assembler `_load_scene_clip`: skips Ken Burns for scenes with `animate=True` and `.mp4` suffix — just resizes to target_size
 - Clip selector: `musicvid/pipeline/clip_selector.py` — `select_clip(analysis, clip_duration)` calls Claude API; manual 2-attempt retry loop with fallback to song center; mock target: `@patch("musicvid.pipeline.clip_selector.anthropic")`
-- `--preset [full|social|all]`: preset mode — `full` generates YouTube 16:9 in `output/pelny/`, `social` generates 3 reels (9:16) from different sections in `output/social/`, `all` generates both. Stages 1-3 run once; stage 4 loops per variant. Uses `_run_preset_mode()` in `musicvid.py`
+- `--preset [full|social|all]` (default: "all"): preset mode — `full` generates YouTube 16:9 in `output/pelny/`, `social` generates 3 reels (9:16) from different sections in `output/social/`, `all` generates both. Stages 1-3 run once; stage 4 loops per variant. Uses `_run_preset_mode()` in `musicvid.py`
+- `--lut-style [warm|cold|cinematic|natural|faded]` (default: warm): LUT color grade style — passed as `lut_style` kwarg to all `assemble_video` calls (assembler already supports it via `color_grade.py`); `_run_preset_mode` accepts `lut_style`/`lut_intensity` kwargs
+- `--subtitle-style [fade|karaoke|none]` (default: karaoke): overrides `scene_plan["subtitle_style"]["animation"]` in `cli()` after Stage 2
+- `--transitions [cut|auto]` (default: auto): if "cut", overrides all `scene["transition"]` in scene_plan after Stage 2
+- `--beat-sync [off|auto]` (default: auto): if "auto", calls `_apply_beat_sync()` to snap interior scene boundaries to nearest beat position after Stage 2; helpers `_snap_to_nearest_beat`, `_apply_beat_sync` defined in `musicvid.py`
+- `--yes`: skips interactive confirmation prompt (prompt only shown when `sys.stdin.isatty()` is True — auto-skipped in CliRunner tests)
+- `--quick`: shortcut that sets mode=stock, preset=full, effects=none, animate=never, lut_style=None, transitions=cut, beat_sync=off
+- `--economy`: shortcut that sets mode=ai, provider=flux-dev, preset=full, effects=minimal, animate=never, lut_style=warm
+- API key fallbacks: checked early in `cli()` after --quick/--economy overrides — missing BFL_API_KEY falls back to mode=stock, missing RUNWAY_API_KEY falls back to animate=never, both with printed messages
+- Startup summary: `_print_startup_summary()` called before pipeline stages; displays active settings in a formatted table
 - `--reel-duration [15|20|30]` (default: 15): duration of social reels; invalidates social clips cache
 - Social clip selector: `musicvid/pipeline/social_clip_selector.py` — `select_social_clips(analysis, clip_duration)` asks Claude for 3 non-overlapping clips from different sections; mock: `@patch("musicvid.pipeline.social_clip_selector.anthropic")`
 - CLI tests for `--preset` must mock `@patch("musicvid.musicvid.select_social_clips")` in addition to the usual pipeline mocks
@@ -81,6 +89,7 @@ CLI tool that generates synchronized MP4 music videos from audio files using sto
 - Assembler `assemble_video` accepts `clip_start`, `clip_end`, `title_card_text` kwargs; audio trimmed via `audio.subclipped(clip_start, clip_end)` + `afx.AudioFadeIn/AudioFadeOut`; video via `vfx.FadeIn/FadeOut`
 - Assembler `RESOLUTION_MAP` includes `"portrait": (1080, 1920)` for social media clips
 - CLI tests for `--clip` must mock `@patch("musicvid.musicvid.select_clip")` in addition to the usual pipeline mocks
+- CLI tests MUST pass `--mode stock` and `--preset full` explicitly — defaults are now "ai" and "all"; omitting them will hit the real BFL API causing 402 Payment Required errors
 - Effects per-frame transforms use `clip.transform(fn)` where `fn(get_frame, t)` returns numpy array; test by extracting transform_fn from `mock_clip.transform.call_args[0][0]`
 - `_create_ken_burns_clip` test mocks need `mock_clip.size=(w,h)`, `mock_clip.w=w`, `mock_clip.h=h`, `mock_clip.cropped.return_value=mock_clip` — omitting breaks the mock chain since `cropped()` returns an unconfigured auto-MagicMock
 - MoviePy 2.x cover-scale: `scale = max(tw/iw, th/ih); clip = clip.resized(scale); clip = clip.cropped(x1=x1, y1=y1, x2=x1+tw, y2=y1+th)` — scalar for proportional resize, explicit pixel coords for crop

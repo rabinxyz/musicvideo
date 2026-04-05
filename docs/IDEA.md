@@ -1,53 +1,106 @@
 # Idea
 
-# Spec: Naprawa wyświetlania wideo — pasy, skalowanie, napisy
+# Spec: Domyślne ustawienia dla najlepszego teledysku
 
-## Problem 1 — czarne pasy góra i dół
-Cinematic bars (12% góra + 12% dół) są włączone domyślnie.
-Dla trybu youtube 16:9 powinny być domyślnie WYŁĄCZONE.
-Włączone tylko gdy użytkownik jawnie poda --effects full.
+## Cel
+Zmiana domyślnych wartości flag CLI tak żeby samo:
+python3 -m musicvid.musicvid piosenka.mp3
+generowało najbardziej rozbudowany i profesjonalny teledysk bez żadnych
+dodatkowych opcji.
 
-Zmień w platform_config.py lub assembler.py:
-cinematic_bars domyślnie: False dla wszystkich platform
-Włącz tylko gdy: --effects full I użytkownik jawnie prosi
+## Zmiany domyślnych wartości w musicvid.py
 
-## Problem 2 — obrazy źle skalowane (nie wypełniają ekranu)
-Obrazy z BFL (1024x768) muszą być przeskalowane do pełnej rozdzielczości
-docelowej (1920x1080) przed zastosowaniem Ken Burns.
+Zmień default= dla każdej opcji Click:
 
-W assembler.py przy tworzeniu ImageClip:
-- Użyj resize() do wypełnienia całego kadru PRZED Ken Burns
-- Użyj metody "fill" (cover) — zachowaj proporcje, przytnij nadmiar
-- NIE używaj "fit" (contain) — zostawia czarne pasy
-- NIE rozciągaj (stretch) — deformuje obraz
+--mode:            "stock"   → "ai"
+--provider:        "flux-dev" → "flux-pro"
+--preset:          None      → "all"
+--effects:         "none"    → "minimal"
+--animate:         "never"   → "auto"
+--subtitle-style:  "fade"    → "karaoke"
+--transitions:     "cut"     → "auto"
+--lut-style:       None      → "warm"
+--lut-intensity:   0.85      → 0.85 (bez zmian)
+--beat-sync:       "off"     → "auto"
+--resolution:      "1080p"   → "1080p" (bez zmian)
+--reel-duration:   15        → 15 (bez zmian)
 
-Poprawna kolejność:
-1. Wczytaj obraz ImageClip
-2. Oblicz scale = max(target_w / img_w, target_h / img_h)
-3. Przeskaluj: clip = clip.resized(scale)
-4. Wyśrodkuj i przytnij do target_w x target_h
-5. Zastosuj Ken Burns na już przeskalowanym klipie
+## Komunikat startowy
 
-## Problem 3 — brak napisów
-Napisy nie pojawiają się w wideo.
-Sprawdź i napraw w assembler.py:
+Gdy użytkownik odpala bez żadnych flag wyświetl czytelne podsumowanie
+co będzie generowane:
 
-Możliwe przyczyny:
-a) TextClip rzuca błąd cicho — dodaj try/except z logowaniem
-b) Lyrics lista jest pusta — sprawdź czy analysis["lyrics"] ma elementy
-c) Font nie istnieje — dodaj fallback do DejaVuSans
-d) Pozycja napisów poza kadrem — sprawdź czy y < frame_height
-e) Napisy generowane ale nie dodane do CompositeVideoClip — sprawdź kolejność
+  MusicVid — tryb pełny
+  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  Obrazy:      BFL Flux Pro (AI)
+  Animacje:    Runway Gen-4 (co 3. scena)
+  Preset:      Pełny teledysk + 3 rolki 15s
+  Efekty:      Warm grade + vignette
+  Napisy:      Karaoke style
+  Przejścia:   Auto (Claude dobiera)
+  Color grade: LUT Warm
+  Beat sync:   Włączony
+  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  Szacowany czas: ~15-20 minut
+  Szacowany koszt: ~$0.80 (Flux Pro + Runway)
+  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  Kontynuować? [T/n]:
 
-Dodaj log dla każdej linijki napisów:
-print(f"Napis: '{lyric['text']}' start={lyric['start']:.1f}s end={lyric['end']:.1f}s")
+Flaga --yes lub --batch-yes pomija potwierdzenie.
 
-Jeśli lista lyrics pusta: wyświetl ostrzeżenie i kontynuuj bez napisów.
-Jeśli font nie znaleziony: użyj DejaVuSans jako fallback bez rzucania błędu.
+## Tryb szybki --quick
+
+Dodaj nową flagę --quick która ustawia szybkie ale gorsze ustawienia:
+  --mode stock (Pexels, bez kosztów API)
+  --preset full (tylko pełny teledysk, bez rolek)
+  --effects none
+  --animate never
+  --subtitle-style fade
+  --transitions cut
+  --lut-style None
+  --beat-sync off
+
+Użycie: python3 -m musicvid.musicvid piosenka.mp3 --quick
+Dla testów i podglądów bez wydawania kredytów API.
+
+## Tryb ekonomiczny --economy
+
+Dodaj flagę --economy dla niższych kosztów przy dobrej jakości:
+  --mode ai
+  --provider flux-dev (tańszy niż pro)
+  --preset full (tylko pełny teledysk)
+  --effects minimal
+  --animate never (bez Runway)
+  --subtitle-style karaoke
+  --transitions auto
+  --lut-style warm
+  --beat-sync auto
+
+Koszt: ~$0.15 zamiast ~$0.80
+
+## Zachowanie gdy brak kluczy API
+
+Gdy BFL_API_KEY brak a --mode ai (domyślny):
+Wyświetl czytelny komunikat:
+  "Brak BFL_API_KEY — przełączam na tryb stock (Pexels).
+   Aby używać AI obrazów: dodaj BFL_API_KEY do .env
+   Rejestracja: https://bfl.ai/dashboard"
+Kontynuuj z --mode stock zamiast rzucać błąd.
+
+Gdy RUNWAY_API_KEY brak a --animate auto (domyślny):
+Wyświetl:
+  "Brak RUNWAY_API_KEY — animacje wyłączone (Ken Burns zamiast Runway).
+   Aby używać Runway: dodaj RUNWAY_API_KEY do .env
+   Rejestracja: https://app.runwayml.com"
+Kontynuuj z --animate never zamiast rzucać błąd.
 
 ## Acceptance Criteria
-- Wideo wypełnia cały ekran bez czarnych pasów góra/dół
-- Obrazy skalowane cover (nie contain, nie stretch)
-- Napisy widoczne w wideo
-- --effects minimal i --effects full nie dodają cinematic bars domyślnie
+- python3 -m musicvid.musicvid piosenka.mp3 używa flux-pro, preset all,
+  karaoke, warm LUT, beat-sync, effects minimal
+- Komunikat startowy wyświetla podsumowanie ustawień i pyta o potwierdzenie
+- --quick przełącza na szybki tryb stock bez kosztów
+- --economy używa flux-dev bez Runway
+- Brak BFL_API_KEY: automatyczny fallback do stock z komunikatem
+- Brak RUNWAY_API_KEY: automatyczny fallback do Ken Burns z komunikatem
+- --yes pomija potwierdzenie
 - python3 -m pytest tests/ -v przechodzi

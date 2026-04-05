@@ -518,7 +518,7 @@ def _run_preset_mode(preset, reel_duration, analysis, scene_plan, fetch_manifest
     generate_full = preset in ("full", "all")
     generate_social = preset in ("social", "all")
 
-    # Social clip selection
+    # Social clip selection (unchanged from before)
     social_clips = None
     if generate_social:
         social_cache_name = f"social_clips_{reel_duration}s.json"
@@ -533,96 +533,93 @@ def _run_preset_mode(preset, reel_duration, analysis, scene_plan, fetch_manifest
             click.echo(f"  Clip {clip['id']}: {clip['start']:.1f}s\u2013{clip['end']:.1f}s "
                        f"({clip.get('section', '?')}) \u2014 {clip.get('reason', '')}")
 
-    # Count total assemblies for progress
-    total = (1 if generate_full else 0) + (3 if generate_social else 0)
-    assembly_num = 0
-
     click.echo("[4/4] Monta\u017c:")
 
-    # Stage 4a: Full YouTube video
+    # Build AssemblyJob list
+    jobs = []
+
     if generate_full:
-        assembly_num += 1
         pelny_dir = output_dir / "pelny"
         pelny_dir.mkdir(parents=True, exist_ok=True)
         full_output = str(pelny_dir / f"{stem}_youtube.mp4")
-        click.echo(f"  \u2192 Pe\u0142ny teledysk YouTube ({assembly_num}/{total})...")
-        assemble_video(
-            analysis=analysis,
-            scene_plan=scene_plan,
-            fetch_manifest=fetch_manifest,
-            audio_path=audio_path,
-            output_path=full_output,
-            resolution="1080p",
-            font_path=font,
-            effects_level=effects,
-            logo_path=logo_path,
-            logo_position=logo_position,
-            logo_size=logo_size,
-            logo_opacity=logo_opacity,
-            cinematic_bars=(effects == "full"),
-            lut_style=lut_style,
-            lut_intensity=lut_intensity,
-        )
-        click.echo(f"  \u2192 Pe\u0142ny teledysk YouTube ({assembly_num}/{total})... \u2705")
-
-    # Stage 4b-d: Social reels
-    if generate_social:
-        social_dir = output_dir / "social"
-        social_dir.mkdir(parents=True, exist_ok=True)
-
-        for clip_info in social_clips["clips"]:
-            assembly_num += 1
-            clip_id = clip_info["id"]
-            clip_start = clip_info["start"]
-            clip_end = clip_info["end"]
-            section = clip_info.get("section", "unknown")
-
-            reel_output = str(social_dir / f"{stem}_rolka_{clip_id}_{reel_duration}s.mp4")
-
-            click.echo(f"  \u2192 Rolka {clip_id} \u2014 {section} ({assembly_num}/{total})...")
-
-            # Filter analysis, scene plan, and manifest to clip window
-            clip_analysis = _filter_analysis_to_clip(analysis, clip_start, clip_end)
-            clip_scene_plan = _filter_scene_plan_to_clip(scene_plan, clip_start, clip_end)
-
-            # Remap horizontal pans to vertical for portrait
-            for scene in clip_scene_plan["scenes"]:
-                scene["motion"] = _remap_motion_for_portrait(scene.get("motion", "static"))
-
-            clip_manifest = _filter_manifest_to_clip(
-                fetch_manifest, scene_plan["scenes"], clip_start, clip_end
-            )
-
-            assemble_video(
-                analysis=clip_analysis,
-                scene_plan=clip_scene_plan,
-                fetch_manifest=clip_manifest,
+        jobs.append(AssemblyJob(
+            name="youtube",
+            kwargs=dict(
+                analysis=analysis,
+                scene_plan=scene_plan,
+                fetch_manifest=fetch_manifest,
                 audio_path=audio_path,
-                output_path=reel_output,
-                resolution="portrait",
+                output_path=full_output,
+                resolution="1080p",
                 font_path=font,
                 effects_level=effects,
-                clip_start=clip_start,
-                clip_end=clip_end,
-                audio_fade_out=1.5,
-                subtitle_margin_bottom=200,
-                cinematic_bars=False,
                 logo_path=logo_path,
                 logo_position=logo_position,
                 logo_size=logo_size,
                 logo_opacity=logo_opacity,
+                cinematic_bars=(effects == "full"),
                 lut_style=lut_style,
                 lut_intensity=lut_intensity,
+            ),
+        ))
+
+    if generate_social:
+        social_dir = output_dir / "social"
+        social_dir.mkdir(parents=True, exist_ok=True)
+        for clip_info in social_clips["clips"]:
+            clip_id = clip_info["id"]
+            clip_start = clip_info["start"]
+            clip_end = clip_info["end"]
+            section = clip_info.get("section", "unknown")
+            reel_output = str(social_dir / f"{stem}_rolka_{clip_id}_{reel_duration}s.mp4")
+            clip_analysis = _filter_analysis_to_clip(analysis, clip_start, clip_end)
+            clip_scene_plan = _filter_scene_plan_to_clip(scene_plan, clip_start, clip_end)
+            for scene in clip_scene_plan["scenes"]:
+                scene["motion"] = _remap_motion_for_portrait(scene.get("motion", "static"))
+            clip_manifest = _filter_manifest_to_clip(
+                fetch_manifest, scene_plan["scenes"], clip_start, clip_end
             )
-            click.echo(f"  \u2192 Rolka {clip_id} \u2014 {section} ({assembly_num}/{total})... \u2705")
+            jobs.append(AssemblyJob(
+                name=f"rolka_{clip_id}_{section}",
+                kwargs=dict(
+                    analysis=clip_analysis,
+                    scene_plan=clip_scene_plan,
+                    fetch_manifest=clip_manifest,
+                    audio_path=audio_path,
+                    output_path=reel_output,
+                    resolution="portrait",
+                    font_path=font,
+                    effects_level=effects,
+                    clip_start=clip_start,
+                    clip_end=clip_end,
+                    audio_fade_out=1.5,
+                    subtitle_margin_bottom=200,
+                    cinematic_bars=False,
+                    logo_path=logo_path,
+                    logo_position=logo_position,
+                    logo_size=logo_size,
+                    logo_opacity=logo_opacity,
+                    lut_style=lut_style,
+                    lut_intensity=lut_intensity,
+                ),
+            ))
+
+    # Assemble: parallel (default) or sequential (--sequential-assembly or single job)
+    if sequential_assembly or len(jobs) == 1:
+        output_paths = []
+        for job in jobs:
+            click.echo(f"  \u2192 {job.name}...")
+            assemble_video(**job.kwargs)
+            click.echo(f"  \u2192 {job.name}... \u2705")
+            output_paths.append(job.kwargs["output_path"])
+    else:
+        click.echo(f"  R\u00f3wnoleg\u0142y monta\u017c ({len(jobs)} w\u0105tki, max 4)...")
+        output_paths = assemble_all_parallel(jobs)
 
     # Summary
-    click.echo(f"\nGotowe! Wygenerowano {total} plik\u00f3w:")
-    if generate_full:
-        click.echo(f"  {output_dir}/pelny/{stem}_youtube.mp4")
-    if generate_social:
-        for clip_info in social_clips["clips"]:
-            click.echo(f"  {output_dir}/social/{stem}_rolka_{clip_info['id']}_{reel_duration}s.mp4")
+    click.echo(f"\nGotowe! Wygenerowano {len(output_paths)} plik\u00f3w:")
+    for path in output_paths:
+        click.echo(f"  {path}")
 
 
 if __name__ == "__main__":

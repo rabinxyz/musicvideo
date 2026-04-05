@@ -2576,12 +2576,14 @@ class TestSequentialAssemblyFlag(unittest.TestCase):
             patch("musicvid.musicvid.load_cache", return_value=None),
             patch("musicvid.musicvid.save_cache"),
             patch("musicvid.musicvid.analyze_audio", return_value={
-                "duration": 60, "lyrics": [], "beats": [], "sections": []
+                "duration": 60, "lyrics": [], "beats": [], "sections": [],
+                "bpm": 120.0, "mood_energy": "contemplative", "language": "en",
             }),
             patch("musicvid.musicvid.create_scene_plan", return_value={
-                "scenes": [], "subtitle_style": {"animation": "fade"}, "master_style": ""
+                "overall_style": "contemplative",
+                "scenes": [], "subtitle_style": {"animation": "fade"}, "master_style": "",
             }),
-            patch("musicvid.musicvid.fetch_videos", return_value={}),
+            patch("musicvid.musicvid.fetch_videos", return_value=[]),
             patch("musicvid.musicvid.select_social_clips", return_value={"clips": [
                 {"id": "A", "start": 0.0, "end": 15.0, "section": "verse"},
                 {"id": "B", "start": 20.0, "end": 35.0, "section": "chorus"},
@@ -2619,3 +2621,73 @@ class TestSequentialAssemblyFlag(unittest.TestCase):
                 runner.invoke(cli, ["song.mp3", "--mode", "stock", "--preset", "all", "--sequential-assembly"])
             mock_parallel.assert_not_called()
             self.assertGreater(mock_serial.call_count, 0)
+
+
+class TestPresetModeParallelKwargs(unittest.TestCase):
+    """Verify AssemblyJob kwargs match what assemble_video expects."""
+
+    @patch("musicvid.musicvid.assemble_video")
+    def test_full_preset_job_has_correct_kwargs(self, mock_assemble):
+        from musicvid.musicvid import _run_preset_mode, AssemblyJob
+        analysis = {"duration": 60, "lyrics": [], "beats": [], "sections": []}
+        scene_plan = {"scenes": [], "subtitle_style": {"animation": "fade"}, "master_style": ""}
+        import tempfile, pathlib
+        with tempfile.TemporaryDirectory() as tmp:
+            _run_preset_mode(
+                preset="full",
+                reel_duration=15,
+                analysis=analysis,
+                scene_plan=scene_plan,
+                fetch_manifest={},
+                audio_path="/tmp/audio.mp3",
+                output_dir=pathlib.Path(tmp),
+                stem="song",
+                font="/fake/font.ttf",
+                effects="minimal",
+                cache_dir=pathlib.Path(tmp),
+                new=False,
+            )
+        # preset=full has 1 job → sequential path → assemble_video called directly
+        mock_assemble.assert_called_once()
+        kwargs = mock_assemble.call_args[1]
+        self.assertEqual(kwargs["resolution"], "1080p")
+        self.assertEqual(kwargs["audio_path"], "/tmp/audio.mp3")
+        self.assertIn("pelny", kwargs["output_path"])
+        self.assertIn("_youtube.mp4", kwargs["output_path"])
+
+    @patch("musicvid.musicvid.select_social_clips")
+    @patch("musicvid.musicvid.load_cache", return_value=None)
+    @patch("musicvid.musicvid.save_cache")
+    @patch("musicvid.musicvid.assemble_all_parallel")
+    def test_social_preset_creates_3_portrait_jobs(self, mock_parallel, mock_save, mock_load, mock_select):
+        from musicvid.musicvid import _run_preset_mode
+        mock_select.return_value = {"clips": [
+            {"id": "A", "start": 0.0, "end": 15.0, "section": "verse"},
+            {"id": "B", "start": 20.0, "end": 35.0, "section": "chorus"},
+            {"id": "C", "start": 40.0, "end": 55.0, "section": "bridge"},
+        ]}
+        mock_parallel.return_value = []
+        analysis = {"duration": 60, "lyrics": [], "beats": [], "sections": []}
+        scene_plan = {"scenes": [], "subtitle_style": {"animation": "fade"}, "master_style": ""}
+        import tempfile, pathlib
+        with tempfile.TemporaryDirectory() as tmp:
+            _run_preset_mode(
+                preset="social",
+                reel_duration=15,
+                analysis=analysis,
+                scene_plan=scene_plan,
+                fetch_manifest={},
+                audio_path="/tmp/audio.mp3",
+                output_dir=pathlib.Path(tmp),
+                stem="song",
+                font="/fake/font.ttf",
+                effects="minimal",
+                cache_dir=pathlib.Path(tmp),
+                new=False,
+            )
+        jobs = mock_parallel.call_args[0][0]
+        self.assertEqual(len(jobs), 3)
+        for job in jobs:
+            self.assertEqual(job.kwargs["resolution"], "portrait")
+            self.assertEqual(job.kwargs["audio_fade_out"], 1.5)
+            self.assertEqual(job.kwargs["cinematic_bars"], False)

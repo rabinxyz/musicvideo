@@ -232,3 +232,109 @@ class TestPollAnimationOutputFormats:
 
         with pytest.raises(RuntimeError, match="Unexpected output structure"):
             _poll_animation("task-xyz")
+
+
+class TestGenerateVideoFromText:
+    """Tests for generate_video_from_text() — text-to-video without input image."""
+
+    @patch.dict(os.environ, {"RUNWAY_API_KEY": "test-key"})
+    @patch("musicvid.pipeline.video_animator.requests")
+    @patch("musicvid.pipeline.video_animator.time")
+    def test_returns_output_path(self, mock_time, mock_requests, tmp_path):
+        from musicvid.pipeline.video_animator import generate_video_from_text
+
+        mock_time.monotonic.side_effect = [0.0, 1.0, 2.0]
+        mock_time.sleep = MagicMock()
+
+        mock_requests.post.return_value = _make_post_response("task-t2v")
+        mock_requests.get.side_effect = [
+            _make_poll_response("SUCCEEDED", "https://runway.ai/video.mp4"),
+            _make_download_response(),
+        ]
+
+        out = tmp_path / "text_video_000.mp4"
+        result = generate_video_from_text("Golden sunrise over mountains", output_path=str(out))
+
+        assert result == str(out)
+        assert out.exists()
+
+    @patch.dict(os.environ, {"RUNWAY_API_KEY": "test-key"})
+    @patch("musicvid.pipeline.video_animator.requests")
+    @patch("musicvid.pipeline.video_animator.time")
+    def test_payload_has_no_prompt_image(self, mock_time, mock_requests, tmp_path):
+        from musicvid.pipeline.video_animator import generate_video_from_text
+
+        mock_time.monotonic.side_effect = [0.0, 1.0]
+        mock_time.sleep = MagicMock()
+
+        mock_requests.post.return_value = _make_post_response("task-t2v")
+        mock_requests.get.side_effect = [
+            _make_poll_response("SUCCEEDED", "https://runway.ai/video.mp4"),
+            _make_download_response(),
+        ]
+
+        out = tmp_path / "out.mp4"
+        generate_video_from_text("Sunset over ocean", duration=5, output_path=str(out))
+
+        payload = mock_requests.post.call_args[1]["json"]
+        assert payload["model"] == "gen4.5"
+        assert payload["promptText"] == "Sunset over ocean"
+        assert payload["duration"] == 5
+        assert payload["ratio"] == "1280:720"
+        assert "promptImage" not in payload
+
+    @patch.dict(os.environ, {"RUNWAY_API_KEY": "test-key"})
+    @patch("musicvid.pipeline.video_animator.requests")
+    @patch("musicvid.pipeline.video_animator.time")
+    def test_cache_hit_skips_api(self, mock_time, mock_requests, tmp_path):
+        from musicvid.pipeline.video_animator import generate_video_from_text
+
+        out = tmp_path / "text_video_000.mp4"
+        out.write_bytes(b"existing video")
+
+        result = generate_video_from_text("Any prompt", output_path=str(out))
+
+        assert result == str(out)
+        mock_requests.post.assert_not_called()
+
+    @patch.dict(os.environ, {}, clear=True)
+    def test_raises_when_no_api_key(self, tmp_path):
+        from musicvid.pipeline.video_animator import generate_video_from_text
+
+        out = tmp_path / "out.mp4"
+        with pytest.raises(RuntimeError, match="RUNWAY_API_KEY"):
+            generate_video_from_text("A prompt", output_path=str(out))
+
+    @patch.dict(os.environ, {"RUNWAY_API_KEY": "test-key"})
+    @patch("musicvid.pipeline.video_animator.requests")
+    @patch("musicvid.pipeline.video_animator.time")
+    def test_timeout_raises_timeout_error(self, mock_time, mock_requests, tmp_path):
+        from musicvid.pipeline.video_animator import generate_video_from_text
+
+        mock_time.monotonic.side_effect = [0.0, 301.0]
+        mock_time.sleep = MagicMock()
+
+        mock_requests.post.return_value = _make_post_response("task-slow")
+        mock_requests.get.return_value = _make_poll_response("PENDING")
+
+        out = tmp_path / "out.mp4"
+        with pytest.raises(TimeoutError):
+            generate_video_from_text("A prompt", output_path=str(out))
+
+    @patch.dict(os.environ, {"RUNWAY_API_KEY": "test-key"})
+    @patch("musicvid.pipeline.video_animator.requests")
+    @patch("musicvid.pipeline.video_animator.time")
+    def test_failed_status_raises_runtime_error(self, mock_time, mock_requests, tmp_path):
+        from musicvid.pipeline.video_animator import generate_video_from_text
+
+        mock_time.monotonic.side_effect = [0.0, 1.0, 2.0]
+        mock_time.sleep = MagicMock()
+
+        mock_requests.post.return_value = _make_post_response("task-fail")
+        mock_requests.get.side_effect = [
+            _make_poll_response("FAILED"),
+        ]
+
+        out = tmp_path / "out.mp4"
+        with pytest.raises(RuntimeError, match="FAILED"):
+            generate_video_from_text("A prompt", output_path=str(out))

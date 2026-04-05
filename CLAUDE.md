@@ -4,7 +4,7 @@
 CLI tool that generates synchronized MP4 music videos from audio files using stock footage, beat-synced cuts, and whisper-based subtitles.
 
 ## Commands
-- `python3 -m pytest tests/ -v` - run all tests (~431 tests)
+- `python3 -m pytest tests/ -v` - run all tests (~507 tests)
 - `python3 -m musicvid.musicvid song.mp3` - run the CLI (uses cache by default)
 - `python3 -m musicvid.musicvid song.mp3 --new` - force recalculation, ignore cache
 - `python3 -c "import musicvid; print(musicvid.__version__)"` - check version
@@ -13,7 +13,9 @@ CLI tool that generates synchronized MP4 music videos from audio files using sto
 4-stage pipeline: audio_analyzer → director → visual_router/stock_fetcher → assembler, orchestrated by Click CLI in `musicvid/musicvid.py`.
 - `--mode ai` (default): Stage 3 uses `VisualRouter` (hybrid per-scene sourcing — Pexels/Unsplash/BFL/Runway), caches to `image_manifest.json`; `--mode stock` uses `stock_fetcher` (Pexels API for all scenes)
 - Hybrid visual sourcing: director outputs `visual_source` (TYPE_VIDEO_STOCK|TYPE_PHOTO_STOCK|TYPE_AI|TYPE_ANIMATED) and `search_query` per scene; `VisualRouter` in `musicvid/pipeline/visual_router.py` dispatches to the correct API; `_validate_scene_plan` defaults `visual_source="TYPE_AI"`, `search_query=""`, `visual_prompt=""`
-- VisualRouter fallback chain: TYPE_VIDEO_STOCK → simplified query (2 words) → BFL (visual_prompt or "nature landscape peaceful"); TYPE_PHOTO_STOCK → Unsplash → Pexels video → BFL; TYPE_ANIMATED no RUNWAY_API_KEY → static BFL image (Ken Burns); TYPE_ANIMATED Runway failure → static BFL image (Ken Burns)
+- Stock content filtering: `sanitize_query(query)` in `visual_router.py` checks search queries against `BLOCKED_WORDS` (returns "BLOCKED") and `SAFE_QUERY_MAP` (returns safe alternative); `SAFE_QUERY_MAP` is ordered longest-first so "worship hands raised" matches before "worship"; called in `_route_video_stock` and `_route_photo_stock` before any API call; blocked queries skip stock APIs entirely and fall back to BFL
+- Stock filtering tests: `tests/test_stock_filtering.py` — `TestSanitizeQueryBlocked`, `TestSanitizeQuerySafeReplacement`, `TestSanitizeQuerySafePassthrough`, `TestVideoStockSanitization`, `TestPhotoStockSanitization`, `TestDirectorPromptFiltering`
+- VisualRouter fallback chain: TYPE_VIDEO_STOCK → sanitize_query → simplified query (2 words) → BFL (visual_prompt or "nature landscape peaceful"); TYPE_PHOTO_STOCK → sanitize_query → Unsplash → Pexels video → BFL; TYPE_ANIMATED no RUNWAY_API_KEY → static BFL image (Ken Burns); TYPE_ANIMATED Runway failure → static BFL image (Ken Burns)
 - VisualRouter `_route_animated` uses Runway text-to-video (`generate_video_from_text`) — no BFL image step; builds video_prompt from `visual_prompt` + `motion_prompt`; truncates visual_prompt to 400 chars if >500; always passes `duration=5` — assembler trims to actual scene length via `subclipped()`
 - `--animate` with VisualRouter: `never` converts TYPE_ANIMATED→TYPE_AI; `always` converts all→TYPE_ANIMATED + enforce_animation_rules; `auto` keeps director's visual_source + enforce_animation_rules
 - CLI tests for mode=ai must mock `@patch("musicvid.musicvid.VisualRouter")` — `generate_images` and `animate_image` are no longer called directly from `cli()` in ai mode

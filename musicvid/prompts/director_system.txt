@@ -50,8 +50,10 @@ STYLE RULES:
 
 ANIMATION RULES:
 - Add "animate" (bool) and "motion_prompt" (string) to every scene
-- Set animate: true only for emotionally significant scenes (chorus, key moments)
-- Maximum 1/3 of all scenes may have animate: true (round down)
+- Set animate: true ONLY for: first chorus, bridge, last chorus before outro
+- NEVER set animate: true for: outro, any scene shorter than 6 seconds, two adjacent scenes
+- Maximum 1 animated scene per 4 scenes (25% cap, round down; minimum 1 allowed)
+- Two scenes with animate: true must NEVER be adjacent — always have at least 1 static scene between them
 - motion_prompt describes ONLY the camera/scene motion (not content), e.g.:
   "Slow camera push forward, gentle breeze moves the trees"
   "Camera slowly rises revealing the landscape below, clouds drift gently"

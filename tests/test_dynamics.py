@@ -86,3 +86,67 @@ class TestAssignDynamicTransitions:
         scenes = self._make_scenes(["intro", "outro"])
         result = _assign_dynamic_transitions(scenes, bpm=84.0)
         assert result[0]["transition_to_next"] == "cross_dissolve"
+
+
+from unittest.mock import patch, MagicMock
+
+
+class TestSectionFontSizes:
+    @patch("musicvid.pipeline.assembler.vfx")
+    @patch("musicvid.pipeline.assembler.TextClip")
+    def test_chorus_uses_large_font(self, mock_text_clip, mock_vfx):
+        from musicvid.pipeline.assembler import _create_subtitle_clips
+        mock_clip = MagicMock()
+        mock_clip.with_duration.return_value = mock_clip
+        mock_clip.with_start.return_value = mock_clip
+        mock_clip.with_position.return_value = mock_clip
+        mock_clip.with_effects.return_value = mock_clip
+        mock_text_clip.return_value = mock_clip
+
+        lyrics = [{"start": 5.0, "end": 7.0, "text": "Hallelujah"}]
+        sections = [{"label": "chorus", "start": 0.0, "end": 10.0}]
+        subtitle_style = {"font_size": 54, "color": "#FFFFFF", "outline_color": "#000000"}
+
+        _create_subtitle_clips(lyrics, subtitle_style, (1920, 1080), sections=sections)
+
+        call_kwargs = mock_text_clip.call_args[1]
+        assert call_kwargs["font_size"] == 64, f"Expected 64 for chorus, got {call_kwargs['font_size']}"
+
+    @patch("musicvid.pipeline.assembler.vfx")
+    @patch("musicvid.pipeline.assembler.TextClip")
+    def test_verse_uses_standard_font(self, mock_text_clip, mock_vfx):
+        from musicvid.pipeline.assembler import _create_subtitle_clips
+        mock_clip = MagicMock()
+        mock_clip.with_duration.return_value = mock_clip
+        mock_clip.with_start.return_value = mock_clip
+        mock_clip.with_position.return_value = mock_clip
+        mock_clip.with_effects.return_value = mock_clip
+        mock_text_clip.return_value = mock_clip
+
+        lyrics = [{"start": 5.0, "end": 7.0, "text": "Amazing grace"}]
+        sections = [{"label": "verse", "start": 0.0, "end": 10.0}]
+        subtitle_style = {"font_size": 54, "color": "#FFFFFF", "outline_color": "#000000"}
+
+        _create_subtitle_clips(lyrics, subtitle_style, (1920, 1080), sections=sections)
+
+        call_kwargs = mock_text_clip.call_args[1]
+        assert call_kwargs["font_size"] == 54, f"Expected 54 for verse, got {call_kwargs['font_size']}"
+
+    @patch("musicvid.pipeline.assembler.vfx")
+    @patch("musicvid.pipeline.assembler.TextClip")
+    def test_no_sections_uses_style_font_size(self, mock_text_clip, mock_vfx):
+        from musicvid.pipeline.assembler import _create_subtitle_clips
+        mock_clip = MagicMock()
+        mock_clip.with_duration.return_value = mock_clip
+        mock_clip.with_start.return_value = mock_clip
+        mock_clip.with_position.return_value = mock_clip
+        mock_clip.with_effects.return_value = mock_clip
+        mock_text_clip.return_value = mock_clip
+
+        lyrics = [{"start": 1.0, "end": 3.0, "text": "Hello"}]
+        subtitle_style = {"font_size": 48, "color": "#FFFFFF", "outline_color": "#000000"}
+
+        _create_subtitle_clips(lyrics, subtitle_style, (1920, 1080), sections=None)
+
+        call_kwargs = mock_text_clip.call_args[1]
+        assert call_kwargs["font_size"] == 48

@@ -20,6 +20,26 @@ from musicvid.pipeline.color_grade import prepare_lut_ffmpeg_params
 from musicvid.pipeline.smart_crop import convert_for_platform
 
 
+_SECTION_FONT_SIZES = {
+    "chorus": 64,
+    "verse":  54,
+    "bridge": 48,
+    "intro":  50,
+    "outro":  46,
+}
+_DEFAULT_FONT_SIZE = 54
+
+
+def _get_section_for_time(t, sections):
+    """Return section label at time t, or 'verse' if not found."""
+    if not sections:
+        return "verse"
+    for section in sections:
+        if section["start"] <= t < section["end"]:
+            return section.get("label", "verse")
+    return "verse"
+
+
 RESOLUTION_MAP = {
     "720p": (1280, 720),
     "1080p": (1920, 1080),
@@ -235,15 +255,12 @@ def _concatenate_with_transitions(scene_clips, scenes, bpm, target_size):
     return CompositeVideoClip(all_clips, size=target_size).with_duration(total_duration)
 
 
-def _create_subtitle_clips(lyrics, subtitle_style, size, font_path=None, subtitle_margin_bottom=80):
+def _create_subtitle_clips(lyrics, subtitle_style, size, font_path=None, subtitle_margin_bottom=80, sections=None):
     """Create subtitle TextClips from lyrics with word-level timing."""
     clips = []
-    font_size = subtitle_style.get("font_size", 58)
     color = subtitle_style.get("color", "#FFFFFF")
     outline_color = subtitle_style.get("outline_color", "#000000")
     margin_bottom = subtitle_margin_bottom
-    descender_pad = int(font_size * 0.35)  # ~35% covers descenders in most Latin typefaces
-    padded_height = font_size + descender_pad
 
     if not lyrics:
         print("Warning: no lyrics segments — subtitles skipped")
@@ -255,6 +272,14 @@ def _create_subtitle_clips(lyrics, subtitle_style, size, font_path=None, subtitl
             continue
 
         print(f"Napis: '{segment['text']}' start={segment['start']:.1f}s end={segment['end']:.1f}s")
+
+        if sections:
+            section = _get_section_for_time(segment["start"], sections)
+            font_size = _SECTION_FONT_SIZES.get(section, subtitle_style.get("font_size", _DEFAULT_FONT_SIZE))
+        else:
+            font_size = subtitle_style.get("font_size", _DEFAULT_FONT_SIZE)
+        descender_pad = int(font_size * 0.35)
+        padded_height = font_size + descender_pad
 
         y_pos = size[1] - margin_bottom - padded_height
         if y_pos >= size[1]:
@@ -382,6 +407,7 @@ def assemble_video(analysis, scene_plan, fetch_manifest, audio_path, output_path
         target_size,
         font_path=font_path,
         subtitle_margin_bottom=subtitle_margin_bottom,
+        sections=analysis.get("sections"),
     )
 
     layers = [video] + subtitle_clips

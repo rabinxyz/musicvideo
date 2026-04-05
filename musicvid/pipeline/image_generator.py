@@ -163,7 +163,7 @@ def generate_single_image(prompt, output_path, provider="flux-pro"):
         return str(output_path)
 
     full_prompt = f"{prompt}, cinematic 16:9, {DOCUMENTARY_SUFFIX}, {NEGATIVE_CONTEXT}"
-    task_id, polling_url = _submit_task(model_name, full_prompt)
+    task_id, polling_url = _submit_task(model_name, full_prompt, width=1024, height=768)
     image_url = _poll_result(polling_url)
     _download_image(image_url, output_path)
     return str(output_path)

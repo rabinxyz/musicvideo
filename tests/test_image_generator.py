@@ -525,3 +525,17 @@ class TestGenerateSingleImage:
             result = generate_single_image("any prompt", str(output), provider="flux-pro")
         assert result == str(output)
         mock_req.post.assert_not_called()
+
+    @patch.dict(os.environ, {"BFL_API_KEY": "test-key"})
+    @patch("musicvid.pipeline.image_generator.requests")
+    def test_single_image_uses_1024x768(self, mock_requests, tmp_path):
+        mock_requests.post.return_value = _make_post_response()
+        mock_requests.get.side_effect = [_make_poll_response(), _make_download_response()]
+
+        from musicvid.pipeline.image_generator import generate_single_image
+        output = str(tmp_path / "scene_001.jpg")
+        generate_single_image("mountain sunrise", output, provider="flux-pro")
+
+        payload = mock_requests.post.call_args[1]["json"]
+        assert payload["width"] == 1024
+        assert payload["height"] == 768

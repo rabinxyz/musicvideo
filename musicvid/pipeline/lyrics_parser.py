@@ -231,12 +231,16 @@ def merge_whisper_with_lyrics_file(whisper_segments, lyrics_lines, audio_duratio
 
 
 def _apply_timing_corrections(result, audio_duration):
-    """Apply timing corrections to aligned subtitle list."""
-    # 1. Apply pre-display offset first (shift start back 0.05s), clamp to 0
-    for item in result:
-        item["start"] = max(0.0, item["start"] - 0.05)
+    """Apply timing corrections to aligned subtitle list.
 
-    # 3. Enforce min/max duration
+    Order per spec:
+    1. Extend subtitles shorter than 0.8s
+    2. Cap subtitles longer than 8s
+    3. Enforce minimum 0.15s gap between consecutive subtitles
+    4. Apply -0.05s pre-display offset (clamped to 0)
+    5. Clamp all end times to audio_duration
+    """
+    # Step 1 & 2: min/max duration
     for item in result:
         duration = item["end"] - item["start"]
         if duration < 0.8:
@@ -244,12 +248,16 @@ def _apply_timing_corrections(result, audio_duration):
         elif duration > 8.0:
             item["end"] = item["start"] + 8.0
 
-    # 4. Enforce minimum gap between subtitles (after offset is applied)
+    # Step 3: enforce minimum 0.15s gap (process in order)
     for i in range(len(result) - 1):
         if result[i]["end"] > result[i + 1]["start"] - 0.15:
             result[i]["end"] = result[i + 1]["start"] - 0.15
 
-    # 5. Clamp ends to audio duration
+    # Step 4: pre-display offset (-0.05s, clamped to 0)
+    for item in result:
+        item["start"] = max(0.0, item["start"] - 0.05)
+
+    # Step 5: clamp end to audio_duration
     for item in result:
         item["end"] = min(item["end"], audio_duration)
 

@@ -26,10 +26,10 @@ TYPE_AI — BFL Flux image ($0.04, unique)
         spiritual light (theological concept not physical light).
   Fields: set visual_prompt (min 3 sentences, documentary style), set search_query to ""
 
-TYPE_ANIMATED — BFL image + Runway Gen-4 video ($0.54, climactic)
-  When: TYPE_AI scene that is first chorus, last chorus, or bridge. Max 25% of scenes,
-        never adjacent, min 6s scene. Also set animate: true.
-  Fields: set visual_prompt, motion_prompt, set search_query to ""
+TYPE_ANIMATED — Runway Gen-4.5 text-to-video ($0.50, climactic)
+  When: first chorus, last chorus, or bridge. Max 25% of scenes,
+        never adjacent, min 3s scene. Also set animate: true.
+  Fields: set visual_prompt (can be empty), motion_prompt (FULL scene description), set search_query to ""
 
 EXAMPLES:
   "góry, dolina, chodzę" → TYPE_VIDEO_STOCK, search_query: "person walking mountain valley path"
@@ -90,15 +90,20 @@ STYLE RULES:
 ANIMATION RULES:
 - Add "animate" (bool) and "motion_prompt" (string) to every scene
 - Set animate: true ONLY for: first chorus, bridge, last chorus before outro
-- NEVER set animate: true for: outro, any scene shorter than 6 seconds, two adjacent scenes
+- NEVER set animate: true for: outro, any scene shorter than 3 seconds, two adjacent scenes
 - Maximum 1 animated scene per 4 scenes (25% cap, round down; minimum 1 allowed)
 - Two scenes with animate: true must NEVER be adjacent — always have at least 1 static scene between them
-- motion_prompt describes ONLY the camera/scene motion (not content), e.g.:
-  "Slow camera push forward, gentle breeze moves the trees"
-  "Camera slowly rises revealing the landscape below, clouds drift gently"
-  "Subtle zoom out, light rays sweep across the scene"
+- For TYPE_ANIMATED scenes, motion_prompt describes the FULL video scene (Runway generates video from text):
+  - What happens in frame (subject + action + mood)
+  - Camera movement
+  - Lighting and atmosphere
+  - Maximum 2-3 sentences, concrete and specific
+  Examples:
+  "Slow camera rise over misty mountain valley at dawn, golden light breaking through clouds, person silhouette on ridge, documentary cinematic style, natural colors"
+  "Gentle push forward through outdoor worship gathering, people with hands raised at sunset, warm golden backlight, authentic documentary feel, real emotion"
+  "Camera slowly pulls back revealing vast ocean horizon, waves in foreground, light dancing on water surface, contemplative mood, film grain aesthetic"
+- For non-animated scenes (animate: false), set motion_prompt to ""
 - Avoid fast or jarring motion — worship music requires slow, peaceful movement
-- If animate: false, set motion_prompt to ""
 
 OUTPUT FORMAT (pure JSON):
 {

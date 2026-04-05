@@ -634,6 +634,10 @@ class TestLoadSceneClipAnimated:
         mock_clip.resized.return_value = mock_clip
         mock_clip.with_duration.return_value = mock_clip
         mock_clip.transform.return_value = mock_clip
+        mock_clip.size = (1920, 1080)
+        mock_clip.w = 1920
+        mock_clip.h = 1080
+        mock_clip.cropped.return_value = mock_clip
 
         scene = {"start": 0.0, "end": 5.0, "motion": "slow_zoom_in", "animate": False}
         _load_scene_clip(str(fake_jpg), scene, (1920, 1080))
@@ -656,6 +660,10 @@ class TestLoadSceneClipAnimated:
         mock_clip.resized.return_value = mock_clip
         mock_clip.with_duration.return_value = mock_clip
         mock_clip.transform.return_value = mock_clip
+        mock_clip.size = (1920, 1080)
+        mock_clip.w = 1920
+        mock_clip.h = 1080
+        mock_clip.cropped.return_value = mock_clip
 
         scene = {"start": 0.0, "end": 5.0, "motion": "slow_zoom_in", "animate": False}
         _load_scene_clip(str(fake_mp4), scene, (1920, 1080))
@@ -675,6 +683,10 @@ class TestPortraitKenBurns:
         mock_clip.resized.return_value = mock_clip
         mock_clip.with_duration.return_value = mock_clip
         mock_clip.transform.return_value = mock_clip
+        mock_clip.size = (1080, 1920)
+        mock_clip.w = 1080
+        mock_clip.h = 1920
+        mock_clip.cropped.return_value = mock_clip
 
         result = _create_ken_burns_clip(mock_clip, 5.0, "pan_up", (1080, 1920))
 
@@ -688,6 +700,10 @@ class TestPortraitKenBurns:
         mock_clip.resized.return_value = mock_clip
         mock_clip.with_duration.return_value = mock_clip
         mock_clip.transform.return_value = mock_clip
+        mock_clip.size = (1080, 1920)
+        mock_clip.w = 1080
+        mock_clip.h = 1920
+        mock_clip.cropped.return_value = mock_clip
 
         result = _create_ken_burns_clip(mock_clip, 5.0, "pan_down", (1080, 1920))
 
@@ -851,7 +867,11 @@ class TestAssembleVideoLut:
         mock_clip = MagicMock()
         mock_clip.duration = 5.0
         mock_clip.size = (1920, 1080)
+        mock_clip.w = 1920
+        mock_clip.h = 1080
         mock_clip.resized.return_value = mock_clip
+        mock_clip.cropped.return_value = mock_clip
+        mock_clip.subclipped.return_value = mock_clip
         mock_clip.with_duration.return_value = mock_clip
         mock_clip.with_effects.return_value = mock_clip
         mock_clip.transform.return_value = mock_clip
@@ -910,7 +930,11 @@ class TestAssembleVideoLut:
         mock_clip = MagicMock()
         mock_clip.duration = 5.0
         mock_clip.size = (1920, 1080)
+        mock_clip.w = 1920
+        mock_clip.h = 1080
         mock_clip.resized.return_value = mock_clip
+        mock_clip.cropped.return_value = mock_clip
+        mock_clip.subclipped.return_value = mock_clip
         mock_clip.with_duration.return_value = mock_clip
         mock_clip.with_effects.return_value = mock_clip
         mock_clip.transform.return_value = mock_clip
@@ -942,3 +966,41 @@ class TestAssembleVideoLut:
         call_kwargs = mock_clip.write_videofile.call_args[1]
         if "ffmpeg_params" in call_kwargs:
             assert "lut3d" not in str(call_kwargs["ffmpeg_params"])
+
+
+class TestKenBurnsCoverScale:
+    """Tests that _create_ken_burns_clip uses cover scaling (not stretch)."""
+
+    def test_cover_scale_fills_frame_preserving_aspect_ratio(self):
+        """4:3 image into 16:9 frame: must scale up and crop, not stretch."""
+        from musicvid.pipeline.assembler import _create_ken_burns_clip
+        from unittest.mock import MagicMock
+
+        # Simulate a 1024x768 BFL image (4:3 ratio)
+        mock_clip = MagicMock()
+        mock_clip.size = (1024, 768)
+        mock_clip.w = 1024
+        mock_clip.h = 768
+        mock_clip.resized.return_value = mock_clip
+        mock_clip.cropped.return_value = mock_clip
+        mock_clip.with_duration.return_value = mock_clip
+        mock_clip.transform.return_value = mock_clip
+
+        target_size = (1920, 1080)
+        _create_ken_burns_clip(mock_clip, 5.0, "slow_zoom_in", target_size)
+
+        # Cover scale: resized() must be called with a scalar float, not a tuple
+        resized_call = mock_clip.resized.call_args
+        assert resized_call is not None
+        args, kwargs = resized_call
+        if args:
+            scale_arg = args[0]
+        else:
+            scale_arg = kwargs.get("new_size", None)
+        assert not isinstance(scale_arg, tuple), (
+            f"resized() was called with tuple {scale_arg!r} (stretch), "
+            "expected scalar (cover scale)"
+        )
+
+        # cropped must be called to trim the overflow
+        mock_clip.cropped.assert_called_once()

@@ -35,7 +35,15 @@ def _get_resolution(resolution_str):
 def _create_ken_burns_clip(clip, duration, motion="slow_zoom_in", target_size=(1920, 1080)):
     """Apply Ken Burns effect (zoom/pan) to a clip."""
     w, h = target_size
-    clip = clip.resized(new_size=(int(w * 1.15), int(h * 1.15)))
+    kb_w, kb_h = int(w * 1.15), int(h * 1.15)
+
+    # Cover scale: expand to fill kb_w × kb_h preserving aspect ratio, then center-crop
+    img_w, img_h = clip.size
+    scale = max(kb_w / img_w, kb_h / img_h)
+    clip = clip.resized(scale)
+    x1 = (clip.w - kb_w) // 2
+    y1 = (clip.h - kb_h) // 2
+    clip = clip.cropped(x1=x1, y1=y1, x2=x1 + kb_w, y2=y1 + kb_h)
     clip = clip.with_duration(duration)
 
     if motion == "slow_zoom_in":

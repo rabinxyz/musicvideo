@@ -8,6 +8,38 @@ from musicvid.pipeline.stock_fetcher import fetch_video_by_query
 from musicvid.pipeline.image_generator import generate_single_image
 from musicvid.pipeline.video_animator import animate_image, generate_video_from_text
 
+BLOCKED_WORDS = [
+    "muslim", "mosque", "islamic", "quran", "hindu",
+    "buddha", "buddhist", "catholic", "cathedral",
+    "shrine", "temple", "prayer rug", "hijab",
+    "church interior", "altar", "rosary", "statue",
+]
+
+SAFE_QUERY_MAP = {
+    "worship hands raised": "people outdoor arms up sunset",
+    "prayer hands": "person sitting quietly nature",
+    "hands praying": "person peaceful outdoor sunrise",
+    "praying hands": "person sitting peaceful morning",
+    "prayer outdoor": "person sitting field morning light",
+    "worship": "outdoor gathering people singing sunset",
+    "spiritual": "peaceful nature landscape morning",
+    "meditation": "person sitting peaceful nature",
+}
+
+
+def sanitize_query(query):
+    """Check query against blocked words and safe replacements."""
+    if not query:
+        return query
+    query_lower = query.lower()
+    for blocked in BLOCKED_WORDS:
+        if blocked in query_lower:
+            return "BLOCKED"
+    for unsafe, safe in SAFE_QUERY_MAP.items():
+        if unsafe in query_lower:
+            return safe
+    return query
+
 
 class VisualRouter:
     """Routes each scene to the appropriate visual source API.

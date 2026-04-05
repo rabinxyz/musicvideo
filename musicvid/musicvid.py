@@ -151,24 +151,39 @@ def assemble_all_parallel(jobs, max_workers=4):
     return results
 
 
+def _compute_downbeats(beats):
+    """Return every 4th beat (downbeat) from the beats list."""
+    return beats[::4]
+
+
+def _snap_to_downbeat(t, downbeats, window=0.5):
+    """Snap t to the nearest downbeat within window seconds; return t unchanged if none qualifies."""
+    candidates = [d for d in downbeats if abs(d - t) <= window]
+    if not candidates:
+        return t
+    return min(candidates, key=lambda d: abs(d - t))
+
+
 def _snap_to_nearest_beat(t, beats):
-    """Return the beat timestamp closest to t."""
+    """Return the beat timestamp closest to t (kept for backward compat)."""
     if not beats:
         return t
     return min(beats, key=lambda b: abs(b - t))
 
 
 def _apply_beat_sync(scene_plan, beats):
-    """Snap interior scene boundaries to nearest beat timestamps.
+    """Snap interior scene boundaries to nearest downbeat within ±0.5s.
 
     First scene start stays 0.0; last scene end stays as-is.
     Adjacent scenes share the same snapped boundary (no gaps).
+    Falls back to unsnapped boundary if no downbeat is within 0.5s.
     """
     scenes = scene_plan["scenes"]
     if not scenes or not beats:
         return scene_plan
+    downbeats = _compute_downbeats(beats)
     for i in range(len(scenes) - 1):
-        snapped = _snap_to_nearest_beat(scenes[i]["end"], beats)
+        snapped = _snap_to_downbeat(scenes[i]["end"], downbeats)
         scenes[i]["end"] = snapped
         scenes[i + 1]["start"] = snapped
     return scene_plan

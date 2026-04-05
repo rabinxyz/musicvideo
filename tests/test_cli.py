@@ -2524,9 +2524,9 @@ class TestLogoWithPreset:
             "subtitle_style": {"font_size": 48, "color": "#FFF", "outline_color": "#000",
                                "position": "center-bottom", "animation": "fade"},
             "scenes": [
-                {"section": "verse", "start": 0.0, "end": 1.3,
+                {"section": "verse", "start": 0.0, "end": 2.1,
                  "visual_prompt": "test", "motion": "static", "transition": "cut", "overlay": "none"},
-                {"section": "verse", "start": 1.3, "end": 5.0,
+                {"section": "verse", "start": 2.1, "end": 5.0,
                  "visual_prompt": "test2", "motion": "static", "transition": "cut", "overlay": "none"},
             ],
         }
@@ -2542,10 +2542,10 @@ class TestLogoWithPreset:
         assert result.exit_code == 0, result.output
         call_kwargs = mock_assemble.call_args.kwargs
         passed_scene_plan = call_kwargs.get("scene_plan")
-        # Scene 0 ends at 1.3 → snaps to nearest beat (1.5)
-        assert abs(passed_scene_plan["scenes"][0]["end"] - 1.5) < 0.01
-        # Scene 1 starts at 1.3 → snaps to nearest beat (1.5)
-        assert abs(passed_scene_plan["scenes"][1]["start"] - 1.5) < 0.01
+        # Scene 0 ends at 2.1 → 0.1s from downbeat 2.0 (within ±0.5s window) → snaps to 2.0
+        assert abs(passed_scene_plan["scenes"][0]["end"] - 2.0) < 0.01
+        # Scene 1 starts at 2.1 → snaps to same downbeat 2.0
+        assert abs(passed_scene_plan["scenes"][1]["start"] - 2.0) < 0.01
 
 
 class TestParallelAssembly(unittest.TestCase):
@@ -2750,3 +2750,55 @@ class TestRamWarning(unittest.TestCase):
             assemble_all_parallel(jobs)
             calls = " ".join(str(c) for c in mock_echo.call_args_list)
             self.assertNotIn("RAM", calls)
+
+
+def test_snap_to_downbeat_within_window():
+    """Snaps to closest downbeat when within 0.5s window."""
+    from musicvid.musicvid import _snap_to_downbeat
+    downbeats = [0.0, 2.86, 5.71, 8.57]
+    assert abs(_snap_to_downbeat(2.9, downbeats) - 2.86) < 0.01
+
+
+def test_snap_to_downbeat_outside_window():
+    """Returns t unchanged when no downbeat is within 0.5s."""
+    from musicvid.musicvid import _snap_to_downbeat
+    downbeats = [0.0, 2.86, 5.71]
+    # 4.0 is 1.14s from 2.86 and 1.71s from 5.71 — both outside window
+    assert _snap_to_downbeat(4.0, downbeats) == 4.0
+
+
+def test_compute_downbeats_every_4th():
+    """Returns every 4th beat starting at index 0."""
+    from musicvid.musicvid import _compute_downbeats
+    beats = [0.0, 0.5, 1.0, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0]
+    assert _compute_downbeats(beats) == [0.0, 2.0, 4.0]
+
+
+def test_apply_beat_sync_uses_downbeats():
+    """_apply_beat_sync snaps boundaries to downbeats, not all beats."""
+    from musicvid.musicvid import _apply_beat_sync
+    # Beats at every 0.5s; downbeats at 0, 2.0, 4.0, 6.0, ...
+    beats = [i * 0.5 for i in range(20)]
+    scene_plan = {
+        "scenes": [
+            {"start": 0.0, "end": 4.1},   # 4.1 is 0.1s from downbeat 4.0 → snaps
+            {"start": 4.1, "end": 8.0},
+        ]
+    }
+    result = _apply_beat_sync(scene_plan, beats)
+    assert abs(result["scenes"][0]["end"] - 4.0) < 0.01
+    assert abs(result["scenes"][1]["start"] - 4.0) < 0.01
+
+
+def test_apply_beat_sync_no_snap_outside_window():
+    """Boundary outside ±0.5s of any downbeat is not snapped."""
+    from musicvid.musicvid import _apply_beat_sync
+    beats = [i * 0.5 for i in range(20)]  # downbeats at 0, 2.0, 4.0, 6.0...
+    scene_plan = {
+        "scenes": [
+            {"start": 0.0, "end": 3.2},   # 3.2 is 0.8s from downbeat 4.0 → no snap
+            {"start": 3.2, "end": 8.0},
+        ]
+    }
+    result = _apply_beat_sync(scene_plan, beats)
+    assert abs(result["scenes"][0]["end"] - 3.2) < 0.01

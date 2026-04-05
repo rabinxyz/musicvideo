@@ -19,8 +19,8 @@ class VisualRouter:
       TYPE_ANIMATED     → BFL image + Runway Gen-4 video (generate_single_image + animate_image)
 
     Fallback hierarchy:
-      TYPE_VIDEO_STOCK failure → simplified query → TYPE_PHOTO_STOCK → TYPE_AI
-      TYPE_PHOTO_STOCK no key  → TYPE_AI
+      TYPE_VIDEO_STOCK failure → simplified query → BFL (visual_prompt or default)
+      TYPE_PHOTO_STOCK         → Unsplash → Pexels → BFL
       TYPE_ANIMATED no key     → static TYPE_AI image (Ken Burns in assembler)
     """
 
@@ -62,8 +62,11 @@ class VisualRouter:
             if result:
                 return result
 
-        print(f"  Fallback: scene {idx} TYPE_VIDEO_STOCK → TYPE_PHOTO_STOCK")
-        return self._route_photo_stock(scene, idx)
+        # BFL fallback — use visual_prompt if available, else default
+        visual_prompt = scene.get("visual_prompt") or ""
+        fallback_prompt = visual_prompt if visual_prompt else "nature landscape peaceful"
+        print(f"  Fallback: scene {idx} TYPE_VIDEO_STOCK → TYPE_AI (Pexels exhausted)")
+        return self._generate_bfl(fallback_prompt, idx)
 
     def _route_photo_stock(self, scene, idx):
         output_path = str(self.cache_dir / f"scene_{idx:03d}.jpg")

@@ -107,6 +107,53 @@ class TestVisualRouterVideoStock:
         mock_gen.assert_called_once()
         assert result == ai_path
 
+    def test_route_video_stock_fallback_uses_visual_prompt_for_bfl(self, tmp_path):
+        from musicvid.pipeline.visual_router import VisualRouter
+        router = VisualRouter(cache_dir=str(tmp_path), provider="flux-pro")
+
+        scene = {
+            "index": 0,
+            "section": "verse",
+            "start": 0.0,
+            "end": 12.0,
+            "visual_source": "TYPE_VIDEO_STOCK",
+            "search_query": "mountain valley peaceful morning",
+            "visual_prompt": "sunrise over misty mountain valley, wide angle",
+            "motion_prompt": "",
+            "animate": False,
+        }
+        ai_path = str(tmp_path / "scene_000.jpg")
+
+        with patch("musicvid.pipeline.visual_router.fetch_video_by_query", return_value=None), \
+             patch("musicvid.pipeline.visual_router.generate_single_image",
+                   return_value=ai_path) as mock_gen:
+            result = router.route(scene)
+
+        mock_gen.assert_called_once_with(
+            "sunrise over misty mountain valley, wide angle",
+            ai_path,
+            "flux-pro",
+        )
+        assert result == ai_path
+
+    def test_route_video_stock_fallback_uses_default_when_no_visual_prompt(self, tmp_path):
+        from musicvid.pipeline.visual_router import VisualRouter
+        router = VisualRouter(cache_dir=str(tmp_path), provider="flux-pro")
+
+        ai_path = str(tmp_path / "scene_000.jpg")
+
+        with patch("musicvid.pipeline.visual_router.fetch_video_by_query", return_value=None), \
+             patch("musicvid.pipeline.visual_router.generate_single_image",
+                   return_value=ai_path) as mock_gen:
+            result = router.route(SCENE_VIDEO_STOCK)  # SCENE_VIDEO_STOCK has visual_prompt=""
+
+        mock_gen.assert_called_once_with(
+            "nature landscape peaceful",
+            ai_path,
+            "flux-pro",
+        )
+        assert result == ai_path
+
 
 class TestVisualRouterPhotoStock:
     @patch.dict(os.environ, {"UNSPLASH_ACCESS_KEY": "fake-key"})

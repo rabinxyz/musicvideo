@@ -401,7 +401,8 @@ def cli(audio_file, mode, provider, style, output, resolution, lang, new, font_p
             fetch_manifest = image_manifest
         else:
             click.echo(f"[3/4] Generating images (provider: {provider})...")
-            image_paths = generate_images(scene_plan, str(cache_dir), provider=provider)
+            gen_platform = "reels" if preset == "social" else None
+            image_paths = generate_images(scene_plan, str(cache_dir), provider=provider, platform=gen_platform)
             fetch_manifest = [
                 {"scene_index": i, "video_path": path, "search_query": scene["visual_prompt"]}
                 for i, (path, scene) in enumerate(zip(image_paths, scene_plan["scenes"]))

@@ -52,13 +52,13 @@ def _get_headers():
     wait=wait_exponential(multiplier=1, min=2, max=10),
     retry=retry_if_exception(_is_retryable),
 )
-def _submit_task(model_name, prompt):
+def _submit_task(model_name, prompt, width=1024, height=768):
     """Submit an image generation task to BFL API. Returns (task_id, polling_url)."""
     url = f"{BFL_BASE_URL}/v1/{model_name}"
     payload = {
         "prompt": prompt,
-        "width": 1024,
-        "height": 768,
+        "width": width,
+        "height": height,
     }
     resp = requests.post(url, json=payload, headers=_get_headers())
     resp.raise_for_status()
@@ -88,13 +88,14 @@ def _download_image(image_url, output_path):
     Path(output_path).write_bytes(resp.content)
 
 
-def generate_images(scene_plan, output_dir, provider="flux-pro"):
+def generate_images(scene_plan, output_dir, provider="flux-pro", platform=None):
     """Generate one image per scene using BFL API.
 
     Args:
         scene_plan: Scene plan dict from Stage 2.
         output_dir: Directory to save generated images.
         provider: One of flux-dev, flux-pro, flux-schnell. Default: flux-pro (flux-pro-1.1).
+        platform: Optional platform hint — "reels" generates native 9:16 (768x1360).
 
     Returns:
         list of image file paths in scene order.
@@ -107,17 +108,21 @@ def generate_images(scene_plan, output_dir, provider="flux-pro"):
     output_path = Path(output_dir)
     output_path.mkdir(parents=True, exist_ok=True)
 
+    is_portrait = platform in ("reels", "shorts")
+    img_w, img_h = (768, 1360) if is_portrait else (1024, 768)
+    orientation_hint = "portrait 9:16" if is_portrait else "cinematic 16:9"
+
     image_paths = []
     total = len(scenes)
 
     for i, scene in enumerate(scenes):
         visual_prompt = scene.get("visual_prompt", "nature landscape")
         if master_style:
-            full_prompt = f"{visual_prompt}, {master_style}, cinematic 16:9, photorealistic, high quality"
+            full_prompt = f"{visual_prompt}, {master_style}, {orientation_hint}, photorealistic, high quality"
         else:
-            full_prompt = f"{visual_prompt}, cinematic 16:9, photorealistic, high quality"
+            full_prompt = f"{visual_prompt}, {orientation_hint}, photorealistic, high quality"
 
-        task_id, polling_url = _submit_task(model_name, full_prompt)
+        task_id, polling_url = _submit_task(model_name, full_prompt, width=img_w, height=img_h)
         image_url = _poll_result(polling_url)
 
         dest = output_path / f"scene_{i:03d}.jpg"

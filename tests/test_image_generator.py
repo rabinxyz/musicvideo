@@ -155,6 +155,35 @@ class TestBFLFlowSubmitPollDownload:
         headers = mock_requests.post.call_args[1]["headers"]
         assert headers["X-Key"] == "my-secret-key"
 
+    @patch.dict(os.environ, {"BFL_API_KEY": "fake-key"})
+    @patch("musicvid.pipeline.image_generator.requests")
+    @patch("musicvid.pipeline.image_generator.time")
+    def test_generate_images_uses_portrait_dimensions_for_reels_platform(self, mock_time, mock_requests, tmp_path):
+        mock_time.monotonic.side_effect = [0, 1, 2, 3, 4, 5]
+        mock_time.sleep = MagicMock()
+        submit_resp = MagicMock()
+        submit_resp.json.return_value = {"id": "task-1", "polling_url": "http://poll/1"}
+        poll_resp = MagicMock()
+        poll_resp.json.return_value = {"status": "Ready", "result": {"sample": "http://img/1.jpg"}}
+        download_resp = MagicMock()
+        download_resp.content = b"fake-image-bytes"
+        mock_requests.post.return_value = submit_resp
+        mock_requests.get.side_effect = [poll_resp, download_resp]
+
+        from musicvid.pipeline.image_generator import generate_images
+
+        scene_plan = {
+            "master_style": "cinematic",
+            "scenes": [{"visual_prompt": "portrait scene"}],
+        }
+        generate_images(scene_plan, str(tmp_path), provider="flux-pro", platform="reels")
+
+        post_call = mock_requests.post.call_args
+        payload = post_call[1]["json"]
+        assert payload["width"] == 768
+        assert payload["height"] == 1360
+        assert "portrait 9:16" in payload["prompt"]
+
 
 class TestPolling:
     """Tests for polling behavior."""

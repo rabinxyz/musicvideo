@@ -759,6 +759,78 @@ class TestCLI:
         assert "MusicVid" in result.output
         assert "Obrazy" in result.output
 
+    @patch("musicvid.musicvid.get_font_path", return_value="/fake/font.ttf")
+    @patch("musicvid.musicvid.assemble_video")
+    @patch("musicvid.musicvid.fetch_videos")
+    @patch("musicvid.musicvid.create_scene_plan")
+    @patch("musicvid.musicvid.analyze_audio")
+    def test_startup_summary_shows_reel_duration_for_social_preset(
+        self, mock_analyze, mock_direct, mock_fetch, mock_assemble, mock_font, runner, tmp_path
+    ):
+        """Startup summary shows reel duration when preset is social or all."""
+        audio_file = tmp_path / "test.mp3"
+        audio_file.write_bytes(b"fake audio")
+        mock_analyze.return_value = {
+            "lyrics": [], "beats": [0.0], "bpm": 120.0, "duration": 60.0,
+            "sections": [{"label": "verse", "start": 0.0, "end": 60.0}],
+            "mood_energy": "contemplative", "language": "en",
+        }
+        mock_direct.return_value = {
+            "overall_style": "contemplative", "color_palette": ["#aaa"],
+            "subtitle_style": {"font_size": 48, "color": "#FFF", "outline_color": "#000",
+                               "position": "center-bottom", "animation": "fade"},
+            "scenes": [{"section": "verse", "start": 0.0, "end": 60.0,
+                        "visual_prompt": "t", "motion": "static", "transition": "cut",
+                        "overlay": "none", "animate": False, "motion_prompt": ""}],
+        }
+        mock_fetch.return_value = [{"scene_index": 0, "video_path": "/fake/v.mp4", "search_query": "t"}]
+        result = runner.invoke(cli, [
+            str(audio_file), "--preset", "full", "--mode", "stock",
+            "--reel-duration", "30",
+        ])
+        assert result.exit_code == 0, result.output
+        # For preset=full, reel duration line should NOT appear
+        assert "Rolki social" not in result.output
+
+    def test_startup_summary_shows_reel_duration_line_for_social(self):
+        """_print_startup_summary shows reel duration line for social/all presets."""
+        from musicvid.musicvid import _print_startup_summary
+        import click
+        from click.testing import CliRunner as _CliRunner
+
+        @click.command()
+        def dummy():
+            _print_startup_summary(
+                mode="stock", provider="flux-pro", preset="social",
+                effects="minimal", animate_mode="never", lut_style="warm",
+                lut_intensity=0.85, subtitle_style_override="karaoke",
+                transitions_mode="auto", beat_sync="auto", reel_duration=30,
+            )
+
+        _runner = _CliRunner()
+        result = _runner.invoke(dummy)
+        assert "30s" in result.output
+        assert "Rolki social" in result.output
+
+    def test_startup_summary_no_reel_line_for_full_preset(self):
+        """_print_startup_summary does NOT show reel duration line for full preset."""
+        from musicvid.musicvid import _print_startup_summary
+        import click
+        from click.testing import CliRunner as _CliRunner
+
+        @click.command()
+        def dummy():
+            _print_startup_summary(
+                mode="stock", provider="flux-pro", preset="full",
+                effects="minimal", animate_mode="never", lut_style="warm",
+                lut_intensity=0.85, subtitle_style_override="karaoke",
+                transitions_mode="auto", beat_sync="auto", reel_duration=30,
+            )
+
+        _runner = _CliRunner()
+        result = _runner.invoke(dummy)
+        assert "Rolki social" not in result.output
+
 
 class TestLyricsFlag:
     """Tests for --lyrics CLI option and auto-detection."""

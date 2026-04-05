@@ -268,6 +268,8 @@ def _print_startup_summary(mode, provider, preset, effects, animate_mode, lut_st
     click.echo(f"  Obrazy:      {images_desc}")
     click.echo(f"  Animacje:    {animate_desc}")
     click.echo(f"  Preset:      {preset_desc}")
+    if preset in ("social", "all"):
+        click.echo(f"  Rolki social:   3 × {reel_duration}s z różnych fragmentów")
     click.echo(f"  Efekty:      {effects}")
     click.echo(f"  Napisy:      {subtitle_style_override} style")
     click.echo(f"  Przejścia:   {transitions_mode}")

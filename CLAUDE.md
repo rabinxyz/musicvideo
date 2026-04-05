@@ -4,7 +4,7 @@
 CLI tool that generates synchronized MP4 music videos from audio files using stock footage, beat-synced cuts, and whisper-based subtitles.
 
 ## Commands
-- `python3 -m pytest tests/ -v` - run all tests (~341 tests)
+- `python3 -m pytest tests/ -v` - run all tests (~371 tests)
 - `python3 -m musicvid.musicvid song.mp3` - run the CLI (uses cache by default)
 - `python3 -m musicvid.musicvid song.mp3 --new` - force recalculation, ignore cache
 - `python3 -c "import musicvid; print(musicvid.__version__)"` - check version
@@ -15,7 +15,7 @@ CLI tool that generates synchronized MP4 music videos from audio files using sto
 - `--provider [flux-dev|flux-pro|flux-schnell]` (default: flux-pro): selects BFL model for `--mode ai`
 - `--font PATH`: custom .ttf font for subtitles (optional, defaults to auto-downloaded Montserrat Light)
 - `--lyrics PATH`: custom .txt lyrics file (optional); auto-detects single .txt in audio dir. When provided, Whisper still runs for timing, then Claude API aligns file text to Whisper segments
-- `--effects [none|minimal|full]` (default: minimal): visual effects level — none (Ken Burns only), minimal (warm grade + vignette + cinematic bars), full (+ film grain + light leak)
+- `--effects [none|minimal|full]` (default: minimal): visual effects level — none (Ken Burns only), minimal (warm grade + vignette + subtle_film_look + cinematic bars), full (+ film grain + light leak)
 - `--clip [15|20|25|30]`: generate short social-media clip — Claude selects best fragment (chorus preferred); clips analysis to window before director; output named `{stem}_{N}s.mp4`
 - `--platform [reels|shorts|tiktok]`: forces portrait 9:16 resolution (1080×1920) and adds platform name to output filename; use with `--clip`
 - `--title-card`: prepends 2s black title card with song name; only active when used with `--clip`
@@ -87,7 +87,11 @@ CLI tool that generates synchronized MP4 music videos from audio files using sto
 - Stock fetcher tests need `PEXELS_API_KEY` env var set via `@patch.dict(os.environ)` to exercise API code path
 - Image generator BFL tests need `BFL_API_KEY` env var via `@patch.dict(os.environ)` and mock `requests` at module level
 - BFL API flow: `_submit_task` returns `(task_id, polling_url)` tuple; `_poll_result` takes `polling_url` (not task_id)
-- BFL API payload: only `prompt`, `width`, `height` — no `output_format`, `safety_tolerance`, or `prompt_upsampling`; use 1024x768 (1280x720 causes 422 from flux-dev)
+- BFL API payload: only `prompt`, `width`, `height` — no `output_format`, `safety_tolerance`, or `prompt_upsampling`; landscape uses 1360x768 (1280x720 causes 422 from flux-dev); portrait (reels) uses 768x1360
+- BFL prompts: `DOCUMENTARY_SUFFIX` and `NEGATIVE_CONTEXT` constants in `image_generator.py` are appended to every BFL prompt; they replace the old "photorealistic, high quality" suffix
+- Director prompt bans two categories of words: Catholic imagery terms AND photographic AI-fantasy terms (magical, HDR, 8K, ethereal, oversaturated, etc.) — both in `musicvid/prompts/director_system.txt`
+- `apply_subtle_film_look(clip)` in `effects.py`: pure-numpy luminance-weighted 8% desaturation + sigma=4/opacity=0.08 grain; called from `apply_effects` for "minimal" and "full" levels (not "none")
+- Banned-words test in `test_image_generator.py` uses word-boundary regex `r'\b(?<!no )(?<!no\s)' + re.escape(word) + r'\b'` to allow negation phrases like "no Catholic imagery" while still catching affirmative uses
 - Image generator polling tests mock `time.monotonic` and `time.sleep` to control timing
 - Image generator retry tests must patch tenacity wait to `wait_none()` to avoid slow tests
 - AI lyrics alignment: `align_with_claude` in `lyrics_parser.py` mocks `anthropic` at module level: `@patch("musicvid.pipeline.lyrics_parser.anthropic")`; uses manual retry loop (2 attempts) instead of tenacity

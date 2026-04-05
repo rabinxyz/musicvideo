@@ -1,146 +1,155 @@
 # Idea
 
-# Spec 2: Animowane sceny nie mogą sąsiadować ze sobą
+# Spec 3: Jakość zdjęć — dokumentalny realizm zamiast cukierkowego AI
 
 ## Kontekst i historia problemu
 
-Runway Gen-4 animuje co N-tą scenę (animate=True).
-Problem: Claude-reżyser może wygenerować plan gdzie dwie animowane
-sceny są obok siebie. Powoduje to że widz widzi dwa bardzo podobne
-ruchy kamery jeden po drugim — wygląda to monotonnie i sztucznie.
+Obecne zdjęcia generowane przez BFL Flux Pro są:
+- Zbyt nasycone kolorystycznie (oversaturated)
+- Zbyt "magiczne" i bajkowe
+- Widać że to AI — brak autentyczności
+- Bokeh na wszystkim — niepotrzebne
+- Zbyt perfekcyjne oświetlenie — nierealistyczne
 
-Dodatkowo: animowane sceny powinny być rozłożone RÓWNOMIERNIE
-przez cały teledysk — nie skupione w jednej części.
+Dla pieśni chrześcijańskich protestanckich potrzebujemy:
+- Styl dokumentalnej fotografii
+- Autentyczne emocje i miejsca
+- Naturalne oświetlenie
+- Subtelne, nie przesadzone efekty
 
-## Zasady rozmieszczenia animowanych scen
+## Zmiany w director_system.txt (system prompt Claude-reżysera)
 
-### Zasada 1: Minimum 2 nieanimowane sceny między każdą animowaną
-Nie: [animate, animate, static, animate]
-Tak: [animate, static, static, animate, static, static, animate]
+### Usuń kompletnie te słowa/frazy z generowanych promptów:
+(Claude nie może ich używać w visual_prompt)
 
-### Zasada 2: Animowane sceny przy kulminacyjnych momentach
-Priorytet dla animate=True:
-  - Pierwsze wystąpienie refrenu (chorus_first)
-  - Bridge (emocjonalny szczyt)
-  - Ostatni refren przed outro
-  - Intro (pierwsze 12s) — jeśli ma silny hook
+Zakazane słowa:
+magical, mystical, ethereal, dreamy, fantasy, otherworldly,
+glowing, radiant glow, divine light rays, heavenly glow,
+surreal, cinematic fantasy, epic, majestic (używaj rzadko),
+bokeh everywhere, heavy bokeh, extreme bokeh,
+oversaturated, vivid colors, vibrant, ultra sharp,
+perfect lighting, studio lighting, professional lighting,
+HDR, ultra-realistic (paradoksalnie wygląda nierealnie),
+8K, ultra HD, hyper-detailed
 
-Nigdy animate=True dla:
-  - Outro (ostatnie 15s) — powinno być spokojne
-  - Sceny z bardzo krótkim czasem trwania (< 6s) — za krótko dla Runway
+### Dodaj obowiązkowy styl fotograficzny do każdego promptu:
 
-### Zasada 3: Maksymalna liczba animowanych scen
-max_animated = max(1, total_scenes // 4)
-Np. dla 20 scen: max 5 animowanych
-Np. dla 8 scen: max 2 animowane
+Suffix dodawany automatycznie do KAŻDEGO visual_prompt (w image_generator.py):
+"Shot on Sony A7III, 35mm f/2.8 lens, natural available light only,
+documentary photography style, authentic and unposed,
+slight film grain, natural color grading, no heavy filters,
+real location feel, photojournalism aesthetic"
 
-### Zasada 4: Równomierne rozłożenie
-Animowane sceny powinny być rozłożone w odstępach:
-  ideal_gap = total_scenes / (max_animated + 1)
-  Np. dla 20 scen i 5 animowanych: co ~4 sceny
+### Nowe wzorce dla różnych typów scen:
 
-## Implementacja
+Dla przyrody:
+"[opis sceny], actual landscape photography, no HDR enhancement,
+natural colors slightly desaturated, authentic weather conditions,
+real sky with natural clouds, shot on location feel"
 
-### Lokalizacja: musicvid/musicvid.py — po otrzymaniu scene_plan od Claude
+Dla ludzi (sylwetki, ręce, ogólne):
+"[opis], documentary portrait style, authentic human emotion,
+natural skin tones, available light, candid feel, no posing,
+real worship moment not staged"
 
-Funkcja: enforce_animation_rules(scenes: list) -> list
-  Modyfikuje listę scen in-place, zwraca poprawioną listę.
+Dla abstrakcji duchowej (gdy tekst wymaga):
+"[opis], fine art photography, long exposure, minimal post-processing,
+subtle and restrained, atmospheric not overwhelming"
 
-Algorytm:
-  1. Zbierz indeksy scen z animate=True
-  2. Sprawdź zasadę sąsiedztwa:
-     for i in range(len(scenes) - 1):
-         if scenes[i].get("animate") and scenes[i+1].get("animate"):
-             # Wyłącz animację dla sceny o MNIEJSZEJ priorytecie
-             # Priorytet: chorus > bridge > verse > intro > outro
-             priority_i = get_section_priority(scenes[i]["section"])
-             priority_next = get_section_priority(scenes[i+1]["section"])
-             if priority_i >= priority_next:
-                 scenes[i+1]["animate"] = False
-             else:
-                 scenes[i]["animate"] = False
+### Zmień Visual Bible w visual_bible.py
 
-  3. Sprawdź maksymalną liczbę animowanych:
-     animated_indices = [i for i, s in enumerate(scenes) if s.get("animate")]
-     max_animated = max(1, len(scenes) // 4)
-     if len(animated_indices) > max_animated:
-         # Wyłącz nadmiarowe — zachowaj te o najwyższym priorytecie
-         excess = animated_indices[max_animated:]
-         for idx in excess:
-             scenes[idx]["animate"] = False
+Nowy master_style (zastąp obecny):
+"Documentary worship photography aesthetic. Natural available light,
+film grain present, colors slightly desaturated and warm,
+authentic unposed moments, Sony A7III 35mm feel,
+no artificial enhancements, real and human."
 
-  4. Sprawdź czas trwania animowanych scen:
-     for scene in scenes:
-         if scene.get("animate"):
-             duration = scene["end"] - scene["start"]
-             if duration < 6.0:
-                 scene["animate"] = False
-                 print(f"WARN: Scena {scene['section']} za krótka ({duration:.1f}s) — Ken Burns fallback")
+### Nowe przykłady promptów w director_system.txt
 
-  5. Wypisz plan animacji:
-     animated = [i for i, s in enumerate(scenes) if s.get("animate")]
-     print(f"Plan animacji Runway: {len(animated)} scen z {len(scenes)}")
-     for i in animated:
-         s = scenes[i]
-         print(f"  Scena {i}: {s['section']} @ {s['start']:.1f}-{s['end']:.1f}s")
+Zastąp obecne przykłady tymi (każdy jest wzorcem do naśladowania):
 
-def get_section_priority(section: str) -> int:
-  Mapowanie sekcji na priorytet (wyższy = ważniejszy dla animacji):
-    "chorus": 5
-    "bridge": 4
-    "verse": 3
-    "intro": 2
-    "outro": 0  (nigdy nie animuj outro)
-    default: 1
+Dla "Tylko w Bogu jest moja dusza":
+"Person sitting alone on wooden dock overlooking misty lake at dawn,
+back to camera, legs hanging over water, complete stillness,
+documentary style, natural morning light, slight mist on water,
+Sony A7III 35mm, film grain, authentic solitude and trust"
 
-### Dodaj enforce_animation_rules do pipeline
+Dla "Pan jest moim pasterzem":
+"Vast open meadow at golden hour, single figure walking in distance,
+long grass moving in wind, wide establishing shot, natural colors,
+documentary landscape photography, real weather, no filters"
 
-W musicvid.py po Stage 2 (director) i po Stage 3.5 setup:
-  scene_plan["scenes"] = enforce_animation_rules(scene_plan["scenes"])
+Dla "Nawet przez ciemną dolinę":
+"Rocky mountain path at dusk, dramatic but real clouds,
+dark foreground with lighter sky, lone figure on path seen from behind,
+photojournalism style, available light only, natural shadows"
 
-Wywołaj PRZED pętlą animowania — nie po.
+Dla refrenu/kulminacji:
+"Outdoor worship gathering at sunset, people with hands raised,
+wide shot showing community, authentic emotion on faces,
+documentary photography, warm natural backlight, no staging"
 
-### Zaktualizuj prompt Claude-reżysera w director.py
+## Zmiany w image_generator.py
 
-Dodaj do promptu:
-"ZASADY DLA POLA animate:
-- animate=True TYLKO dla: pierwszego refrenu, bridge, ostatniego refrenu
-- animate=False dla: outro, scen < 6 sekund, dwóch sąsiednich scen
-- Maksymalnie co 4. scena może mieć animate=True
-- Dwie sceny animate=True nigdy obok siebie
-- motion_prompt: opisuje RUCH KAMERY (nie treść obrazu)
-  Przykłady dobrych motion_prompt:
-  'Slow camera push forward through morning mist, gentle movement'
-  'Camera slowly rises revealing valley below, clouds drift'
-  'Subtle dolly back, light shifts from left to right gradually'
-  Unikaj: 'beautiful scene', 'spiritual moment' — to treść, nie ruch"
+### Dodaj negatywny kontekst do każdego promptu (jako część głównego promptu, nie osobny parametr)
+
+W funkcji generate_images() przed wysłaniem do BFL:
+Dodaj na końcu full_prompt:
+", documentary style, no Catholic imagery, no religious figures,
+no rosary, no crucifix, no saints, authentic not staged,
+natural light not artificial, film grain not oversaturated"
+
+### Zmień wymiary dla lepszej kompozycji 16:9
+
+Obecne: width=1024, height=768 (4:3 — złe proporcje!)
+Zmień na: width=1360, height=768 (bliższe 16:9)
+
+BFL akceptuje te wymiary i dają lepszą kompozycję panoramiczną
+która po przycięciu do 1920x1080 wygląda lepiej.
+
+## Zmiany w assembler.py — post-processing
+
+### Dodaj subtelne filmowe przetwarzanie do każdego obrazu
+
+W apply_effects() dla poziomu "minimal" i "full":
+Po warm_grade dodaj subtle_film_look():
+
+def subtle_film_look(frame):
+  # Lekka desaturacja (bardziej filmowy look)
+  # Konwertuj do HSV, zmniejsz S o 8%
+  hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV).astype(float)
+  hsv[:,:,1] *= 0.92  # -8% saturacji
+  hsv = np.clip(hsv, 0, 255).astype(np.uint8)
+  result = cv2.cvtColor(hsv, cv2.COLOR_HSV2BGR)
+
+  # Bardzo subtelny film grain (sigma=4, opacity=0.08)
+  noise = np.random.normal(0, 4, frame.shape).astype(np.float32)
+  result = np.clip(result.astype(float) + noise * 0.08, 0, 255).astype(np.uint8)
+
+  return result
+
+Używaj tylko gdy --effects minimal lub full.
+NIE używaj dla --effects none.
 
 ## Testy
 
-test_adjacent_animated:
-  Input: [animate=True, animate=True, animate=False, animate=True]
-  Output: [animate=True, animate=False, animate=False, animate=True]
+test_no_banned_words:
+  Sprawdź że visual_prompt nie zawiera żadnego z zakazanych słów
+  ["magical", "mystical", "dreamy", "fantasy", "glowing", "ethereal", "HDR", "8K"]
 
-test_max_animated:
-  Input: 20 scen, 8 z animate=True
-  Output: max 5 z animate=True (20 // 4 = 5)
+test_documentary_suffix:
+  Każdy prompt wysyłany do BFL zawiera "documentary photography style"
 
-test_short_scene:
-  Input: scena 4s z animate=True
-  Output: scena 4s z animate=False
+test_dimensions:
+  BFL request ma width=1360, height=768
 
-test_outro_never_animated:
-  Input: ostatnia scena (outro) z animate=True
-  Output: animate=False
-
-test_priority:
-  Input: chorus(animate=True) obok verse(animate=True)
-  Output: verse dostaje animate=False (niższy priorytet)
+test_film_look:
+  subtle_film_look() zwraca frame o nieco niższej saturacji
 
 ## Acceptance Criteria
-- Brak dwóch animowanych scen obok siebie w żadnym teledysku
-- Maksymalnie 25% scen animowanych (1 na 4)
-- Outro nigdy nie jest animowane
-- Sceny < 6s nigdy nie są animowane
-- Log pokazuje plan animacji przed uruchomieniem Runway
-- python3 -m pytest tests/test_animation_rules.py -v przechodzi
+- Żaden prompt nie zawiera zakazanych słów
+- Każdy prompt kończy się dokumentalnym suffixem
+- Wymiary 1360x768 zamiast 1024x768
+- Wygenerowane zdjęcia wyglądają jak fotografia dokumentalna
+- Subtelny film grain i desaturacja gdy --effects minimal
+- python3 -m pytest tests/test_image_generator.py -v przechodzi

@@ -441,6 +441,8 @@ def cli(audio_file, mode, provider, style, output, resolution, lang, new, font_p
                     )
                     entry["video_path"] = result_path
                 except Exception as exc:
+                    if hasattr(exc, 'response') and exc.response is not None:
+                        click.echo(f"  Runway error: {exc.response.status_code} {exc.response.text[:300]}")
                     click.echo(f"  \u26a0 Animation failed for scene {idx + 1}: {exc} \u2014 Ken Burns fallback")
                     scene["animate"] = False
     else:

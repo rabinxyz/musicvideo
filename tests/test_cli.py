@@ -1399,6 +1399,40 @@ class TestAnimateCLI:
         mock_animate.assert_not_called()
         assert result.exit_code == 0
 
+    @patch("musicvid.musicvid.animate_image")
+    @patch("musicvid.musicvid.get_font_path", return_value="/fake/font.ttf")
+    @patch("musicvid.musicvid.assemble_video")
+    @patch("musicvid.musicvid.generate_images", return_value=["/fake/s0.jpg", "/fake/s1.jpg", "/fake/s2.jpg"])
+    @patch("musicvid.musicvid.create_scene_plan")
+    @patch("musicvid.musicvid.analyze_audio")
+    def test_animate_error_shows_runway_response(
+        self, mock_analyze, mock_plan, mock_gen, mock_assemble, mock_font, mock_animate, tmp_path
+    ):
+        import requests
+
+        from musicvid.musicvid import cli
+
+        mock_analyze.return_value = self._make_analysis()
+        mock_plan.return_value = self._make_scene_plan_with_animated()
+
+        mock_response = MagicMock()
+        mock_response.status_code = 400
+        mock_response.text = '{"error":"invalid ratio"}'
+        http_error = requests.exceptions.HTTPError("400 Client Error")
+        http_error.response = mock_response
+        mock_animate.side_effect = http_error
+
+        audio = tmp_path / "song.mp3"
+        audio.write_bytes(b"fake audio")
+
+        runner = CliRunner()
+        with patch.dict(os.environ, {"RUNWAY_API_KEY": "test-key", "BFL_API_KEY": "test-bfl"}):
+            result = runner.invoke(cli, [str(audio), "--mode", "ai", "--animate", "always"])
+
+        assert "Runway error: 400" in result.output
+        assert "invalid ratio" in result.output
+        assert result.exit_code == 0
+
 
 class TestFilterScenePlanToClip:
     """Tests for _filter_scene_plan_to_clip helper."""

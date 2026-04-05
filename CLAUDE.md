@@ -4,7 +4,7 @@
 CLI tool that generates synchronized MP4 music videos from audio files using stock footage, beat-synced cuts, and whisper-based subtitles.
 
 ## Commands
-- `python3 -m pytest tests/ -v` - run all tests (~297 tests)
+- `python3 -m pytest tests/ -v` - run all tests (~299 tests)
 - `python3 -m musicvid.musicvid song.mp3` - run the CLI (uses cache by default)
 - `python3 -m musicvid.musicvid song.mp3 --new` - force recalculation, ignore cache
 - `python3 -c "import musicvid; print(musicvid.__version__)"` - check version
@@ -103,6 +103,7 @@ CLI tool that generates synchronized MP4 music videos from audio files using sto
 - `_create_ken_burns_clip` test mocks need `mock_clip.size=(w,h)`, `mock_clip.w=w`, `mock_clip.h=h`, `mock_clip.cropped.return_value=mock_clip` — omitting breaks the mock chain since `cropped()` returns an unconfigured auto-MagicMock
 - MoviePy 2.x cover-scale: `scale = max(tw/iw, th/ih); clip = clip.resized(scale); clip = clip.cropped(x1=x1, y1=y1, x2=x1+tw, y2=y1+th)` — scalar for proportional resize, explicit pixel coords for crop
 - `_create_subtitle_clips` has try/except around `TextClip` creation — silently skips failed segments; logs each lyric line; falls back to `font=None` if named font fails
+- Subtitle descender fix: `TextClip` height is set to `font_size + int(font_size * 0.35)` (35% pad) so j/g/y/p/q/ą/ę aren't clipped; `y_pos` is adjusted so padded clip bottom lands at `margin_bottom` from frame bottom; `~297 tests` count is now 299
 - Use `python3` not `python` on this macOS system
 
 ## Environment

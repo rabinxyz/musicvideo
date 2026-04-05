@@ -142,7 +142,7 @@ def _create_subtitle_clips(lyrics, subtitle_style, size, font_path=None, subtitl
     color = subtitle_style.get("color", "#FFFFFF")
     outline_color = subtitle_style.get("outline_color", "#000000")
     margin_bottom = subtitle_margin_bottom
-    descender_pad = int(font_size * 0.35)
+    descender_pad = int(font_size * 0.35)  # ~35% covers descenders in most Latin typefaces
     padded_height = font_size + descender_pad
 
     if not lyrics:

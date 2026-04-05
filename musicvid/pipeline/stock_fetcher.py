@@ -74,6 +74,49 @@ def _download_video(url, output_path, api_key):
     return str(output_path)
 
 
+def fetch_video_by_query(query, min_duration, output_path):
+    """Fetch a single Pexels video by explicit query string.
+
+    Unlike fetch_videos(), this takes a direct query instead of deriving
+    one from scene style. Used by VisualRouter for TYPE_VIDEO_STOCK scenes.
+
+    Args:
+        query: Pexels search string (English, 3-5 words).
+        min_duration: Minimum video duration in seconds.
+        output_path: Destination path for the downloaded .mp4.
+
+    Returns:
+        str output_path if successful, None if not found or no API key.
+    """
+    api_key = os.environ.get("PEXELS_API_KEY", "")
+    if not api_key:
+        return None
+
+    dest = Path(output_path)
+    if dest.exists():
+        return str(dest)
+
+    try:
+        search_result = _search_pexels(query, api_key)
+        videos = search_result.get("videos", [])
+
+        # Prefer videos long enough; fall back to first available
+        candidate = next(
+            (v for v in videos if v.get("duration", 0) >= min_duration),
+            videos[0] if videos else None,
+        )
+        if candidate is None:
+            return None
+
+        video_file = _get_best_video_file(candidate.get("video_files", []))
+        if video_file is None:
+            return None
+
+        return _download_video(video_file["link"], dest, api_key)
+    except Exception:
+        return None
+
+
 def fetch_videos(scene_plan, output_dir=None):
     """Fetch stock videos for each scene in the plan.
 

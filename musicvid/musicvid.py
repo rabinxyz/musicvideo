@@ -626,9 +626,11 @@ def cli(audio_file, mode, provider, style, output, resolution, lang, new, font_p
             for i, scene in enumerate(scene_plan["scenes"]):
                 scene["index"] = i
                 src = scene.get("visual_source", "TYPE_AI")
-                label = scene.get("search_query") or scene.get("visual_prompt", "")
-                click.echo(f"  [{i + 1}/{len(scene_plan['scenes'])}] "
-                           f"{scene['section']}: {src} — '{label[:40]}'")
+                query = scene.get("search_query", "")
+                prompt_preview = (scene.get("visual_prompt") or "")[:50]
+                detail = f"query: {query}" if query else f"prompt: {prompt_preview}"
+                total = len(scene_plan["scenes"])
+                click.echo(f"  [{i + 1}/{total}] {scene['section']} | {src} | {detail}")
                 asset_path = router.route(scene)
                 if asset_path is None:
                     from musicvid.pipeline.stock_fetcher import _create_placeholder_video

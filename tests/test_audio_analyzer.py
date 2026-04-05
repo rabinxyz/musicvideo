@@ -222,3 +222,38 @@ class TestAnalyzeAudio:
         analyze_audio(str(audio_file))
 
         mock_whisper.load_model.assert_called_once_with("small")
+
+    @patch("musicvid.pipeline.audio_analyzer.whisper")
+    @patch("musicvid.pipeline.audio_analyzer.librosa")
+    def test_filters_out_short_segments(self, mock_librosa, mock_whisper, mock_audio_signal, tmp_path):
+        y, sr = mock_audio_signal
+
+        mock_model = MagicMock()
+        mock_model.transcribe.return_value = {
+            "segments": [
+                {"start": 0.0, "end": 1.0, "text": "A", "words": []},
+                {"start": 1.0, "end": 2.0, "text": "Bogu chwała na wieki", "words": [
+                    {"word": "Bogu", "start": 1.0, "end": 1.3},
+                    {"word": "chwała", "start": 1.3, "end": 1.6},
+                    {"word": "na", "start": 1.6, "end": 1.7},
+                    {"word": "wieki", "start": 1.7, "end": 2.0},
+                ]},
+                {"start": 2.0, "end": 3.0, "text": "", "words": []},
+                {"start": 3.0, "end": 4.0, "text": " ", "words": []},
+            ],
+            "language": "pl",
+        }
+        mock_whisper.load_model.return_value = mock_model
+
+        mock_librosa.load.return_value = (y, sr)
+        mock_librosa.beat.beat_track.return_value = (120.0, np.array([0]))
+        mock_librosa.get_duration.return_value = 10.0
+        mock_librosa.frames_to_time.return_value = np.array([0.0])
+
+        audio_file = tmp_path / "test.mp3"
+        audio_file.write_bytes(b"fake audio data")
+
+        result = analyze_audio(str(audio_file))
+
+        assert len(result["lyrics"]) == 1
+        assert result["lyrics"][0]["text"] == "Bogu chwała na wieki"

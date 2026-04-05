@@ -103,6 +103,11 @@ def analyze_audio(audio_path, output_dir=None, whisper_model="small"):
 
     lyrics = []
     for segment in transcription.get("segments", []):
+        text = segment["text"].strip()
+        if not text:
+            continue
+        if len(text) < 2:
+            continue
         words = []
         for w in segment.get("words", []):
             words.append({
@@ -113,7 +118,7 @@ def analyze_audio(audio_path, output_dir=None, whisper_model="small"):
         lyrics.append({
             "start": round(float(segment["start"]), 2),
             "end": round(float(segment["end"]), 2),
-            "text": segment["text"].strip(),
+            "text": text,
             "words": words,
         })
 

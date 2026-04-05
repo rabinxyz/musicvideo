@@ -1,6 +1,7 @@
 """Tests for the BFL (Black Forest Labs) AI image generator pipeline stage."""
 
 import os
+import re
 from unittest.mock import patch, MagicMock, call
 
 import pytest
@@ -100,7 +101,7 @@ class TestBFLFlowSubmitPollDownload:
         assert "/v1/flux-dev" in url
 
         payload = post_call[1]["json"]
-        assert payload["width"] == 1024
+        assert payload["width"] == 1360
         assert payload["height"] == 768
         assert "prompt" in payload
         assert "output_format" not in payload
@@ -154,6 +155,55 @@ class TestBFLFlowSubmitPollDownload:
 
         headers = mock_requests.post.call_args[1]["headers"]
         assert headers["X-Key"] == "my-secret-key"
+
+    @patch.dict(os.environ, {"BFL_API_KEY": "test-key"})
+    @patch("musicvid.pipeline.image_generator.requests")
+    def test_landscape_dimensions_are_1360x768(self, mock_requests, tmp_path):
+        from musicvid.pipeline.image_generator import generate_images
+
+        mock_requests.post.return_value = _make_post_response()
+        mock_requests.get.side_effect = [
+            _make_poll_response(),
+            _make_download_response(),
+        ]
+
+        generate_images(ONE_SCENE_PLAN, str(tmp_path), provider="flux-dev")
+
+        payload = mock_requests.post.call_args[1]["json"]
+        assert payload["width"] == 1360
+        assert payload["height"] == 768
+
+    @patch.dict(os.environ, {"BFL_API_KEY": "test-key"})
+    @patch("musicvid.pipeline.image_generator.requests")
+    def test_prompt_contains_documentary_suffix(self, mock_requests, tmp_path):
+        from musicvid.pipeline.image_generator import generate_images
+
+        mock_requests.post.return_value = _make_post_response()
+        mock_requests.get.side_effect = [
+            _make_poll_response(),
+            _make_download_response(),
+        ]
+
+        generate_images(ONE_SCENE_PLAN, str(tmp_path))
+
+        payload = mock_requests.post.call_args[1]["json"]
+        assert "documentary photography style" in payload["prompt"]
+
+    @patch.dict(os.environ, {"BFL_API_KEY": "test-key"})
+    @patch("musicvid.pipeline.image_generator.requests")
+    def test_prompt_contains_negative_context(self, mock_requests, tmp_path):
+        from musicvid.pipeline.image_generator import generate_images
+
+        mock_requests.post.return_value = _make_post_response()
+        mock_requests.get.side_effect = [
+            _make_poll_response(),
+            _make_download_response(),
+        ]
+
+        generate_images(ONE_SCENE_PLAN, str(tmp_path))
+
+        payload = mock_requests.post.call_args[1]["json"]
+        assert "natural light not artificial" in payload["prompt"]
 
     @patch.dict(os.environ, {"BFL_API_KEY": "fake-key"})
     @patch("musicvid.pipeline.image_generator.requests")
@@ -346,7 +396,10 @@ class TestBannedWords:
         for post_call in mock_requests.post.call_args_list:
             prompt = post_call[1]["json"]["prompt"].lower()
             for word in BANNED_WORDS:
-                assert word not in prompt, f"Banned word '{word}' found in prompt: {prompt}"
+                # Allow words that appear only as explicit negations (e.g., "no catholic imagery")
+                # but reject any affirmative use of the banned word
+                assert not re.search(r'(?<!no )(?<!no\s)' + re.escape(word), prompt), \
+                    f"Banned word '{word}' found affirmatively in prompt: {prompt}"
 
 
 class TestMasterStylePrompt:

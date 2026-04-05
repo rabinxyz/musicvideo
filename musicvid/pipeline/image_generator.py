@@ -18,6 +18,18 @@ BFL_MODELS = {
 POLL_INTERVAL = 1.5
 POLL_TIMEOUT = 120
 
+DOCUMENTARY_SUFFIX = (
+    "documentary photography style, authentic and unposed, "
+    "natural available light only, film grain, natural color grading, "
+    "real location feel, photojournalism aesthetic"
+)
+
+NEGATIVE_CONTEXT = (
+    "no Catholic imagery, no religious figures, no rosary, no crucifix, "
+    "no saints, natural light not artificial, authentic not staged, "
+    "film grain not oversaturated"
+)
+
 
 def _is_retryable(exc):
     """Return True for network errors and 5xx responses (retryable)."""
@@ -109,7 +121,7 @@ def generate_images(scene_plan, output_dir, provider="flux-pro", platform=None):
     output_path.mkdir(parents=True, exist_ok=True)
 
     is_portrait = platform in ("reels", "shorts")
-    img_w, img_h = (768, 1360) if is_portrait else (1024, 768)
+    img_w, img_h = (768, 1360) if is_portrait else (1360, 768)
     orientation_hint = "portrait 9:16" if is_portrait else "cinematic 16:9"
 
     image_paths = []
@@ -118,9 +130,9 @@ def generate_images(scene_plan, output_dir, provider="flux-pro", platform=None):
     for i, scene in enumerate(scenes):
         visual_prompt = scene.get("visual_prompt", "nature landscape")
         if master_style:
-            full_prompt = f"{visual_prompt}, {master_style}, {orientation_hint}, photorealistic, high quality"
+            full_prompt = f"{visual_prompt}, {master_style}, {orientation_hint}, {DOCUMENTARY_SUFFIX}, {NEGATIVE_CONTEXT}"
         else:
-            full_prompt = f"{visual_prompt}, {orientation_hint}, photorealistic, high quality"
+            full_prompt = f"{visual_prompt}, {orientation_hint}, {DOCUMENTARY_SUFFIX}, {NEGATIVE_CONTEXT}"
 
         task_id, polling_url = _submit_task(model_name, full_prompt, width=img_w, height=img_h)
         image_url = _poll_result(polling_url)

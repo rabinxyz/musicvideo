@@ -110,6 +110,29 @@ def _filter_manifest_to_clip(manifest, scenes, clip_start, clip_end):
     return filtered
 
 
+def _snap_to_nearest_beat(t, beats):
+    """Return the beat timestamp closest to t."""
+    if not beats:
+        return t
+    return min(beats, key=lambda b: abs(b - t))
+
+
+def _apply_beat_sync(scene_plan, beats):
+    """Snap interior scene boundaries to nearest beat timestamps.
+
+    First scene start stays 0.0; last scene end stays as-is.
+    Adjacent scenes share the same snapped boundary (no gaps).
+    """
+    scenes = scene_plan["scenes"]
+    if not scenes or not beats:
+        return scene_plan
+    for i in range(len(scenes) - 1):
+        snapped = _snap_to_nearest_beat(scenes[i]["end"], beats)
+        scenes[i]["end"] = snapped
+        scenes[i + 1]["start"] = snapped
+    return scene_plan
+
+
 def _print_startup_summary(mode, provider, preset, effects, animate_mode, lut_style,
                             lut_intensity, subtitle_style_override, transitions_mode,
                             beat_sync, reel_duration):
@@ -309,6 +332,21 @@ def cli(audio_file, mode, provider, style, output, resolution, lang, new, font_p
         save_cache(str(cache_dir), scene_cache_name, scene_plan)
     click.echo(f"  Style: {scene_plan['overall_style']}, Scenes: {len(scene_plan['scenes'])}")
 
+    # Override transitions if --transitions cut
+    if transitions_mode == "cut":
+        for scene in scene_plan["scenes"]:
+            scene["transition"] = "cut"
+
+    # Override subtitle animation style
+    if subtitle_style_override:
+        if "subtitle_style" not in scene_plan:
+            scene_plan["subtitle_style"] = {}
+        scene_plan["subtitle_style"]["animation"] = subtitle_style_override
+
+    # Snap scene cuts to beat positions if --beat-sync auto
+    if beat_sync == "auto":
+        scene_plan = _apply_beat_sync(scene_plan, analysis.get("beats", []))
+
     # Stage 3: Fetch Videos or Generate Images
     manifest_suffix = f"_clip_{clip_duration}s" if clip_duration else ""
     if mode == "ai":
@@ -396,6 +434,8 @@ def cli(audio_file, mode, provider, style, output, resolution, lang, new, font_p
             logo_position=logo_position,
             logo_size=logo_size,
             logo_opacity=logo_opacity,
+            lut_style=lut_style,
+            lut_intensity=lut_intensity,
         )
         return
 
@@ -432,13 +472,16 @@ def cli(audio_file, mode, provider, style, output, resolution, lang, new, font_p
         logo_size=logo_size,
         logo_opacity=logo_opacity,
         cinematic_bars=(effects == "full"),
+        lut_style=lut_style,
+        lut_intensity=lut_intensity,
     )
     click.echo(f"  Done! Output: {output_path}")
 
 
 def _run_preset_mode(preset, reel_duration, analysis, scene_plan, fetch_manifest,
                      audio_path, output_dir, stem, font, effects, cache_dir, new,
-                     logo_path=None, logo_position="top-left", logo_size=None, logo_opacity=0.85):
+                     logo_path=None, logo_position="top-left", logo_size=None, logo_opacity=0.85,
+                     lut_style=None, lut_intensity=0.85):
     """Handle --preset flag: generate full video and/or social reels."""
     generate_full = preset in ("full", "all")
     generate_social = preset in ("social", "all")
@@ -485,6 +528,8 @@ def _run_preset_mode(preset, reel_duration, analysis, scene_plan, fetch_manifest
             logo_size=logo_size,
             logo_opacity=logo_opacity,
             cinematic_bars=(effects == "full"),
+            lut_style=lut_style,
+            lut_intensity=lut_intensity,
         )
         click.echo(f"  \u2192 Pe\u0142ny teledysk YouTube ({assembly_num}/{total})... \u2705")
 
@@ -534,6 +579,8 @@ def _run_preset_mode(preset, reel_duration, analysis, scene_plan, fetch_manifest
                 logo_position=logo_position,
                 logo_size=logo_size,
                 logo_opacity=logo_opacity,
+                lut_style=lut_style,
+                lut_intensity=lut_intensity,
             )
             click.echo(f"  \u2192 Rolka {clip_id} \u2014 {section} ({assembly_num}/{total})... \u2705")
 

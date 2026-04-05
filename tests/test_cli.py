@@ -2363,3 +2363,150 @@ class TestLogoWithPreset:
         assert result.exit_code == 0, result.output
         mock_gen.assert_called_once()
         assert mock_gen.call_args.kwargs.get("provider") == "flux-dev"
+
+    @patch("musicvid.musicvid.get_font_path", return_value="/fake/font.ttf")
+    @patch("musicvid.musicvid.assemble_video")
+    @patch("musicvid.musicvid.fetch_videos")
+    @patch("musicvid.musicvid.create_scene_plan")
+    @patch("musicvid.musicvid.analyze_audio")
+    def test_lut_style_passed_to_assembler(
+        self, mock_analyze, mock_direct, mock_fetch, mock_assemble, mock_font, runner, tmp_path
+    ):
+        audio_file = tmp_path / "test.mp3"
+        audio_file.write_bytes(b"fake audio")
+        mock_analyze.return_value = {
+            "lyrics": [], "beats": [0.0, 0.5], "bpm": 120.0,
+            "duration": 10.0, "sections": [{"label": "verse", "start": 0.0, "end": 10.0}],
+            "mood_energy": "contemplative", "language": "en",
+        }
+        mock_direct.return_value = {
+            "overall_style": "contemplative", "color_palette": ["#aaa"],
+            "subtitle_style": {"font_size": 48, "color": "#FFF", "outline_color": "#000",
+                               "position": "center-bottom", "animation": "fade"},
+            "scenes": [{"section": "verse", "start": 0.0, "end": 10.0,
+                        "visual_prompt": "test", "motion": "static",
+                        "transition": "cut", "overlay": "none"}],
+        }
+        mock_fetch.return_value = [{"scene_index": 0, "video_path": "/fake/v.mp4", "search_query": "test"}]
+        output_dir = tmp_path / "output"
+        result = runner.invoke(cli, [
+            str(audio_file), "--output", str(output_dir),
+            "--mode", "stock", "--preset", "full",
+            "--lut-style", "cinematic", "--lut-intensity", "0.7",
+        ])
+        assert result.exit_code == 0, result.output
+        call_kwargs = mock_assemble.call_args.kwargs
+        assert call_kwargs.get("lut_style") == "cinematic"
+        assert abs(call_kwargs.get("lut_intensity", 0) - 0.7) < 0.01
+
+    @patch("musicvid.musicvid.get_font_path", return_value="/fake/font.ttf")
+    @patch("musicvid.musicvid.assemble_video")
+    @patch("musicvid.musicvid.fetch_videos")
+    @patch("musicvid.musicvid.create_scene_plan")
+    @patch("musicvid.musicvid.analyze_audio")
+    def test_transitions_cut_overrides_scene_plan(
+        self, mock_analyze, mock_direct, mock_fetch, mock_assemble, mock_font, runner, tmp_path
+    ):
+        audio_file = tmp_path / "test.mp3"
+        audio_file.write_bytes(b"fake audio")
+        mock_analyze.return_value = {
+            "lyrics": [], "beats": [0.0, 0.5], "bpm": 120.0,
+            "duration": 10.0, "sections": [{"label": "verse", "start": 0.0, "end": 10.0}],
+            "mood_energy": "contemplative", "language": "en",
+        }
+        mock_direct.return_value = {
+            "overall_style": "contemplative", "color_palette": ["#aaa"],
+            "subtitle_style": {"font_size": 48, "color": "#FFF", "outline_color": "#000",
+                               "position": "center-bottom", "animation": "fade"},
+            "scenes": [{"section": "verse", "start": 0.0, "end": 10.0,
+                        "visual_prompt": "test", "motion": "static",
+                        "transition": "crossfade", "overlay": "none"}],
+        }
+        mock_fetch.return_value = [{"scene_index": 0, "video_path": "/fake/v.mp4", "search_query": "test"}]
+        output_dir = tmp_path / "output"
+        result = runner.invoke(cli, [
+            str(audio_file), "--output", str(output_dir),
+            "--mode", "stock", "--preset", "full", "--transitions", "cut",
+        ])
+        assert result.exit_code == 0, result.output
+        call_kwargs = mock_assemble.call_args.kwargs
+        passed_scene_plan = call_kwargs.get("scene_plan")
+        assert all(s["transition"] == "cut" for s in passed_scene_plan["scenes"])
+
+    @patch("musicvid.musicvid.get_font_path", return_value="/fake/font.ttf")
+    @patch("musicvid.musicvid.assemble_video")
+    @patch("musicvid.musicvid.fetch_videos")
+    @patch("musicvid.musicvid.create_scene_plan")
+    @patch("musicvid.musicvid.analyze_audio")
+    def test_subtitle_style_override_passed_to_scene_plan(
+        self, mock_analyze, mock_direct, mock_fetch, mock_assemble, mock_font, runner, tmp_path
+    ):
+        audio_file = tmp_path / "test.mp3"
+        audio_file.write_bytes(b"fake audio")
+        mock_analyze.return_value = {
+            "lyrics": [], "beats": [0.0, 0.5], "bpm": 120.0,
+            "duration": 10.0, "sections": [{"label": "verse", "start": 0.0, "end": 10.0}],
+            "mood_energy": "contemplative", "language": "en",
+        }
+        mock_direct.return_value = {
+            "overall_style": "contemplative", "color_palette": ["#aaa"],
+            "subtitle_style": {"font_size": 48, "color": "#FFF", "outline_color": "#000",
+                               "position": "center-bottom", "animation": "fade"},
+            "scenes": [{"section": "verse", "start": 0.0, "end": 10.0,
+                        "visual_prompt": "test", "motion": "static",
+                        "transition": "cut", "overlay": "none"}],
+        }
+        mock_fetch.return_value = [{"scene_index": 0, "video_path": "/fake/v.mp4", "search_query": "test"}]
+        output_dir = tmp_path / "output"
+        result = runner.invoke(cli, [
+            str(audio_file), "--output", str(output_dir),
+            "--mode", "stock", "--preset", "full", "--subtitle-style", "karaoke",
+        ])
+        assert result.exit_code == 0, result.output
+        call_kwargs = mock_assemble.call_args.kwargs
+        passed_scene_plan = call_kwargs.get("scene_plan")
+        assert passed_scene_plan["subtitle_style"]["animation"] == "karaoke"
+
+    @patch("musicvid.musicvid.get_font_path", return_value="/fake/font.ttf")
+    @patch("musicvid.musicvid.assemble_video")
+    @patch("musicvid.musicvid.fetch_videos")
+    @patch("musicvid.musicvid.create_scene_plan")
+    @patch("musicvid.musicvid.analyze_audio")
+    def test_beat_sync_auto_snaps_scene_boundaries(
+        self, mock_analyze, mock_direct, mock_fetch, mock_assemble, mock_font, runner, tmp_path
+    ):
+        audio_file = tmp_path / "test.mp3"
+        audio_file.write_bytes(b"fake audio")
+        mock_analyze.return_value = {
+            "lyrics": [], "beats": [0.0, 0.5, 1.0, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0, 4.5, 5.0],
+            "bpm": 120.0,
+            "duration": 10.0, "sections": [{"label": "verse", "start": 0.0, "end": 10.0}],
+            "mood_energy": "contemplative", "language": "en",
+        }
+        mock_direct.return_value = {
+            "overall_style": "contemplative", "color_palette": ["#aaa"],
+            "subtitle_style": {"font_size": 48, "color": "#FFF", "outline_color": "#000",
+                               "position": "center-bottom", "animation": "fade"},
+            "scenes": [
+                {"section": "verse", "start": 0.0, "end": 1.3,
+                 "visual_prompt": "test", "motion": "static", "transition": "cut", "overlay": "none"},
+                {"section": "verse", "start": 1.3, "end": 5.0,
+                 "visual_prompt": "test2", "motion": "static", "transition": "cut", "overlay": "none"},
+            ],
+        }
+        mock_fetch.return_value = [
+            {"scene_index": 0, "video_path": "/fake/v0.mp4", "search_query": "test"},
+            {"scene_index": 1, "video_path": "/fake/v1.mp4", "search_query": "test2"},
+        ]
+        output_dir = tmp_path / "output"
+        result = runner.invoke(cli, [
+            str(audio_file), "--output", str(output_dir),
+            "--mode", "stock", "--preset", "full", "--beat-sync", "auto",
+        ])
+        assert result.exit_code == 0, result.output
+        call_kwargs = mock_assemble.call_args.kwargs
+        passed_scene_plan = call_kwargs.get("scene_plan")
+        # Scene 0 ends at 1.3 → snaps to nearest beat (1.5)
+        assert abs(passed_scene_plan["scenes"][0]["end"] - 1.5) < 0.01
+        # Scene 1 starts at 1.3 → snaps to nearest beat (1.5)
+        assert abs(passed_scene_plan["scenes"][1]["start"] - 1.5) < 0.01

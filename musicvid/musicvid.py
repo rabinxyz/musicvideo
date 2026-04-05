@@ -8,6 +8,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
 import click
+import psutil
 from dotenv import load_dotenv
 
 from musicvid.pipeline.audio_analyzer import analyze_audio
@@ -121,9 +122,20 @@ class AssemblyJob:
 def assemble_all_parallel(jobs, max_workers=4):
     """Run multiple assemble_video calls in parallel.
 
+    Warns when system RAM < 16 GB since each FFmpeg process uses ~2 GB.
     Returns list of output_path strings for successful jobs.
     A failing job is logged but does not abort remaining jobs.
     """
+    RAM_THRESHOLD_BYTES = 16 * 1024 ** 3
+    total_ram = psutil.virtual_memory().total
+    if total_ram < RAM_THRESHOLD_BYTES:
+        ram_gb = total_ram / 1024 ** 3
+        click.echo(
+            f"  \u26a0\ufe0f  Uwaga: r\u00f3wnoleg\u0142y monta\u017c wymaga ~8GB RAM "
+            f"(wykryto {ram_gb:.0f}GB). "
+            f"Je\u015bli Mac zwalnia u\u017cyj --sequential-assembly"
+        )
+
     results = []
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
         futures = {executor.submit(assemble_video, **job.kwargs): job for job in jobs}

@@ -2691,3 +2691,28 @@ class TestPresetModeParallelKwargs(unittest.TestCase):
             self.assertEqual(job.kwargs["resolution"], "portrait")
             self.assertEqual(job.kwargs["audio_fade_out"], 1.5)
             self.assertEqual(job.kwargs["cinematic_bars"], False)
+
+
+class TestRamWarning(unittest.TestCase):
+
+    @patch("musicvid.musicvid.psutil")
+    @patch("musicvid.musicvid.assemble_video")
+    def test_low_ram_prints_warning(self, mock_av, mock_psutil):
+        from musicvid.musicvid import assemble_all_parallel, AssemblyJob
+        mock_psutil.virtual_memory.return_value = MagicMock(total=8 * 1024**3)
+        jobs = [AssemblyJob(name="j1", kwargs={"output_path": "/tmp/a.mp4", "audio_path": "/a.mp3"})]
+        with patch("click.echo") as mock_echo:
+            assemble_all_parallel(jobs)
+            calls = " ".join(str(c) for c in mock_echo.call_args_list)
+            self.assertIn("RAM", calls)
+
+    @patch("musicvid.musicvid.psutil")
+    @patch("musicvid.musicvid.assemble_video")
+    def test_high_ram_no_warning(self, mock_av, mock_psutil):
+        from musicvid.musicvid import assemble_all_parallel, AssemblyJob
+        mock_psutil.virtual_memory.return_value = MagicMock(total=32 * 1024**3)
+        jobs = [AssemblyJob(name="j1", kwargs={"output_path": "/tmp/a.mp4", "audio_path": "/a.mp3"})]
+        with patch("click.echo") as mock_echo:
+            assemble_all_parallel(jobs)
+            calls = " ".join(str(c) for c in mock_echo.call_args_list)
+            self.assertNotIn("RAM", calls)

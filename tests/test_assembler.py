@@ -1004,3 +1004,68 @@ class TestKenBurnsCoverScale:
 
         # cropped must be called to trim the overflow
         mock_clip.cropped.assert_called_once()
+
+
+class TestSubtitleErrorHandling:
+    """Tests for subtitle creation error handling."""
+
+    @patch("musicvid.pipeline.assembler.vfx")
+    @patch("musicvid.pipeline.assembler.TextClip")
+    def test_textclip_error_skips_segment_without_crash(self, mock_text_clip, mock_vfx, sample_analysis, sample_scene_plan):
+        """If TextClip raises, the segment is skipped and other segments still render."""
+        mock_good_clip = MagicMock()
+        mock_good_clip.with_duration.return_value = mock_good_clip
+        mock_good_clip.with_start.return_value = mock_good_clip
+        mock_good_clip.with_position.return_value = mock_good_clip
+        mock_good_clip.with_effects.return_value = mock_good_clip
+
+        # First segment raises, second succeeds
+        mock_text_clip.side_effect = [Exception("ImageMagick failed"), mock_good_clip]
+
+        subtitle_style = sample_scene_plan["subtitle_style"]
+        clips = _create_subtitle_clips(
+            sample_analysis["lyrics"],
+            subtitle_style,
+            (1920, 1080),
+        )
+        # Should get 1 clip (second segment), not crash
+        assert len(clips) == 1
+
+    @patch("musicvid.pipeline.assembler.vfx")
+    @patch("musicvid.pipeline.assembler.TextClip")
+    def test_empty_lyrics_returns_no_clips(self, mock_text_clip, mock_vfx, sample_scene_plan):
+        """Empty lyrics list produces no clips and does not crash."""
+        subtitle_style = sample_scene_plan["subtitle_style"]
+        clips = _create_subtitle_clips([], subtitle_style, (1920, 1080))
+        assert len(clips) == 0
+        mock_text_clip.assert_not_called()
+
+    @patch("musicvid.pipeline.assembler.vfx")
+    @patch("musicvid.pipeline.assembler.TextClip")
+    def test_subtitle_position_within_frame(self, mock_text_clip, mock_vfx, sample_analysis, sample_scene_plan):
+        """Subtitle y-position must be less than frame height."""
+        mock_clip = MagicMock()
+        mock_clip.with_duration.return_value = mock_clip
+        mock_clip.with_start.return_value = mock_clip
+        mock_clip.with_position.return_value = mock_clip
+        mock_clip.with_effects.return_value = mock_clip
+        mock_text_clip.return_value = mock_clip
+
+        subtitle_style = sample_scene_plan["subtitle_style"]
+        frame_h = 1080
+        margin_bottom = 80
+        font_size = subtitle_style.get("font_size", 58)
+        _create_subtitle_clips(
+            sample_analysis["lyrics"],
+            subtitle_style,
+            (1920, frame_h),
+            subtitle_margin_bottom=margin_bottom,
+        )
+
+        # Check with_position was called with y < frame_h
+        pos_call = mock_clip.with_position.call_args
+        assert pos_call is not None
+        args, kwargs = pos_call
+        # Position is ("center", y_value)
+        y_value = args[0][1]
+        assert y_value < frame_h, f"Subtitle y={y_value} is outside frame height={frame_h}"

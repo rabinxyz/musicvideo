@@ -142,24 +142,57 @@ def _create_subtitle_clips(lyrics, subtitle_style, size, font_path=None, subtitl
     outline_color = subtitle_style.get("outline_color", "#000000")
     margin_bottom = subtitle_margin_bottom
 
+    if not lyrics:
+        print("Warning: no lyrics segments — subtitles skipped")
+        return clips
+
     for segment in lyrics:
         duration = segment["end"] - segment["start"]
         if duration <= 0:
             continue
 
-        txt_clip = TextClip(
-            text=segment["text"],
-            font_size=font_size,
-            color=color,
-            stroke_color=outline_color,
-            stroke_width=2,
-            font=font_path,
-            method="caption",
-            size=(size[0] - 100, None),
-        )
+        print(f"Napis: '{segment['text']}' start={segment['start']:.1f}s end={segment['end']:.1f}s")
+
+        y_pos = size[1] - margin_bottom - font_size
+        if y_pos >= size[1]:
+            print(f"Warning: subtitle y={y_pos} is outside frame height={size[1]}, clamping")
+            y_pos = size[1] - font_size - 10
+
+        effective_font = font_path
+        try:
+            txt_clip = TextClip(
+                text=segment["text"],
+                font_size=font_size,
+                color=color,
+                stroke_color=outline_color,
+                stroke_width=2,
+                font=effective_font,
+                method="caption",
+                size=(size[0] - 100, None),
+            )
+        except Exception as e:
+            print(f"Warning: subtitle failed for '{segment['text']}' with font {effective_font!r}: {e}")
+            if effective_font is not None:
+                try:
+                    txt_clip = TextClip(
+                        text=segment["text"],
+                        font_size=font_size,
+                        color=color,
+                        stroke_color=outline_color,
+                        stroke_width=2,
+                        font=None,
+                        method="caption",
+                        size=(size[0] - 100, None),
+                    )
+                except Exception as e2:
+                    print(f"Warning: subtitle fallback also failed: {e2}")
+                    continue
+            else:
+                continue
+
         txt_clip = txt_clip.with_duration(duration)
         txt_clip = txt_clip.with_start(segment["start"])
-        txt_clip = txt_clip.with_position(("center", size[1] - margin_bottom - font_size))
+        txt_clip = txt_clip.with_position(("center", y_pos))
 
         fade_duration = min(0.3, duration / 3)
         txt_clip = txt_clip.with_effects([

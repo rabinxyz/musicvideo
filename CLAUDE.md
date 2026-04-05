@@ -4,7 +4,7 @@
 CLI tool that generates synchronized MP4 music videos from audio files using stock footage, beat-synced cuts, and whisper-based subtitles.
 
 ## Commands
-- `python3 -m pytest tests/ -v` - run all tests (~281 tests)
+- `python3 -m pytest tests/ -v` - run all tests (~297 tests)
 - `python3 -m musicvid.musicvid song.mp3` - run the CLI (uses cache by default)
 - `python3 -m musicvid.musicvid song.mp3 --new` - force recalculation, ignore cache
 - `python3 -c "import musicvid; print(musicvid.__version__)"` - check version
@@ -47,6 +47,11 @@ CLI tool that generates synchronized MP4 music videos from audio files using sto
 - Scene plan/manifest clip filters: `_filter_scene_plan_to_clip(scene_plan, clip_start, clip_end)` and `_filter_manifest_to_clip(manifest, scenes, clip_start, clip_end)` in `musicvid.py` — filter and offset scenes/manifest entries to a clip time window
 - Assembler social mode kwargs: `audio_fade_out=1.0` (social uses 1.5), `subtitle_margin_bottom=80` (social uses 200), `cinematic_bars=False` (default); standard/preset-full passes `cinematic_bars=(effects == "full")`, social explicitly passes `False`
 - Ken Burns `pan_up`/`pan_down` motions added; `_remap_motion_for_portrait(motion)` maps horizontal pans to vertical for 9:16
+- `--reels-style [crop|blur-bg]` (default: blur-bg): portrait conversion style — `blur-bg` creates blurred background + sharp smart crop overlay; `crop` does tighter POI-centered smart crop; passed as `reels_style` kwarg to `assemble_video` and all social AssemblyJobs
+- Smart crop: `musicvid/pipeline/smart_crop.py` — `detect_poi(image_path) -> (x, y)` (Haar face detection → saliency map → center fallback); `smart_crop(image_path, target_w, target_h, poi=None) -> PIL.Image`; `blur_bg_composite(image_path, target_w, target_h) -> PIL.Image`; `convert_for_platform(image_path, platform, style) -> str` (saves to `smart_{stem}.jpg` alongside source)
+- Assembler `_load_scene_clip` uses `convert_for_platform` for portrait images (target_size==(1080,1920)) before creating ImageClip; video files and landscape images bypass smart crop; mock target: `@patch("musicvid.pipeline.assembler.convert_for_platform")`
+- cv2 import in `smart_crop.py` uses `try/except ImportError` fallback (cv2=None) so module loads even when opencv-python not installed; tests mock `@patch("musicvid.pipeline.smart_crop.cv2")`
+- BFL image generator: `generate_images()` accepts `platform=None`; when `platform=="reels"`, uses 768×1360 (native 9:16) and `"portrait 9:16"` prompt hint instead of `"cinematic 16:9"`; `_submit_task()` accepts `width` and `height` params; CLI passes `platform="reels"` only when `preset=="social"`
 - Clip analysis filter: `_filter_analysis_to_clip(analysis, clip_start, clip_end)` in `musicvid.py` — offsets lyrics/beats/sections to clip-relative t=0 before passing to director
 - Lyrics parser: `musicvid/pipeline/lyrics_parser.py` — `align_with_claude(whisper_segments, file_lines)` for AI alignment via Claude API; also has `parse()` with variant A (plain text, even distribution) and B (MM:SS/HH:MM:SS timestamps)
 - Visual effects: `musicvid/pipeline/effects.py` — `apply_effects(clip, level)` orchestrates per-frame transforms (warm grade, vignette, film grain) and overlay effects (cinematic bars, light leak)

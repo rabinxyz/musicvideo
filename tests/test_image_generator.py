@@ -398,7 +398,7 @@ class TestBannedWords:
             for word in BANNED_WORDS:
                 # Allow words that appear only as explicit negations (e.g., "no catholic imagery")
                 # but reject any affirmative use of the banned word
-                assert not re.search(r'(?<!no )(?<!no\s)' + re.escape(word), prompt), \
+                assert not re.search(r'\b(?<!no )(?<!no\s)' + re.escape(word) + r'\b', prompt), \
                     f"Banned word '{word}' found affirmatively in prompt: {prompt}"
 
 

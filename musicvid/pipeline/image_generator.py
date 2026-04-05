@@ -64,7 +64,7 @@ def _get_headers():
     wait=wait_exponential(multiplier=1, min=2, max=10),
     retry=retry_if_exception(_is_retryable),
 )
-def _submit_task(model_name, prompt, width=1024, height=768):
+def _submit_task(model_name, prompt, width=1360, height=768):
     """Submit an image generation task to BFL API. Returns (task_id, polling_url)."""
     url = f"{BFL_BASE_URL}/v1/{model_name}"
     payload = {

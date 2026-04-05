@@ -165,6 +165,76 @@ def _remap_motion_for_portrait(motion):
     return remap.get(motion, motion)
 
 
+def _concatenate_with_transitions(scene_clips, scenes, bpm, target_size):
+    """Concatenate scene clips applying per-scene transitions.
+
+    Uses scene[i]["transition_to_next"] (set by _assign_dynamic_transitions).
+    Falls back to "cut" if field absent.
+    """
+    beat_duration = 60.0 / bpm
+    trans_durations = {
+        "cut":           0.0,
+        "cross_dissolve": max(0.2, min(0.8, round(beat_duration / 2, 2))),
+        "fade":          max(0.2, min(0.8, round(beat_duration, 2))),
+        "dip_white":     max(0.2, min(0.8, round(beat_duration * 0.75, 2))),
+    }
+
+    # Determine transitions between each consecutive pair
+    transitions = []
+    for i in range(len(scenes) - 1):
+        trans = scenes[i].get("transition_to_next", "cut")
+        d = trans_durations.get(trans, 0.0)
+        transitions.append((trans, d))
+
+    # Fast path: all cuts
+    if all(t == "cut" for t, _ in transitions):
+        return concatenate_videoclips(scene_clips, method="compose")
+
+    # Build composited clips with offsets
+    clips_positioned = []
+    cursor = 0.0
+    for i, clip in enumerate(scene_clips):
+        positioned = clip.with_start(cursor)
+        # Apply incoming transition effect
+        if i > 0:
+            prev_trans, prev_d = transitions[i - 1]
+            if prev_trans == "cross_dissolve" and prev_d > 0:
+                positioned = positioned.with_effects([vfx.CrossFadeIn(prev_d)])
+            elif prev_trans == "fade" and prev_d > 0:
+                positioned = positioned.with_effects([vfx.FadeIn(prev_d)])
+        # Apply outgoing transition effect
+        if i < len(scene_clips) - 1:
+            trans, d = transitions[i]
+            if trans == "cross_dissolve" and d > 0:
+                positioned = positioned.with_effects([vfx.CrossFadeOut(d)])
+            elif trans == "fade" and d > 0:
+                positioned = positioned.with_effects([vfx.FadeOut(d)])
+        clips_positioned.append(positioned)
+        # Advance cursor; overlap for dissolves
+        if i < len(scene_clips) - 1:
+            trans, d = transitions[i]
+            if trans == "cross_dissolve":
+                cursor += clip.duration - d
+            else:
+                cursor += clip.duration
+
+    # dip_white: add white flash overlays at transition points
+    white_clips = []
+    flash_cursor = 0.0
+    for i, clip in enumerate(scene_clips[:-1]):
+        flash_cursor += clip.duration
+        trans, d = transitions[i]
+        if trans == "dip_white" and d > 0:
+            flash = ColorClip(size=target_size, color=(255, 255, 255), duration=d)
+            flash = flash.with_start(flash_cursor - d / 2)
+            flash = flash.with_effects([vfx.CrossFadeIn(d / 2), vfx.CrossFadeOut(d / 2)])
+            white_clips.append(flash)
+
+    all_clips = clips_positioned + white_clips
+    total_duration = clips_positioned[-1].start + scene_clips[-1].duration
+    return CompositeVideoClip(all_clips, size=target_size).with_duration(total_duration)
+
+
 def _create_subtitle_clips(lyrics, subtitle_style, size, font_path=None, subtitle_margin_bottom=80):
     """Create subtitle TextClips from lyrics with word-level timing."""
     clips = []
@@ -303,7 +373,8 @@ def assemble_video(analysis, scene_plan, fetch_manifest, audio_path, output_path
         clip = apply_effects(clip, level=effects_level)
         scene_clips.append(clip)
 
-    video = concatenate_videoclips(scene_clips, method="compose")
+    bpm = analysis.get("bpm", 120.0)
+    video = _concatenate_with_transitions(scene_clips, scenes, bpm, target_size)
 
     subtitle_clips = _create_subtitle_clips(
         analysis.get("lyrics", []),

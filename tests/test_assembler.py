@@ -1235,3 +1235,36 @@ class TestSubtitleErrorHandling:
         assert y_pos + padded_h == frame_h - margin_bottom, (
             f"Expected y_pos + padded_h = {frame_h - margin_bottom}, got {y_pos + padded_h}"
         )
+
+
+from musicvid.pipeline.assembler import _concatenate_with_transitions
+
+
+class TestConcatenateWithTransitions:
+    @patch("musicvid.pipeline.assembler.concatenate_videoclips")
+    def test_all_cuts_uses_concatenate_videoclips(self, mock_concat):
+        mock_concat.return_value = MagicMock()
+        mock_clip = MagicMock()
+        mock_clip.duration = 10.0
+        scenes = [
+            {"section": "verse", "transition_to_next": "cut"},
+            {"section": "chorus"},
+        ]
+        _concatenate_with_transitions([mock_clip, mock_clip], scenes, bpm=84.0, target_size=(1920, 1080))
+        mock_concat.assert_called_once()
+
+    @patch("musicvid.pipeline.assembler.CompositeVideoClip")
+    @patch("musicvid.pipeline.assembler.vfx")
+    def test_cross_dissolve_uses_composite(self, mock_vfx, mock_composite):
+        mock_clip = MagicMock()
+        mock_clip.duration = 10.0
+        mock_clip.with_start.return_value = mock_clip
+        mock_clip.with_effects.return_value = mock_clip
+        mock_clip.with_duration.return_value = mock_clip
+        mock_composite.return_value = MagicMock()
+        scenes = [
+            {"section": "intro", "transition_to_next": "cross_dissolve"},
+            {"section": "verse"},
+        ]
+        _concatenate_with_transitions([mock_clip, mock_clip], scenes, bpm=84.0, target_size=(1920, 1080))
+        mock_composite.assert_called_once()

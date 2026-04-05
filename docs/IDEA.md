@@ -1,106 +1,129 @@
 # Idea
 
-# Spec: Domyślne ustawienia dla najlepszego teledysku
+# Spec: Równoległy montaż głównego filmu i rolek social media
 
 ## Cel
-Zmiana domyślnych wartości flag CLI tak żeby samo:
-python3 -m musicvid.musicvid piosenka.mp3
-generowało najbardziej rozbudowany i profesjonalny teledysk bez żadnych
-dodatkowych opcji.
+Gdy --preset all: montaż głównego teledysku i wszystkich 3 rolek
+wykonywany równolegle zamiast sekwencyjnie.
+Oszczędność czasu ~50-60% na Stage 4.
 
-## Zmiany domyślnych wartości w musicvid.py
+## Obecny przepływ (sekwencyjny)
+Stage 1 → Stage 2 → Stage 3 → Montaż youtube → Montaż rolka A → Montaż rolka B → Montaż rolka C
+Czas: ~20 minut (Stage 4 dominuje)
 
-Zmień default= dla każdej opcji Click:
+## Nowy przepływ (równoległy montaż)
+Stage 1 → Stage 2 → Stage 3 →
+  ┌─ Montaż youtube    ─┐
+  ├─ Montaż rolka A    ─┤ → wszystkie równolegle → gotowe
+  ├─ Montaż rolka B    ─┤
+  └─ Montaż rolka C    ─┘
+Czas: ~13 minut (Stage 4 = czas najdłuższego montażu)
 
---mode:            "stock"   → "ai"
---provider:        "flux-dev" → "flux-pro"
---preset:          None      → "all"
---effects:         "none"    → "minimal"
---animate:         "never"   → "auto"
---subtitle-style:  "fade"    → "karaoke"
---transitions:     "cut"     → "auto"
---lut-style:       None      → "warm"
---lut-intensity:   0.85      → 0.85 (bez zmian)
---beat-sync:       "off"     → "auto"
---resolution:      "1080p"   → "1080p" (bez zmian)
---reel-duration:   15        → 15 (bez zmian)
+## Implementacja
 
-## Komunikat startowy
+### Użyj ThreadPoolExecutor dla montaży FFmpeg
+FFmpeg jest procesem zewnętrznym (subprocess) — idealny do
+ThreadPoolExecutor bo nie blokuje GIL Pythona.
 
-Gdy użytkownik odpala bez żadnych flag wyświetl czytelne podsumowanie
-co będzie generowane:
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
-  MusicVid — tryb pełny
-  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  Obrazy:      BFL Flux Pro (AI)
-  Animacje:    Runway Gen-4 (co 3. scena)
-  Preset:      Pełny teledysk + 3 rolki 15s
-  Efekty:      Warm grade + vignette
-  Napisy:      Karaoke style
-  Przejścia:   Auto (Claude dobiera)
-  Color grade: LUT Warm
-  Beat sync:   Włączony
-  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  Szacowany czas: ~15-20 minut
-  Szacowany koszt: ~$0.80 (Flux Pro + Runway)
-  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  Kontynuować? [T/n]:
+def assemble_all_parallel(jobs: list[AssemblyJob]) -> list[str]:
+    results = []
+    with ThreadPoolExecutor(max_workers=4) as executor:
+        futures = {
+            executor.submit(assemble_single, job): job
+            for job in jobs
+        }
+        for future in as_completed(futures):
+            job = futures[future]
+            try:
+                output_path = future.result()
+                results.append(output_path)
+                print(f"✅ Gotowe: {job.name}")
+            except Exception as e:
+                print(f"❌ Błąd: {job.name} — {e}")
+    return results
 
-Flaga --yes lub --batch-yes pomija potwierdzenie.
+AssemblyJob zawiera:
+  name: str            (np. "youtube", "rolka_A_15s")
+  audio_path: str
+  scene_assets: list   (obrazy/wideo z cache)
+  clip_start: float    (0.0 dla głównego, offset dla rolek)
+  clip_end: float      (duration dla głównego, clip_end dla rolek)
+  platform: str        (youtube/reels/square)
+  output_path: str
 
-## Tryb szybki --quick
+### Logowanie postępu przy równoległym montażu
 
-Dodaj nową flagę --quick która ustawia szybkie ale gorsze ustawienia:
-  --mode stock (Pexels, bez kosztów API)
-  --preset full (tylko pełny teledysk, bez rolek)
-  --effects none
-  --animate never
-  --subtitle-style fade
-  --transitions cut
-  --lut-style None
-  --beat-sync off
+Wyświetlaj status wszystkich montaży jednocześnie:
+  Montaż równoległy (4 wątki):
+  [youtube   ] ████████░░░░ 65% — 00:45 pozostało
+  [rolka A   ] ██████░░░░░░ 48% — 01:02 pozostało
+  [rolka B   ] ████░░░░░░░░ 32% — 01:18 pozostało
+  [rolka C   ] ██░░░░░░░░░░ 18% — 01:35 pozostało
 
-Użycie: python3 -m musicvid.musicvid piosenka.mp3 --quick
-Dla testów i podglądów bez wydawania kredytów API.
+Jeśli rich/progress bar niedostępny: zwykłe logi z prefixem nazwy.
 
-## Tryb ekonomiczny --economy
+### Ograniczenia sprzętowe na Macu
 
-Dodaj flagę --economy dla niższych kosztów przy dobrej jakości:
-  --mode ai
-  --provider flux-dev (tańszy niż pro)
-  --preset full (tylko pełny teledysk)
-  --effects minimal
-  --animate never (bez Runway)
-  --subtitle-style karaoke
-  --transitions auto
-  --lut-style warm
-  --beat-sync auto
+Mac M2 ma 8 rdzeni wydajnościowych.
+4 równoległe FFmpeg to bezpieczne maximum.
+Dodaj ostrzeżenie jeśli RAM < 16GB:
+"Uwaga: równoległy montaż wymaga ~8GB RAM. Jeśli Mac zwalnia
+użyj --sequential-assembly"
 
-Koszt: ~$0.15 zamiast ~$0.80
+Flaga --sequential-assembly: wyłącza równoległość Stage 4
+(powrót do sekwencyjnego dla słabszych Maców).
 
-## Zachowanie gdy brak kluczy API
+### Współdzielone zasoby między montażami
 
-Gdy BFL_API_KEY brak a --mode ai (domyślny):
-Wyświetl czytelny komunikat:
-  "Brak BFL_API_KEY — przełączam na tryb stock (Pexels).
-   Aby używać AI obrazów: dodaj BFL_API_KEY do .env
-   Rejestracja: https://bfl.ai/dashboard"
-Kontynuuj z --mode stock zamiast rzucać błąd.
+Wszystkie montaże czytają z cache (tylko odczyt) — bezpieczne:
+  output/tmp/{hash}/scene_NNN.jpg — odczyt wielu procesów naraz
+  output/tmp/{hash}/animated_NNN.mp4 — odczyt wielu procesów naraz
+  output/tmp/{hash}/audio_analysis.json — odczyt
 
-Gdy RUNWAY_API_KEY brak a --animate auto (domyślny):
-Wyświetl:
-  "Brak RUNWAY_API_KEY — animacje wyłączone (Ken Burns zamiast Runway).
-   Aby używać Runway: dodaj RUNWAY_API_KEY do .env
-   Rejestracja: https://app.runwayml.com"
-Kontynuuj z --animate never zamiast rzucać błąd.
+Każdy montaż pisze do osobnego pliku wyjściowego — brak konfliktu:
+  output/pelny/nazwa_youtube.mp4
+  output/social/nazwa_rolka_A_15s.mp4
+  output/social/nazwa_rolka_B_15s.mp4
+  output/social/nazwa_rolka_C_15s.mp4
+
+Pliki tymczasowe FFmpeg (jeśli potrzebne) w osobnych podfolderach:
+  output/tmp/{hash}/assembly_youtube/
+  output/tmp/{hash}/assembly_rolka_A/
+
+### Kolejność priorytetów
+
+Jeśli system jest przeciążony i jeden montaż musi poczekać:
+  Priorytet 1: youtube (najdłuższy, najważniejszy)
+  Priorytet 2: rolka A (zwykle refren — najpopularniejsza)
+  Priorytet 3: rolka B
+  Priorytet 4: rolka C
+
+## Integracja w assembler.py i musicvid.py
+
+W musicvid.py gdy --preset all lub --preset social:
+  Zamiast: for variant in variants: assemble_single(variant)
+  Użyj: assemble_all_parallel(variants)
+
+Gdy --preset full lub brak --preset:
+  Jeden montaż — bez zmian, bez ThreadPoolExecutor.
+
+Gdy --sequential-assembly podane:
+  Zawsze sekwencyjnie niezależnie od --preset.
+
+## Testy
+- assemble_all_parallel: mockuj assemble_single, sprawdź że
+  wszystkie 4 wywołania są uruchamiane równolegle (nie sekwencyjnie)
+- Błąd jednego montażu nie zatrzymuje pozostałych
+- Wyniki zawierają ścieżki do wszystkich udanych plików
+- --sequential-assembly: assemble_single wywoływany sekwencyjnie
+- Pliki wyjściowe trafiają do właściwych podfolderów
 
 ## Acceptance Criteria
-- python3 -m musicvid.musicvid piosenka.mp3 używa flux-pro, preset all,
-  karaoke, warm LUT, beat-sync, effects minimal
-- Komunikat startowy wyświetla podsumowanie ustawień i pyta o potwierdzenie
-- --quick przełącza na szybki tryb stock bez kosztów
-- --economy używa flux-dev bez Runway
-- Brak BFL_API_KEY: automatyczny fallback do stock z komunikatem
-- Brak RUNWAY_API_KEY: automatyczny fallback do Ken Burns z komunikatem
-- --yes pomija potwierdzenie
+- --preset all: 4 montaże uruchamiane równolegle przez ThreadPoolExecutor
+- Czas Stage 4 = czas najdłuższego montażu (nie suma wszystkich)
+- Błąd jednej rolki nie zatrzymuje głównego teledysku
+- --sequential-assembly przywraca sekwencyjne zachowanie
+- Wszystkie pliki wyjściowe w prawidłowych folderach
 - python3 -m pytest tests/ -v przechodzi

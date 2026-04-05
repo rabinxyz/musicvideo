@@ -4,7 +4,7 @@
 CLI tool that generates synchronized MP4 music videos from audio files using stock footage, beat-synced cuts, and whisper-based subtitles.
 
 ## Commands
-- `python3 -m pytest tests/ -v` - run all tests (~271 tests)
+- `python3 -m pytest tests/ -v` - run all tests (~281 tests)
 - `python3 -m musicvid.musicvid song.mp3` - run the CLI (uses cache by default)
 - `python3 -m musicvid.musicvid song.mp3 --new` - force recalculation, ignore cache
 - `python3 -c "import musicvid; print(musicvid.__version__)"` - check version
@@ -27,7 +27,10 @@ CLI tool that generates synchronized MP4 music videos from audio files using sto
 - CLI tests for `--animate` must mock `@patch("musicvid.musicvid.animate_image")` since animate_image is imported at module level
 - Assembler `_load_scene_clip`: skips Ken Burns for scenes with `animate=True` and `.mp4` suffix — just resizes to target_size
 - Clip selector: `musicvid/pipeline/clip_selector.py` — `select_clip(analysis, clip_duration)` calls Claude API; manual 2-attempt retry loop with fallback to song center; mock target: `@patch("musicvid.pipeline.clip_selector.anthropic")`
-- `--preset [full|social|all]` (default: "all"): preset mode — `full` generates YouTube 16:9 in `output/pelny/`, `social` generates 3 reels (9:16) from different sections in `output/social/`, `all` generates both. Stages 1-3 run once; stage 4 loops per variant. Uses `_run_preset_mode()` in `musicvid.py`
+- `--preset [full|social|all]` (default: "all"): preset mode — `full` generates YouTube 16:9 in `output/pelny/`, `social` generates 3 reels (9:16) from different sections in `output/social/`, `all` generates both. Stages 1-3 run once; stage 4 runs all variants in parallel (ThreadPoolExecutor). Uses `_run_preset_mode()` and `assemble_all_parallel()` in `musicvid.py`
+- `--sequential-assembly`: disables Stage 4 parallelism (use on low-RAM Macs); `_run_preset_mode` falls back to sequential loop; single-job presets (`--preset full`) always run sequentially regardless of flag
+- Parallel assembly: `AssemblyJob(name, kwargs)` dataclass collects per-variant args; `assemble_all_parallel(jobs, max_workers=4)` submits all via `ThreadPoolExecutor`; one job failure does not abort others; warns when system RAM < 16 GB (via `psutil`)
+- CLI tests for parallel assembly must mock `@patch("musicvid.musicvid.assemble_all_parallel")` for multi-job presets (`--preset social`, `--preset all`) since `_run_preset_mode` no longer calls `assemble_video` directly in those paths
 - `--lut-style [warm|cold|cinematic|natural|faded]` (default: warm): LUT color grade style — passed as `lut_style` kwarg to all `assemble_video` calls (assembler already supports it via `color_grade.py`); `_run_preset_mode` accepts `lut_style`/`lut_intensity` kwargs
 - `--subtitle-style [fade|karaoke|none]` (default: karaoke): overrides `scene_plan["subtitle_style"]["animation"]` in `cli()` after Stage 2
 - `--transitions [cut|auto]` (default: auto): if "cut", overrides all `scene["transition"]` in scene_plan after Stage 2

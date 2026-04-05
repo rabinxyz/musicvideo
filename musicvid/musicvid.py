@@ -278,6 +278,16 @@ def _print_startup_summary(mode, provider, preset, effects, animate_mode, lut_st
     click.echo("  " + "━" * 38)
 
 
+def get_section_priority(section: str) -> int:
+    """Return animation priority for a section type. Higher = more important."""
+    return {"chorus": 5, "bridge": 4, "verse": 3, "intro": 2, "outro": 0}.get(section, 1)
+
+
+def enforce_animation_rules(scenes: list) -> list:
+    """Placeholder — full implementation in next task."""
+    return scenes
+
+
 @click.command()
 @click.argument("audio_file", type=click.Path(exists=True))
 @click.option("--mode", type=click.Choice(["stock", "ai", "hybrid"]), default="ai", help="Video source mode.")

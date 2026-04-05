@@ -110,6 +110,29 @@ def _filter_manifest_to_clip(manifest, scenes, clip_start, clip_end):
     return filtered
 
 
+def _print_startup_summary(mode, provider, preset, effects, animate_mode, lut_style,
+                            lut_intensity, subtitle_style_override, transitions_mode,
+                            beat_sync, reel_duration):
+    """Print a human-readable summary of the active generation settings."""
+    images_desc = f"BFL {provider.upper()} (AI)" if mode == "ai" else "Pexels (stock)"
+    animate_desc = "Runway Gen-4 (auto)" if animate_mode == "auto" else (
+        "Runway Gen-4 (wszystkie)" if animate_mode == "always" else "wyłączone (Ken Burns)"
+    )
+    preset_desc = {"full": "Pełny teledysk", "social": "3 rolki", "all": "Pełny teledysk + 3 rolki"}.get(preset or "full", preset)
+    lut_desc = f"LUT {lut_style} (intensity {lut_intensity})" if lut_style else "brak"
+    click.echo("  MusicVid — tryb pełny")
+    click.echo("  " + "━" * 38)
+    click.echo(f"  Obrazy:      {images_desc}")
+    click.echo(f"  Animacje:    {animate_desc}")
+    click.echo(f"  Preset:      {preset_desc}")
+    click.echo(f"  Efekty:      {effects}")
+    click.echo(f"  Napisy:      {subtitle_style_override} style")
+    click.echo(f"  Przejścia:   {transitions_mode}")
+    click.echo(f"  Color grade: {lut_desc}")
+    click.echo(f"  Beat sync:   {beat_sync}")
+    click.echo("  " + "━" * 38)
+
+
 @click.command()
 @click.argument("audio_file", type=click.Path(exists=True))
 @click.option("--mode", type=click.Choice(["stock", "ai", "hybrid"]), default="ai", help="Video source mode.")
@@ -183,6 +206,15 @@ def cli(audio_file, mode, provider, style, output, resolution, lang, new, font_p
             "Rejestracja: https://app.runwayml.com"
         )
         animate_mode = "never"
+
+    _print_startup_summary(mode, provider, preset, effects, animate_mode, lut_style,
+                           lut_intensity, subtitle_style_override, transitions_mode,
+                           beat_sync, reel_duration)
+
+    import sys
+    if not skip_confirm and sys.stdin.isatty():
+        if not click.confirm("  Kontynuować?", default=True):
+            raise SystemExit(0)
 
     audio_path = Path(audio_file).resolve()
     output_dir = Path(output).resolve()

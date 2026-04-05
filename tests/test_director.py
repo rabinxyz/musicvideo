@@ -269,3 +269,10 @@ class TestCreateScenePlan:
         for scene in result["scenes"]:
             assert scene.get("animate") == False
             assert scene.get("motion_prompt") == ""
+
+    @patch("musicvid.pipeline.director.anthropic")
+    def test_calls_claude_with_8192_max_tokens(self, mock_anthropic, sample_analysis):
+        mock_client = self._make_mock_client(mock_anthropic, self._base_plan())
+        create_scene_plan(sample_analysis)
+        call_kwargs = mock_client.messages.create.call_args[1]
+        assert call_kwargs["max_tokens"] == 8192

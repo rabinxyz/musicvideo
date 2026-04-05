@@ -302,3 +302,39 @@ class TestCreateScenePlan:
         mock_anthropic.Anthropic.return_value = mock_client
         result = create_scene_plan(sample_analysis)
         assert "overall_style" in result
+
+    @patch("musicvid.pipeline.director.anthropic")
+    def test_repairs_truncated_json(self, mock_anthropic, sample_analysis):
+        """Should repair JSON truncated mid-string by finding last complete scene."""
+        plan = self._base_plan()
+        complete_json = json.dumps(plan)
+        # Truncate in the middle — cut off last 20 chars
+        truncated = complete_json[:-20]
+        mock_response = MagicMock()
+        mock_response.content = [MagicMock()]
+        mock_response.content[0].text = truncated
+        mock_client = MagicMock()
+        mock_client.messages.create.return_value = mock_response
+        mock_anthropic.Anthropic.return_value = mock_client
+        result = create_scene_plan(sample_analysis)
+        assert "scenes" in result
+        assert len(result["scenes"]) > 0
+
+    @patch("musicvid.pipeline.director.anthropic")
+    def test_retries_when_json_unreparable(self, mock_anthropic, sample_analysis):
+        """Should retry Claude call when truncated JSON is unreparable."""
+        plan = self._base_plan()
+        good_json = json.dumps(plan)
+        # First call returns garbage, second returns valid JSON
+        bad_response = MagicMock()
+        bad_response.content = [MagicMock()]
+        bad_response.content[0].text = '{"scenes": [{'  # unreparable
+        good_response = MagicMock()
+        good_response.content = [MagicMock()]
+        good_response.content[0].text = good_json
+        mock_client = MagicMock()
+        mock_client.messages.create.side_effect = [bad_response, good_response]
+        mock_anthropic.Anthropic.return_value = mock_client
+        result = create_scene_plan(sample_analysis)
+        assert "scenes" in result
+        assert mock_client.messages.create.call_count == 2

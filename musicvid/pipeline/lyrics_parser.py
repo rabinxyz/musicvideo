@@ -243,17 +243,19 @@ def _apply_timing_corrections(result, audio_duration):
     # Step 1 & 2: min/max duration
     for item in result:
         duration = item["end"] - item["start"]
-        if duration < 0.8:
+        if duration < 0.8:  # 0.8s minimum so viewers have time to read
             item["end"] = item["start"] + 0.8
-        elif duration > 8.0:
+        elif duration > 8.0:  # 8.0s maximum; longer means the segment was too long
             item["end"] = item["start"] + 8.0
 
     # Step 3: enforce minimum 0.15s gap (process in order)
+    # 0.15s minimum gap prevents subtitle flicker between consecutive lines
     for i in range(len(result) - 1):
         if result[i]["end"] > result[i + 1]["start"] - 0.15:
             result[i]["end"] = result[i + 1]["start"] - 0.15
 
     # Step 4: pre-display offset (-0.05s, clamped to 0)
+    # 0.05s early display so subtitle is visible slightly before the word is heard
     for item in result:
         item["start"] = max(0.0, item["start"] - 0.05)
 

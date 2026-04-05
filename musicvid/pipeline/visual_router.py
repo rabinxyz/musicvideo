@@ -81,6 +81,11 @@ class VisualRouter:
 
     def _route_video_stock(self, scene, idx, duration):
         query = scene.get("search_query", "nature landscape")
+        query = sanitize_query(query)
+        if query == "BLOCKED":
+            visual_prompt = scene.get("visual_prompt") or "nature landscape peaceful"
+            print(f"  Fallback: scene {idx} TYPE_VIDEO_STOCK → TYPE_AI (query blocked)")
+            return self._generate_bfl(visual_prompt, idx)
         output_path = str(self.cache_dir / f"scene_{idx:03d}.mp4")
 
         result = fetch_video_by_query(query, duration, output_path)
@@ -105,9 +110,14 @@ class VisualRouter:
         if Path(output_path).exists():
             return output_path
 
+        query = scene.get("search_query", "nature landscape")
+        query = sanitize_query(query)
+        if query == "BLOCKED":
+            print(f"  Fallback: scene {idx} TYPE_PHOTO_STOCK → TYPE_AI (query blocked)")
+            return self._generate_bfl(scene.get("visual_prompt", "nature landscape"), idx)
+
         unsplash_key = os.environ.get("UNSPLASH_ACCESS_KEY", "")
         if unsplash_key:
-            query = scene.get("search_query", "nature landscape")
             try:
                 resp = requests.get(
                     "https://api.unsplash.com/photos/random",
@@ -127,7 +137,6 @@ class VisualRouter:
         pexels_key = os.environ.get("PEXELS_API_KEY", "")
         if pexels_key:
             duration = scene["end"] - scene["start"]
-            query = scene.get("search_query", "nature landscape")
             video_path = str(self.cache_dir / f"scene_{idx:03d}.mp4")
             result = fetch_video_by_query(query, duration, video_path)
             if result:

@@ -171,8 +171,8 @@ class TestAnimateImage:
         animate_image(str(img), "Camera rises slowly", duration=5, output_path=str(out))
 
         payload = mock_requests.post.call_args[1]["json"]
-        assert payload["model"] == "gen4_turbo"
+        assert payload["model"] == "gen4.5"
         assert payload["duration"] == 5
-        assert payload["ratio"] == "1280:768"
+        assert payload["ratio"] == "1280:720"
         assert payload["promptText"] == "Camera rises slowly"
         assert payload["promptImage"].startswith("data:image/jpeg;base64,")

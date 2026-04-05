@@ -43,11 +43,11 @@ def _get_headers():
 def _submit_animation(image_b64, motion_prompt, duration):
     """POST to Runway API to start image-to-video task. Returns task_id."""
     payload = {
-        "model": "gen4_turbo",
+        "model": "gen4.5",
         "promptImage": image_b64,
         "promptText": motion_prompt,
         "duration": duration,
-        "ratio": "1280:768",
+        "ratio": "1280:720",
     }
     resp = requests.post(
         f"{RUNWAY_API_BASE}/v1/image_to_video",

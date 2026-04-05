@@ -2956,7 +2956,21 @@ class TestFindNearestScene(unittest.TestCase):
             result = find_nearest_scene(0.0, 10.0, manifest)
         assert result["scene_index"] == 1
 
-    def test_returns_none_when_no_valid_entries(self):
+    def test_returns_first_available_when_no_files_exist(self):
+        """When no entry has a valid file on disk, return the first entry with a non-None path."""
+        from musicvid.musicvid import find_nearest_scene
+        manifest = [
+            {"scene_index": 0, "start": 0.0, "end": 10.0, "video_path": None},
+            {"scene_index": 1, "start": 10.0, "end": 20.0, "video_path": "/fake/b.jpg"},
+        ]
+        with patch("os.path.exists", return_value=False):
+            result = find_nearest_scene(0.0, 10.0, manifest)
+        # Falls back to first entry with non-None video_path (ignoring exists check)
+        assert result is not None
+        assert result["scene_index"] == 1
+
+    def test_returns_none_only_when_all_paths_none(self):
+        """Returns None only when every entry has video_path=None."""
         from musicvid.musicvid import find_nearest_scene
         manifest = [
             {"scene_index": 0, "start": 0.0, "end": 10.0, "video_path": None},

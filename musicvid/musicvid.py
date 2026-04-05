@@ -119,7 +119,9 @@ def find_nearest_scene(start, end, fetch_manifest):
 
     Skips entries where video_path is None or the file doesn't exist.
     When no overlap exists, falls back to the entry whose scene center is closest
-    to the clip center. Returns None if no valid entry is found.
+    to the clip center. As a last resort, returns the first entry with a non-None
+    video_path (ignoring file existence). Returns None only if every entry has
+    video_path=None.
     """
     clip_center = (start + end) / 2
     best = None
@@ -143,7 +145,15 @@ def find_nearest_scene(start, end, fetch_manifest):
                 best_center_dist = center_dist
                 best = entry
 
-    return best
+    if best is not None:
+        return best
+
+    # Last resort: first entry with non-None video_path (file may not exist yet)
+    for entry in fetch_manifest:
+        if entry.get("video_path"):
+            return entry
+
+    return None
 
 
 def _validate_clip_manifest(clip_manifest, full_manifest):

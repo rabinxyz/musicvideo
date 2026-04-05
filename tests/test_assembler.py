@@ -668,8 +668,8 @@ class TestLoadSceneClipAnimated:
         mock_clip.transform.assert_called()
 
     @patch("musicvid.pipeline.assembler.VideoFileClip")
-    def test_non_animated_mp4_uses_ken_burns(self, mock_vfc, tmp_path):
-        """Non-animated .mp4 (stock video) should still get Ken Burns."""
+    def test_non_animated_mp4_skips_ken_burns(self, mock_vfc, tmp_path):
+        """Non-animated .mp4 (stock video) should skip Ken Burns — video already has motion."""
         from musicvid.pipeline.assembler import _load_scene_clip
 
         fake_mp4 = tmp_path / "stock.mp4"
@@ -690,8 +690,10 @@ class TestLoadSceneClipAnimated:
         scene = {"start": 0.0, "end": 5.0, "motion": "slow_zoom_in", "animate": False}
         _load_scene_clip(str(fake_mp4), scene, (1920, 1080))
 
-        # transform (Ken Burns) SHOULD be called for non-animated video
-        mock_clip.transform.assert_called()
+        # Ken Burns (transform) should NOT be called — .mp4 already has motion
+        mock_clip.transform.assert_not_called()
+        # Should just resize
+        mock_clip.resized.assert_called()
 
 
 class TestLoadSceneClipSmartCrop(unittest.TestCase):

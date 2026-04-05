@@ -94,13 +94,13 @@ class VisualRouter:
             return self._generate_bfl(scene.get("visual_prompt", "nature landscape"), idx)
 
     def _route_animated(self, scene, idx, duration):
-        image_path = self._generate_bfl(scene.get("visual_prompt", "nature landscape"), idx)
-        if image_path is None:
-            return None
-
         output_path = str(self.cache_dir / f"animated_scene_{idx:03d}.mp4")
         if Path(output_path).exists():
             return output_path
+
+        image_path = self._generate_bfl(scene.get("visual_prompt", "nature landscape"), idx)
+        if image_path is None:
+            return None
 
         runway_key = os.environ.get("RUNWAY_API_KEY", "")
         if not runway_key:

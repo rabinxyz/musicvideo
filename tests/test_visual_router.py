@@ -92,7 +92,7 @@ class TestVisualRouterVideoStock:
 
         assert result == video_path
 
-    def test_route_video_stock_falls_back_to_photo_then_ai(self, tmp_path):
+    def test_route_video_stock_falls_back_to_bfl(self, tmp_path):
         from musicvid.pipeline.visual_router import VisualRouter
         router = VisualRouter(cache_dir=str(tmp_path), provider="flux-pro")
 

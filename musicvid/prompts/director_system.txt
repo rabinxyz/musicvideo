@@ -15,6 +15,16 @@ TYPE_VIDEO_STOCK — Pexels video (free, realistic)
   When: concrete filmable elements — nature (mountains, water, sky, fields), people (worship,
         prayer, walking), community activities. NOT for abstract spiritual concepts.
   Fields: set search_query (English, 3-5 words), set visual_prompt to ""
+  CRITICAL search_query rules:
+  NEVER use these words in search_query: muslim, mosque, islamic, quran, hindu, buddha,
+  buddhist, church interior, cathedral, shrine, altar, rosary, meditation,
+  prayer rug, hijab, pope, bishop, temple
+  For prayer/worship scenes: describe ACTION and PLACE without religious context:
+    NO: "prayer hands", "worship hands", "meditation person"
+    YES: "person sitting quietly sunrise", "hands open palms upward outdoor",
+         "people outdoor arms up sunset", "person peaceful field morning"
+  TYPE_VIDEO_STOCK is SAFEST for nature and landscapes only.
+  For people in prayer/worship — prefer TYPE_AI to avoid non-Protestant content.
 
 TYPE_PHOTO_STOCK — Unsplash photo (free, documentary)
   When: still/contemplative moments, specific objects (open Bible, wooden cross, candle),

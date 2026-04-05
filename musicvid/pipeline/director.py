@@ -18,7 +18,16 @@ def _load_system_prompt():
 
 def _build_user_message(analysis, style_override=None):
     """Build the user message for Claude with analysis data."""
+    duration = analysis.get("duration", 0)
+    if duration > 300:  # over 5 minutes
+        max_scenes = 15
+    elif duration > 180:  # 3-5 minutes
+        max_scenes = 12
+    else:  # under 3 minutes
+        max_scenes = 10
+
     msg = f"Here is the audio analysis for the music video:\n\n{json.dumps(analysis, indent=2)}"
+    msg += f"\n\nGenerate a maximum of {max_scenes} scenes."
     if style_override and style_override != "auto":
         msg += f"\n\nIMPORTANT: Override the style to be '{style_override}' regardless of the mood detected in the audio."
     return msg

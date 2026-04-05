@@ -321,6 +321,36 @@ class TestCreateScenePlan:
         assert len(result["scenes"]) > 0
 
     @patch("musicvid.pipeline.director.anthropic")
+    def test_scene_limit_short_song(self, mock_anthropic, sample_analysis):
+        """Songs under 3 minutes: limit 10 scenes in prompt."""
+        short_analysis = dict(sample_analysis, duration=150.0)  # 2.5 min
+        mock_client = self._make_mock_client(mock_anthropic, self._base_plan())
+        create_scene_plan(short_analysis)
+        call_kwargs = mock_client.messages.create.call_args[1]
+        user_msg = call_kwargs["messages"][0]["content"]
+        assert "10 scenes" in user_msg
+
+    @patch("musicvid.pipeline.director.anthropic")
+    def test_scene_limit_medium_song(self, mock_anthropic, sample_analysis):
+        """Songs 3-5 minutes: limit 12 scenes in prompt."""
+        medium_analysis = dict(sample_analysis, duration=240.0)  # 4 min
+        mock_client = self._make_mock_client(mock_anthropic, self._base_plan())
+        create_scene_plan(medium_analysis)
+        call_kwargs = mock_client.messages.create.call_args[1]
+        user_msg = call_kwargs["messages"][0]["content"]
+        assert "12 scenes" in user_msg
+
+    @patch("musicvid.pipeline.director.anthropic")
+    def test_scene_limit_long_song(self, mock_anthropic, sample_analysis):
+        """Songs over 5 minutes: limit 15 scenes in prompt."""
+        long_analysis = dict(sample_analysis, duration=360.0)  # 6 min
+        mock_client = self._make_mock_client(mock_anthropic, self._base_plan())
+        create_scene_plan(long_analysis)
+        call_kwargs = mock_client.messages.create.call_args[1]
+        user_msg = call_kwargs["messages"][0]["content"]
+        assert "15 scenes" in user_msg
+
+    @patch("musicvid.pipeline.director.anthropic")
     def test_retries_when_json_unreparable(self, mock_anthropic, sample_analysis):
         """Should retry Claude call when truncated JSON is unreparable."""
         plan = self._base_plan()

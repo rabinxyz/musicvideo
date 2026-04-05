@@ -103,7 +103,13 @@ CLI tool that generates synchronized MP4 music videos from audio files using sto
 - `_create_ken_burns_clip` test mocks need `mock_clip.size=(w,h)`, `mock_clip.w=w`, `mock_clip.h=h`, `mock_clip.cropped.return_value=mock_clip` — omitting breaks the mock chain since `cropped()` returns an unconfigured auto-MagicMock
 - MoviePy 2.x cover-scale: `scale = max(tw/iw, th/ih); clip = clip.resized(scale); clip = clip.cropped(x1=x1, y1=y1, x2=x1+tw, y2=y1+th)` — scalar for proportional resize, explicit pixel coords for crop
 - `_create_subtitle_clips` has try/except around `TextClip` creation — silently skips failed segments; logs each lyric line; falls back to `font=None` if named font fails
-- Subtitle descender fix: `TextClip` height is set to `font_size + int(font_size * 0.35)` (35% pad) so j/g/y/p/q/ą/ę aren't clipped; `y_pos` is adjusted so padded clip bottom lands at `margin_bottom` from frame bottom; `~297 tests` count is now 299
+- Subtitle descender fix: `TextClip` height is set to `font_size + int(font_size * 0.35)` (35% pad) so j/g/y/p/q/ą/ę aren't clipped; `y_pos` is adjusted so padded clip bottom lands at `margin_bottom` from frame bottom; test count is now 308
+- Subtitle pre-display offset: `_create_subtitle_clips` applies `-0.1s` to `segment["start"]` (clamped to 0) and extends duration — so subtitles appear before the word
+- Subtitle timing: `with_start(segment["start"])` uses **global** absolute timestamps, composited over the full concatenated video — correct; do NOT subtract `scene["start"]`
+- Subtitle clip tests need `@patch("musicvid.pipeline.assembler.vfx")` alongside `TextClip` — `with_effects([vfx.CrossFadeIn(...)])` uses module-level vfx import
+- `--new` flag uses `shutil.rmtree(cache_dir)` — deletes entire cache dir including scene_NNN.jpg and animated_scene_NNN.mp4; no partial-clear needed
+- Beat sync helpers in `musicvid.py`: `_compute_downbeats(beats)` (every 4th beat via `beats[::4]`), `_snap_to_downbeat(t, downbeats, window=0.5)` (snap only within ±0.5s); `_apply_beat_sync` uses downbeats not all beats
+- Director `_build_user_message` includes BPM, bar_duration, suggested_scene_count (`max(4, int(duration/(bar_duration*4)))`), downbeats preview; `_validate_scene_plan` defaults `lyrics_in_scene=[]` per scene
 - Use `python3` not `python` on this macOS system
 
 ## Environment

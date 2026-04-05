@@ -842,7 +842,7 @@ class TestLyricsFlag:
         result = runner.invoke(cli, [str(audio_file), "--lyrics", str(tmp_path / "lyrics.txt"), "--help"])
         assert result.exit_code == 0
 
-    @patch("musicvid.musicvid.align_with_claude")
+    @patch("musicvid.musicvid.merge_whisper_with_lyrics_file")
     @patch("musicvid.musicvid.get_font_path", return_value="/fake/font.ttf")
     @patch("musicvid.musicvid.assemble_video")
     @patch("musicvid.musicvid.fetch_videos")
@@ -897,7 +897,7 @@ class TestLyricsFlag:
         assert len(analysis_used["lyrics"]) == 2
         assert analysis_used["lyrics"][0]["text"] == "Line one"
 
-    @patch("musicvid.musicvid.align_with_claude")
+    @patch("musicvid.musicvid.merge_whisper_with_lyrics_file")
     @patch("musicvid.musicvid.get_font_path", return_value="/fake/font.ttf")
     @patch("musicvid.musicvid.assemble_video")
     @patch("musicvid.musicvid.fetch_videos")
@@ -995,7 +995,7 @@ class TestLyricsFlag:
         analysis_used = call_kwargs["analysis"]
         assert analysis_used["lyrics"][0]["text"] == "Whisper text"
 
-    @patch("musicvid.musicvid.align_with_claude")
+    @patch("musicvid.musicvid.merge_whisper_with_lyrics_file")
     @patch("musicvid.musicvid.get_font_path", return_value="/fake/font.ttf")
     @patch("musicvid.musicvid.assemble_video")
     @patch("musicvid.musicvid.fetch_videos")
@@ -1057,7 +1057,7 @@ class TestLyricsFlag:
         ])
         assert result.exit_code == 0
         mock_analyze.assert_called_once()
-        # align_with_claude should also be called again (new lyrics hash = no cached alignment)
+        # merge_whisper_with_lyrics_file should also be called again (new lyrics hash = no cached alignment)
         mock_align.assert_called_once()
 
     def test_lyrics_flag_missing_file(self, runner, tmp_path):
@@ -1167,11 +1167,11 @@ class TestAILyricsAlignment:
     @patch("musicvid.musicvid.fetch_videos")
     @patch("musicvid.musicvid.create_scene_plan")
     @patch("musicvid.musicvid.analyze_audio")
-    @patch("musicvid.musicvid.align_with_claude")
+    @patch("musicvid.musicvid.merge_whisper_with_lyrics_file")
     def test_lyrics_file_triggers_alignment(
         self, mock_align, mock_analyze, mock_direct, mock_fetch, mock_assemble, mock_font, runner, tmp_path
     ):
-        """When --lyrics is provided, align_with_claude should be called."""
+        """When --lyrics is provided, merge_whisper_with_lyrics_file should be called."""
         audio_file = tmp_path / "test.mp3"
         audio_file.write_bytes(b"fake audio")
         lyrics_file = tmp_path / "lyrics.txt"
@@ -1219,7 +1219,7 @@ class TestAILyricsAlignment:
     @patch("musicvid.musicvid.fetch_videos")
     @patch("musicvid.musicvid.create_scene_plan")
     @patch("musicvid.musicvid.analyze_audio")
-    @patch("musicvid.musicvid.align_with_claude")
+    @patch("musicvid.musicvid.merge_whisper_with_lyrics_file")
     def test_alignment_result_cached(
         self, mock_align, mock_analyze, mock_direct, mock_fetch, mock_assemble, mock_font, runner, tmp_path
     ):
@@ -1272,7 +1272,7 @@ class TestAILyricsAlignment:
         ])
         assert result.exit_code == 0
         mock_align.assert_not_called()
-        assert "AI dopasowanie" in result.output
+        assert "dopasowanie" in result.output
 
     @patch("musicvid.musicvid.get_font_path", return_value="/fake/font.ttf")
     @patch("musicvid.musicvid.assemble_video")
@@ -1317,7 +1317,7 @@ class TestAILyricsAlignment:
     @patch("musicvid.musicvid.fetch_videos")
     @patch("musicvid.musicvid.create_scene_plan")
     @patch("musicvid.musicvid.analyze_audio")
-    @patch("musicvid.musicvid.align_with_claude")
+    @patch("musicvid.musicvid.merge_whisper_with_lyrics_file")
     def test_alignment_log_message(
         self, mock_align, mock_analyze, mock_direct, mock_fetch, mock_assemble, mock_font, runner, tmp_path
     ):
@@ -1358,7 +1358,7 @@ class TestAILyricsAlignment:
         ])
 
         assert result.exit_code == 0
-        assert "Whisper timing + AI dopasowanie" in result.output
+        assert "Whisper timing + dopasowanie" in result.output
         assert "3 linii" in result.output
 
 

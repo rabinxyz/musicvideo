@@ -111,7 +111,7 @@ class TestMergeWhisperWithLyricsFile:
         lines = self._make_lines(6)
         result = merge_whisper_with_lyrics_file(segments, lines, 30.0)
         assert len(result) == 6
-        assert result[0]["start"] == pytest.approx(segments[0]["start"] - 0.05, abs=0.01)
+        assert result[0]["start"] == pytest.approx(max(0.0, segments[0]["start"] - 0.05), abs=0.01)
         assert result[5]["end"] == pytest.approx(segments[11]["end"], abs=0.01)
         for item in result:
             assert item["text"] in lines

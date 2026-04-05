@@ -70,7 +70,14 @@ def _poll_animation(task_id):
         data = resp.json()
         status = data.get("status")
         if status == "SUCCEEDED":
-            return data["output"][0]["url"]
+            output = data.get("output", [])
+            if output:
+                first = output[0]
+                if isinstance(first, str):
+                    return first
+                if isinstance(first, dict):
+                    return first.get("url") or first.get("uri") or first.get("link")
+            raise RuntimeError(f"Unexpected output structure: {output}")
         if status in ("FAILED", "CANCELLED"):
             raise RuntimeError(f"Runway task {task_id} failed with status: {status}")
         time.sleep(POLL_INTERVAL)

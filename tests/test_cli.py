@@ -2915,3 +2915,129 @@ class TestValidateClipManifest(unittest.TestCase):
         with patch("os.path.exists", side_effect=fake_exists):
             result = _validate_clip_manifest(clip_manifest, full_manifest)
         assert result[0]["video_path"] == "/exists/b.jpg"
+
+
+class TestPresetSocialNoneVideoPath(unittest.TestCase):
+    """Ensure preset=social doesn't crash when clip_manifest has None video_path."""
+
+    def _make_base_mocks(self):
+        return {
+            "analysis": {
+                "lyrics": [],
+                "beats": [0.0, 0.5, 1.0],
+                "bpm": 120.0,
+                "duration": 120.0,
+                "sections": [
+                    {"label": "verse", "start": 0.0, "end": 60.0},
+                    {"label": "chorus", "start": 60.0, "end": 120.0},
+                ],
+                "mood_energy": "energetic",
+                "language": "en",
+            },
+            "scene_plan": {
+                "overall_style": "test",
+                "color_palette": ["#fff"],
+                "master_style": "",
+                "subtitle_style": {
+                    "font_size": 48,
+                    "color": "#FFF",
+                    "outline_color": "#000",
+                    "position": "center-bottom",
+                    "animation": "fade",
+                },
+                "scenes": [
+                    {"section": "verse", "start": 0.0, "end": 60.0,
+                     "visual_prompt": "test", "motion": "static",
+                     "transition": "cut", "overlay": "none",
+                     "animate": False, "motion_prompt": ""},
+                    {"section": "chorus", "start": 60.0, "end": 120.0,
+                     "visual_prompt": "test2", "motion": "static",
+                     "transition": "cut", "overlay": "none",
+                     "animate": False, "motion_prompt": ""},
+                ],
+            },
+            "social_clips": {
+                "clips": [
+                    {"id": "A", "start": 0.0, "end": 15.0, "section": "verse", "reason": "Hook"},
+                    {"id": "B", "start": 60.0, "end": 75.0, "section": "chorus", "reason": "Peak"},
+                    {"id": "C", "start": 30.0, "end": 45.0, "section": "verse", "reason": "Bridge"},
+                ]
+            },
+        }
+
+    @patch("musicvid.musicvid.assemble_all_parallel")
+    @patch("musicvid.musicvid.select_social_clips")
+    def test_none_video_path_replaced_by_fallback(self, mock_social, mock_parallel):
+        """When clip_manifest has a None video_path, fallback to nearest scene — no crash."""
+        from musicvid.musicvid import _run_preset_mode
+        data = self._make_base_mocks()
+        mock_social.return_value = data["social_clips"]
+        mock_parallel.return_value = []
+
+        fetch_manifest = [
+            {"scene_index": 0, "start": 0.0, "end": 60.0, "video_path": "/fake/scene0.jpg"},
+            {"scene_index": 1, "start": 60.0, "end": 120.0, "video_path": None},
+        ]
+
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmpdir:
+            output_dir = Path(tmpdir) / "output"
+            output_dir.mkdir()
+            cache_dir = Path(tmpdir) / "cache"
+            cache_dir.mkdir()
+
+            with patch("os.path.exists", return_value=True):
+                _run_preset_mode(
+                    preset="social",
+                    reel_duration=15,
+                    analysis=data["analysis"],
+                    scene_plan=data["scene_plan"],
+                    fetch_manifest=fetch_manifest,
+                    audio_path=str(Path(tmpdir) / "song.mp3"),
+                    output_dir=output_dir,
+                    stem="song",
+                    font="/fake/font.ttf",
+                    effects="none",
+                    cache_dir=cache_dir,
+                    new=True,
+                )
+        # No exception = success
+        assert mock_parallel.called
+
+    @patch("musicvid.musicvid.assemble_all_parallel")
+    @patch("musicvid.musicvid.select_social_clips")
+    def test_all_none_paths_drops_gracefully(self, mock_social, mock_parallel):
+        """When all entries have None paths and no fallback, builds jobs without crashing."""
+        from musicvid.musicvid import _run_preset_mode
+        data = self._make_base_mocks()
+        mock_social.return_value = data["social_clips"]
+        mock_parallel.return_value = []
+
+        fetch_manifest = [
+            {"scene_index": 0, "start": 0.0, "end": 60.0, "video_path": None},
+            {"scene_index": 1, "start": 60.0, "end": 120.0, "video_path": None},
+        ]
+
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmpdir:
+            output_dir = Path(tmpdir) / "output"
+            output_dir.mkdir()
+            cache_dir = Path(tmpdir) / "cache"
+            cache_dir.mkdir()
+
+            with patch("os.path.exists", return_value=False):
+                _run_preset_mode(
+                    preset="social",
+                    reel_duration=15,
+                    analysis=data["analysis"],
+                    scene_plan=data["scene_plan"],
+                    fetch_manifest=fetch_manifest,
+                    audio_path=str(Path(tmpdir) / "song.mp3"),
+                    output_dir=output_dir,
+                    stem="song",
+                    font="/fake/font.ttf",
+                    effects="none",
+                    cache_dir=cache_dir,
+                    new=True,
+                )
+        # No exception raised = pass

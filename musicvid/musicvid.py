@@ -670,6 +670,8 @@ def _run_preset_mode(preset, reel_duration, analysis, scene_plan, fetch_manifest
             clip_end = clip_info["end"]
             section = clip_info.get("section", "unknown")
             reel_output = str(social_dir / f"{stem}_rolka_{clip_id}_{reel_duration}s.mp4")
+            click.echo(f"  Rolka {clip_id}: start={clip_start:.1f}s end={clip_end:.1f}s")
+            click.echo(f"    Dostępne sceny: {[(e['scene_index'], e['video_path']) for e in fetch_manifest]}")
             clip_analysis = _filter_analysis_to_clip(analysis, clip_start, clip_end)
             clip_scene_plan = _filter_scene_plan_to_clip(scene_plan, clip_start, clip_end)
             for scene in clip_scene_plan["scenes"]:
@@ -677,6 +679,7 @@ def _run_preset_mode(preset, reel_duration, analysis, scene_plan, fetch_manifest
             clip_manifest = _filter_manifest_to_clip(
                 fetch_manifest, scene_plan["scenes"], clip_start, clip_end
             )
+            clip_manifest = _validate_clip_manifest(clip_manifest, fetch_manifest)
             jobs.append(AssemblyJob(
                 name=f"rolka_{clip_id}_{section}",
                 kwargs=dict(

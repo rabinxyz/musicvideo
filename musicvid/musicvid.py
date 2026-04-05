@@ -349,6 +349,7 @@ def cli(audio_file, mode, provider, style, output, resolution, lang, new, font_p
         logo_position=logo_position,
         logo_size=logo_size,
         logo_opacity=logo_opacity,
+        cinematic_bars=(effects == "full"),
     )
     click.echo(f"  Done! Output: {output_path}")
 
@@ -401,6 +402,7 @@ def _run_preset_mode(preset, reel_duration, analysis, scene_plan, fetch_manifest
             logo_position=logo_position,
             logo_size=logo_size,
             logo_opacity=logo_opacity,
+            cinematic_bars=(effects == "full"),
         )
         click.echo(f"  \u2192 Pe\u0142ny teledysk YouTube ({assembly_num}/{total})... \u2705")
 

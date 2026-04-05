@@ -199,7 +199,7 @@ def _load_scene_clip(video_path, scene, target_size):
     return _create_ken_burns_clip(clip, duration, scene.get("motion", "static"), target_size)
 
 
-def assemble_video(analysis, scene_plan, fetch_manifest, audio_path, output_path, resolution="1080p", font_path=None, effects_level="minimal", clip_start=None, clip_end=None, title_card_text=None, audio_fade_out=1.0, subtitle_margin_bottom=80, cinematic_bars=True, logo_path=None, logo_position="top-left", logo_size=None, logo_opacity=0.85, lut_path=None, lut_style=None, lut_intensity=0.85):
+def assemble_video(analysis, scene_plan, fetch_manifest, audio_path, output_path, resolution="1080p", font_path=None, effects_level="minimal", clip_start=None, clip_end=None, title_card_text=None, audio_fade_out=1.0, subtitle_margin_bottom=80, cinematic_bars=False, logo_path=None, logo_position="top-left", logo_size=None, logo_opacity=0.85, lut_path=None, lut_style=None, lut_intensity=0.85):
     """Assemble the final music video.
 
     Args:
@@ -234,7 +234,7 @@ def assemble_video(analysis, scene_plan, fetch_manifest, audio_path, output_path
 
     layers = [video] + subtitle_clips
 
-    if cinematic_bars and effects_level in ("minimal", "full"):
+    if cinematic_bars:
         bars = create_cinematic_bars(target_size[0], target_size[1], video.duration)
         layers.extend(bars)
 

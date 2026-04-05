@@ -298,7 +298,7 @@ def enforce_animation_rules(scenes: list) -> list:
     for scene in scenes:
         if scene.get("animate"):
             duration = scene["end"] - scene["start"]
-            if duration < 6.0:
+            if duration < 3.0:
                 scene["animate"] = False
                 print(
                     f"WARN: Scena {scene['section']} za krótka"

@@ -412,6 +412,8 @@ class TestCLI:
             str(audio_file),
             "--output", str(output_dir),
             "--font", "/custom/font.ttf",
+            "--mode", "stock",
+            "--preset", "full",
         ])
 
         assert result.exit_code == 0
@@ -481,6 +483,8 @@ class TestCLI:
             str(audio_file),
             "--output", str(output_dir),
             "--clip", "15",
+            "--mode", "stock",
+            "--preset", "full",
         ])
 
         assert result.exit_code == 0, result.output
@@ -637,6 +641,8 @@ class TestCLI:
             str(audio_file),
             "--output", str(output_dir),
             "--clip", "15",
+            "--mode", "stock",
+            "--preset", "full",
         ])
 
         assert result.exit_code == 0, result.output
@@ -704,6 +710,8 @@ class TestLyricsFlag:
         result = runner.invoke(cli, [
             str(audio_file), "--output", str(output_dir),
             "--lyrics", str(lyrics_file),
+            "--mode", "stock",
+            "--preset", "full",
         ])
 
         assert result.exit_code == 0
@@ -756,7 +764,8 @@ class TestLyricsFlag:
         ]
 
         output_dir = tmp_path / "output"
-        result = runner.invoke(cli, [str(audio_file), "--output", str(output_dir)])
+        result = runner.invoke(cli, [str(audio_file), "--output", str(output_dir),
+                                     "--mode", "stock", "--preset", "full"])
 
         assert result.exit_code == 0
         mock_align.assert_called_once()
@@ -801,7 +810,8 @@ class TestLyricsFlag:
         ]
 
         output_dir = tmp_path / "output"
-        result = runner.invoke(cli, [str(audio_file), "--output", str(output_dir)])
+        result = runner.invoke(cli, [str(audio_file), "--output", str(output_dir),
+                                     "--mode", "stock", "--preset", "full"])
 
         assert result.exit_code == 0
         assert "--lyrics" in result.output
@@ -854,6 +864,7 @@ class TestLyricsFlag:
         result = runner.invoke(cli, [
             str(audio_file), "--output", str(output_dir),
             "--lyrics", str(lyrics_file),
+            "--mode", "stock", "--preset", "full",
         ])
         assert result.exit_code == 0
 
@@ -866,6 +877,7 @@ class TestLyricsFlag:
         result = runner.invoke(cli, [
             str(audio_file), "--output", str(output_dir),
             "--lyrics", str(lyrics_file),
+            "--mode", "stock", "--preset", "full",
         ])
         assert result.exit_code == 0
         mock_analyze.assert_called_once()
@@ -926,6 +938,7 @@ class TestEffectsFlag:
         output_dir = tmp_path / "output"
         result = runner.invoke(cli, [
             str(audio_file), "--output", str(output_dir), "--effects", "full",
+            "--mode", "stock", "--preset", "full",
         ])
 
         assert result.exit_code == 0
@@ -962,7 +975,8 @@ class TestEffectsFlag:
         ]
 
         output_dir = tmp_path / "output"
-        result = runner.invoke(cli, [str(audio_file), "--output", str(output_dir)])
+        result = runner.invoke(cli, [str(audio_file), "--output", str(output_dir),
+                                     "--mode", "stock", "--preset", "full"])
 
         assert result.exit_code == 0
         call_kwargs = mock_assemble.call_args[1]
@@ -1016,6 +1030,7 @@ class TestAILyricsAlignment:
         result = runner.invoke(cli, [
             str(audio_file), "--output", str(output_dir),
             "--lyrics", str(lyrics_file),
+            "--mode", "stock", "--preset", "full",
         ])
 
         assert result.exit_code == 0
@@ -1068,6 +1083,7 @@ class TestAILyricsAlignment:
         result = runner.invoke(cli, [
             str(audio_file), "--output", str(output_dir),
             "--lyrics", str(lyrics_file),
+            "--mode", "stock", "--preset", "full",
         ])
         assert result.exit_code == 0
 
@@ -1076,6 +1092,7 @@ class TestAILyricsAlignment:
         result = runner.invoke(cli, [
             str(audio_file), "--output", str(output_dir),
             "--lyrics", str(lyrics_file),
+            "--mode", "stock", "--preset", "full",
         ])
         assert result.exit_code == 0
         mock_align.assert_not_called()
@@ -1112,7 +1129,8 @@ class TestAILyricsAlignment:
         ]
 
         output_dir = tmp_path / "output"
-        result = runner.invoke(cli, [str(audio_file), "--output", str(output_dir)])
+        result = runner.invoke(cli, [str(audio_file), "--output", str(output_dir),
+                                     "--mode", "stock", "--preset", "full"])
 
         assert result.exit_code == 0
         call_kwargs = mock_assemble.call_args[1]
@@ -1160,6 +1178,7 @@ class TestAILyricsAlignment:
         result = runner.invoke(cli, [
             str(audio_file), "--output", str(output_dir),
             "--lyrics", str(lyrics_file),
+            "--mode", "stock", "--preset", "full",
         ])
 
         assert result.exit_code == 0
@@ -1475,6 +1494,7 @@ class TestPresetMode:
             str(audio_file),
             "--output", str(output_dir),
             "--preset", "full",
+            "--mode", "stock",
         ])
 
         assert result.exit_code == 0, result.output
@@ -1545,6 +1565,7 @@ class TestPresetMode:
             str(audio_file),
             "--output", str(output_dir),
             "--preset", "social",
+            "--mode", "stock",
         ])
 
         assert result.exit_code == 0, result.output
@@ -1620,6 +1641,7 @@ class TestPresetMode:
             str(audio_file),
             "--output", str(output_dir),
             "--preset", "all",
+            "--mode", "stock",
         ])
 
         assert result.exit_code == 0, result.output
@@ -1742,6 +1764,7 @@ class TestPresetMode:
             "--output", str(output_dir),
             "--preset", "social",
             "--reel-duration", "30",
+            "--mode", "stock",
         ])
 
         assert result.exit_code == 0, result.output
@@ -1795,6 +1818,7 @@ class TestPresetMode:
         output_dir = tmp_path / "output"
         result = runner.invoke(cli, [
             str(audio_file), "--output", str(output_dir), "--preset", "social",
+            "--mode", "stock",
         ])
 
         assert result.exit_code == 0, result.output
@@ -1898,7 +1922,7 @@ class TestPresetMode:
         ]
 
         output_dir = tmp_path / "output"
-        args = [str(audio_file), "--output", str(output_dir), "--preset", "social"]
+        args = [str(audio_file), "--output", str(output_dir), "--preset", "social", "--mode", "stock"]
 
         # First run
         runner.invoke(cli, args)
@@ -1953,11 +1977,11 @@ class TestPresetMode:
         output_dir = tmp_path / "output"
 
         # Run with 15s
-        runner.invoke(cli, [str(audio_file), "--output", str(output_dir), "--preset", "social"])
+        runner.invoke(cli, [str(audio_file), "--output", str(output_dir), "--preset", "social", "--mode", "stock"])
         assert mock_social.call_count == 1
 
         # Run with 30s — different cache key
-        runner.invoke(cli, [str(audio_file), "--output", str(output_dir), "--preset", "social", "--reel-duration", "30"])
+        runner.invoke(cli, [str(audio_file), "--output", str(output_dir), "--preset", "social", "--reel-duration", "30", "--mode", "stock"])
         assert mock_social.call_count == 2  # called again because different duration
 
 
@@ -1991,7 +2015,8 @@ class TestLogoFlag:
         }
         mock_fetch.return_value = [{"scene_index": 0, "video_path": "/fake/v.mp4", "search_query": "test"}]
 
-        result = runner.invoke(cli, [str(audio), "--logo", str(logo), "--output", str(tmp_path / "out")])
+        result = runner.invoke(cli, [str(audio), "--logo", str(logo), "--output", str(tmp_path / "out"),
+                                     "--mode", "stock", "--preset", "full"])
 
         assert result.exit_code == 0, f"CLI failed: {result.output}"
         call_kwargs = mock_assemble.call_args[1]
@@ -2033,6 +2058,7 @@ class TestLogoFlag:
             "--logo-size", "200",
             "--logo-opacity", "0.5",
             "--output", str(tmp_path / "out"),
+            "--mode", "stock", "--preset", "full",
         ])
 
         assert result.exit_code == 0, f"CLI failed: {result.output}"
@@ -2067,7 +2093,8 @@ class TestLogoFlag:
         }
         mock_fetch.return_value = [{"scene_index": 0, "video_path": "/fake/v.mp4", "search_query": "test"}]
 
-        result = runner.invoke(cli, [str(audio), "--output", str(tmp_path / "out")])
+        result = runner.invoke(cli, [str(audio), "--output", str(tmp_path / "out"),
+                                     "--mode", "stock", "--preset", "full"])
 
         assert result.exit_code == 0, f"CLI failed: {result.output}"
         call_kwargs = mock_assemble.call_args[1]
@@ -2121,6 +2148,7 @@ class TestLogoWithPreset:
             str(audio), "--preset", "all",
             "--logo", str(logo), "--logo-position", "top-right",
             "--output", str(tmp_path / "out"),
+            "--mode", "stock",
         ])
 
         assert result.exit_code == 0, f"CLI failed: {result.output}\n{result.exception}"

@@ -117,7 +117,7 @@ class VisualRouter:
 
         visual = scene.get("visual_prompt", "")
         motion = scene.get("motion_prompt", "slow camera push forward")
-        if len(visual) > 400:
+        if len(visual) > 500:
             visual = visual[:400]
         video_prompt = f"{visual} {motion}".strip()
 

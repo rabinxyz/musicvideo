@@ -313,7 +313,7 @@ class TestVisualRouterAnimatedTextToVideo:
         from musicvid.pipeline.visual_router import VisualRouter
         router = VisualRouter(cache_dir=str(tmp_path), provider="flux-pro")
 
-        long_visual = "A" * 500
+        long_visual = "A" * 501
         scene = {
             "index": 0,
             "visual_source": "TYPE_ANIMATED",

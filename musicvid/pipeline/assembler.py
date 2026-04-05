@@ -242,8 +242,11 @@ def _concatenate_with_transitions(scene_clips, scenes, bpm, target_size):
     white_clips = []
     flash_cursor = 0.0
     for i, clip in enumerate(scene_clips[:-1]):
-        flash_cursor += clip.duration
         trans, d = transitions[i]
+        if trans == "cross_dissolve":
+            flash_cursor += clip.duration - d
+        else:
+            flash_cursor += clip.duration
         if trans == "dip_white" and d > 0:
             flash = ColorClip(size=target_size, color=(255, 255, 255), duration=d)
             flash = flash.with_start(flash_cursor - d / 2)

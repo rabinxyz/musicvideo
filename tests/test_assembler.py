@@ -1268,3 +1268,37 @@ class TestConcatenateWithTransitions:
         ]
         _concatenate_with_transitions([mock_clip, mock_clip], scenes, bpm=84.0, target_size=(1920, 1080))
         mock_composite.assert_called_once()
+
+    @patch("musicvid.pipeline.assembler.CompositeVideoClip")
+    @patch("musicvid.pipeline.assembler.ColorClip")
+    @patch("musicvid.pipeline.assembler.vfx")
+    def test_dip_white_flash_position_accounts_for_dissolve_overlap(self, mock_vfx, mock_colorclip, mock_composite):
+        """dip_white flash cursor must subtract cross_dissolve overlap from preceding clip."""
+        mock_clip = MagicMock()
+        mock_clip.duration = 10.0
+        mock_clip.with_start.return_value = mock_clip
+        mock_clip.with_effects.return_value = mock_clip
+        mock_clip.with_duration.return_value = mock_clip
+        mock_colorclip_instance = MagicMock()
+        mock_colorclip_instance.with_start.return_value = mock_colorclip_instance
+        mock_colorclip_instance.with_effects.return_value = mock_colorclip_instance
+        mock_colorclip.return_value = mock_colorclip_instance
+        mock_composite.return_value = MagicMock()
+
+        # clip 0 -> cross_dissolve (d≈0.36s at 84bpm) -> clip 1 -> dip_white -> clip 2
+        scenes = [
+            {"section": "intro", "transition_to_next": "cross_dissolve"},
+            {"section": "chorus", "transition_to_next": "dip_white"},
+            {"section": "verse"},
+        ]
+        _concatenate_with_transitions([mock_clip, mock_clip, mock_clip], scenes, bpm=84.0, target_size=(1920, 1080))
+
+        # flash should be created (dip_white triggered)
+        mock_colorclip.assert_called_once()
+        # The with_start position should be approximately: (10 - dissolve_d) + 10 - dip_d/2
+        # which is LESS than the naive 20.0 - dip_d/2
+        call_args = mock_colorclip_instance.with_start.call_args
+        actual_start = call_args[0][0]
+        # dissolve_d = max(0.2, min(0.8, round(60/84/2, 2))) ≈ 0.36
+        # naive start = 20.0 - dip_d/2; corrected start = (10-0.36+10) - dip_d/2 = 19.64 - dip_d/2
+        assert actual_start < 19.5, f"Flash start {actual_start} should be < 19.5 (naive would be ~19.6, with overlap correction < that)"

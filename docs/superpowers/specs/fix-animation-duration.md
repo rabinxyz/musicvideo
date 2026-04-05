@@ -1,5 +1,3 @@
-# Idea
-
 # Spec: Naprawa progu długości sceny dla animacji Runway
 
 ## Problem

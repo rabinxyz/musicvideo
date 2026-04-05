@@ -288,7 +288,7 @@ def enforce_animation_rules(scenes: list) -> list:
     """Enforce animation placement rules on director's scene plan.
 
     Rules applied in order:
-    1. Disable short scenes (< 6s) — Runway minimum
+    1. Disable short scenes (< 3s) — Runway minimum
     2. Disable outro scenes — should always be calm
     3. Fix adjacency — no two animated scenes side by side (lower priority loses)
     4. Enforce max 25% animated (max(1, total//4)), keeping highest priority

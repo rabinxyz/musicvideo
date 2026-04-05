@@ -14,6 +14,7 @@ CLI tool that generates synchronized MP4 music videos from audio files using sto
 - `--mode ai` (default): Stage 3 uses `VisualRouter` (hybrid per-scene sourcing — Pexels/Unsplash/BFL/Runway), caches to `image_manifest.json`; `--mode stock` uses `stock_fetcher` (Pexels API for all scenes)
 - Hybrid visual sourcing: director outputs `visual_source` (TYPE_VIDEO_STOCK|TYPE_PHOTO_STOCK|TYPE_AI|TYPE_ANIMATED) and `search_query` per scene; `VisualRouter` in `musicvid/pipeline/visual_router.py` dispatches to the correct API; `_validate_scene_plan` defaults `visual_source="TYPE_AI"`, `search_query=""`, `visual_prompt=""`
 - VisualRouter fallback chain: TYPE_VIDEO_STOCK → simplified query (2 words) → BFL (visual_prompt or "nature landscape peaceful"); TYPE_PHOTO_STOCK → Unsplash → Pexels video → BFL; TYPE_ANIMATED no RUNWAY_API_KEY → static image (Ken Burns)
+- VisualRouter `_route_animated` always passes `duration=5` to Runway API — assembler trims to actual scene length via `subclipped()`
 - `--animate` with VisualRouter: `never` converts TYPE_ANIMATED→TYPE_AI; `always` converts all→TYPE_ANIMATED + enforce_animation_rules; `auto` keeps director's visual_source + enforce_animation_rules
 - CLI tests for mode=ai must mock `@patch("musicvid.musicvid.VisualRouter")` — `generate_images` and `animate_image` are no longer called directly from `cli()` in ai mode
 - `fetch_manifest` entries in ai mode now include `start`, `end`, `source` keys (in addition to `scene_index`, `video_path`)
@@ -128,8 +129,8 @@ CLI tool that generates synchronized MP4 music videos from audio files using sto
 - `--new` flag uses `shutil.rmtree(cache_dir)` — deletes entire cache dir including scene_NNN.jpg and animated_scene_NNN.mp4; no partial-clear needed
 - Beat sync helpers in `musicvid.py`: `_compute_downbeats(beats)` (every 4th beat via `beats[::4]`), `_snap_to_downbeat(t, downbeats, window=0.5)` (snap only within ±0.5s); `_apply_beat_sync` uses downbeats not all beats
 - Director `_build_user_message` includes BPM, bar_duration, suggested_scene_count (`max(4, int(duration/(bar_duration*4)))`), downbeats preview; `_validate_scene_plan` defaults `lyrics_in_scene=[]` per scene
-- `enforce_animation_rules(scenes)` and `get_section_priority(section)` defined in `musicvid/musicvid.py` before `@click.command()`; enforces: no adjacent animated, max 25% (`max(1, N//4)`), no outro, no scenes <6s; called only when `animate_mode=="auto"` after animate overrides (~line 566)
-- CLI tests with `animate_mode="auto"` and short scenes (<6s) need `@patch("musicvid.musicvid.enforce_animation_rules", side_effect=lambda s: s)` or the function silently disables those scenes
+- `enforce_animation_rules(scenes)` and `get_section_priority(section)` defined in `musicvid/musicvid.py` before `@click.command()`; enforces: no adjacent animated, max 25% (`max(1, N//4)`), no outro, no scenes <3s; called only when `animate_mode=="auto"` after animate overrides (~line 566)
+- CLI tests with `animate_mode="auto"` and short scenes (<3s) need `@patch("musicvid.musicvid.enforce_animation_rules", side_effect=lambda s: s)` or the function silently disables those scenes
 - `enforce_animation_rules` tests expecting 2+ animated scenes to survive must use ≥8 total scenes — with fewer, `max(1, N//4)` trims to 1 causing unexpected failures
 - Use `python3` not `python` on this macOS system
 

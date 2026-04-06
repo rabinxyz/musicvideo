@@ -72,6 +72,8 @@ class VisualRouter:
             return self._route_photo_stock(scene, idx)
         elif source == "TYPE_ANIMATED":
             return self._route_animated(scene, idx, duration)
+        elif source == "TYPE_VIDEO_RUNWAY":
+            return self._route_runway_text_to_video(scene, idx, duration)
         else:  # TYPE_AI (default)
             return self._generate_bfl(scene.get("visual_prompt", "nature landscape"), idx)
 
@@ -167,6 +169,40 @@ class VisualRouter:
         except Exception as exc:
             print(f"  WARN: Runway text-to-video failed for scene {idx} — fallback TYPE_AI ({exc})")
             return self._generate_bfl(scene.get("visual_prompt", "nature landscape"), idx)
+
+    def _route_runway_text_to_video(self, scene, idx, duration):
+        """Route TYPE_VIDEO_RUNWAY → Runway text-to-video, fallback → Pexels stock."""
+        output_path = str(self.cache_dir / f"runway_scene_{idx:03d}.mp4")
+        if Path(output_path).exists():
+            return output_path
+
+        runway_key = os.environ.get("RUNWAY_API_KEY", "")
+        if runway_key:
+            visual = scene.get("visual_prompt", "")
+            motion = scene.get("motion_prompt", "")
+            if len(visual) > 500:
+                visual = visual[:400]
+            video_prompt = f"{visual} {motion}".strip() or "nature landscape slow camera movement"
+            try:
+                return generate_video_from_text(video_prompt, duration=5, output_path=output_path)
+            except Exception as exc:
+                print(f"  WARN: Runway text-to-video failed for scene {idx} — fallback Pexels ({exc})")
+
+        # Fallback: Pexels stock (no BFL — runway mode avoids AI images)
+        query = scene.get("search_query", "") or "nature landscape peaceful"
+        query = sanitize_query(query)
+        if query == "BLOCKED":
+            query = "nature landscape peaceful"
+        stock_path = str(self.cache_dir / f"scene_{idx:03d}.mp4")
+        result = fetch_video_by_query(query, duration, stock_path)
+        if result:
+            return result
+        simplified = " ".join(query.split()[:2])
+        if simplified and simplified != query:
+            result = fetch_video_by_query(simplified, duration, stock_path)
+            if result:
+                return result
+        return fetch_video_by_query("nature landscape", duration, stock_path)
 
     def _generate_bfl(self, prompt, idx):
         output_path = str(self.cache_dir / f"scene_{idx:03d}.jpg")

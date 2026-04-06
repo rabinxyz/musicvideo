@@ -117,13 +117,19 @@ class TestMergeWhisperWithLyricsFile:
             assert item["text"] in lines
 
     def test_fewer_segments_than_lines_splits_time(self):
-        segments = self._make_segments(4, duration=3.0)
+        segments = self._make_segments(4, start=30.0, duration=3.0)
         lines = self._make_lines(12)
-        result = merge_whisper_with_lyrics_file(segments, lines, 12.0)
+        result = merge_whisper_with_lyrics_file(segments, lines, 60.0)
         assert len(result) == 12
+        # First subtitle must start at Whisper timing (~30s), not 0.0
+        assert result[0]["start"] >= 25.0, f"Expected start >= 25.0, got {result[0]['start']}"
+        # All subtitles must have valid timing
         for item in result:
-            assert item["start"] >= 0.0
+            assert item["start"] >= 25.0
             assert item["end"] > item["start"]
+        # Text comes from file lines, not Whisper
+        assert result[0]["text"] == "Line 1"
+        assert result[11]["text"] == "Line 12"
 
     def test_no_overlap_between_subtitles(self):
         segments = [

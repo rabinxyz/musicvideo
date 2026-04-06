@@ -89,7 +89,7 @@ class TestCLI:
     def test_mode_option_values(self, runner, tmp_path):
         audio_file = tmp_path / "test.mp3"
         audio_file.write_bytes(b"fake")
-        for mode in ["stock", "ai", "hybrid"]:
+        for mode in ["stock", "ai", "runway", "hybrid"]:
             result = runner.invoke(cli, [str(audio_file), "--mode", mode, "--help"])
             assert result.exit_code == 0
 
@@ -836,6 +836,151 @@ class TestCLI:
         _runner = _CliRunner()
         result = _runner.invoke(dummy)
         assert "Rolki social" not in result.output
+
+    @patch("musicvid.musicvid.get_font_path", return_value="/fake/font.ttf")
+    @patch("musicvid.musicvid.assemble_video")
+    @patch("musicvid.musicvid.VisualRouter")
+    @patch("musicvid.musicvid.create_scene_plan")
+    @patch("musicvid.musicvid.analyze_audio")
+    def test_mode_runway_calls_visual_router(
+        self, mock_analyze, mock_direct, mock_router_cls, mock_assemble, mock_font, runner, tmp_path
+    ):
+        audio_file = tmp_path / "test.mp3"
+        audio_file.write_bytes(b"fake audio")
+
+        mock_analyze.return_value = {
+            "lyrics": [], "beats": [0.0, 0.5], "bpm": 120.0,
+            "duration": 10.0, "sections": [{"label": "chorus", "start": 0.0, "end": 10.0}],
+            "mood_energy": "contemplative", "language": "pl",
+        }
+        scene = {
+            "section": "chorus", "start": 0.0, "end": 10.0,
+            "visual_source": "TYPE_VIDEO_RUNWAY", "search_query": "",
+            "visual_prompt": "mountain sunrise", "motion_prompt": "slow rise",
+            "motion": "static", "transition": "cut", "overlay": "none",
+            "animate": False, "lyrics_in_scene": [], "master_style": "",
+            "transition_to_next": "cut",
+        }
+        mock_direct.return_value = {
+            "overall_style": "worship",
+            "color_palette": ["#aaa"],
+            "subtitle_style": {"font_size": 48, "color": "#FFF", "outline_color": "#000",
+                               "position": "center-bottom", "animation": "karaoke"},
+            "scenes": [scene],
+            "master_style": "",
+        }
+        fake_asset = str(tmp_path / "runway_scene_000.mp4")
+        router_instance = MagicMock()
+        router_instance.route.return_value = fake_asset
+        mock_router_cls.return_value = router_instance
+
+        output_dir = tmp_path / "output"
+        result = runner.invoke(cli, [
+            str(audio_file),
+            "--output", str(output_dir),
+            "--mode", "runway",
+            "--preset", "full",
+        ])
+
+        assert result.exit_code == 0, result.output
+        mock_router_cls.assert_called_once()
+        router_instance.route.assert_called_once()
+        mock_assemble.assert_called_once()
+
+    @patch("musicvid.musicvid.get_font_path", return_value="/fake/font.ttf")
+    @patch("musicvid.musicvid.assemble_video")
+    @patch("musicvid.musicvid.VisualRouter")
+    @patch("musicvid.musicvid.create_scene_plan")
+    @patch("musicvid.musicvid.analyze_audio")
+    def test_mode_runway_is_default(
+        self, mock_analyze, mock_direct, mock_router_cls, mock_assemble, mock_font, runner, tmp_path
+    ):
+        """Invoking CLI without --mode should use VisualRouter (runway is default)."""
+        audio_file = tmp_path / "test.mp3"
+        audio_file.write_bytes(b"fake audio")
+
+        mock_analyze.return_value = {
+            "lyrics": [], "beats": [0.0, 0.5], "bpm": 120.0,
+            "duration": 10.0, "sections": [{"label": "verse", "start": 0.0, "end": 10.0}],
+            "mood_energy": "contemplative", "language": "pl",
+        }
+        scene = {
+            "section": "verse", "start": 0.0, "end": 10.0,
+            "visual_source": "TYPE_VIDEO_RUNWAY", "search_query": "",
+            "visual_prompt": "valley", "motion_prompt": "gentle push",
+            "motion": "static", "transition": "cut", "overlay": "none",
+            "animate": False, "lyrics_in_scene": [], "master_style": "",
+            "transition_to_next": "cut",
+        }
+        mock_direct.return_value = {
+            "overall_style": "contemplative",
+            "color_palette": ["#aaa"],
+            "subtitle_style": {"font_size": 48, "color": "#FFF", "outline_color": "#000",
+                               "position": "center-bottom", "animation": "karaoke"},
+            "scenes": [scene],
+            "master_style": "",
+        }
+        router_instance = MagicMock()
+        router_instance.route.return_value = str(tmp_path / "runway_scene_000.mp4")
+        mock_router_cls.return_value = router_instance
+
+        output_dir = tmp_path / "output"
+        result = runner.invoke(cli, [
+            str(audio_file),
+            "--output", str(output_dir),
+            "--preset", "full",
+            # NOTE: no --mode flag — should default to runway
+        ])
+
+        assert result.exit_code == 0, result.output
+        mock_router_cls.assert_called_once()
+
+    @patch("musicvid.musicvid.get_font_path", return_value="/fake/font.ttf")
+    @patch("musicvid.musicvid.assemble_video")
+    @patch("musicvid.musicvid.VisualRouter")
+    @patch("musicvid.musicvid.create_scene_plan")
+    @patch("musicvid.musicvid.analyze_audio")
+    def test_mode_runway_passes_mode_to_director(
+        self, mock_analyze, mock_direct, mock_router_cls, mock_assemble, mock_font, runner, tmp_path
+    ):
+        """--mode runway passes mode='runway' to create_scene_plan."""
+        audio_file = tmp_path / "test.mp3"
+        audio_file.write_bytes(b"fake audio")
+
+        mock_analyze.return_value = {
+            "lyrics": [], "beats": [0.0, 0.5], "bpm": 120.0,
+            "duration": 10.0, "sections": [{"label": "verse", "start": 0.0, "end": 10.0}],
+            "mood_energy": "contemplative", "language": "pl",
+        }
+        scene = {
+            "section": "verse", "start": 0.0, "end": 10.0,
+            "visual_source": "TYPE_VIDEO_RUNWAY", "search_query": "",
+            "visual_prompt": "", "motion_prompt": "",
+            "motion": "static", "transition": "cut", "overlay": "none",
+            "animate": False, "lyrics_in_scene": [], "master_style": "",
+            "transition_to_next": "cut",
+        }
+        mock_direct.return_value = {
+            "overall_style": "contemplative",
+            "color_palette": ["#aaa"],
+            "subtitle_style": {"font_size": 48, "color": "#FFF", "outline_color": "#000",
+                               "position": "center-bottom", "animation": "karaoke"},
+            "scenes": [scene],
+            "master_style": "",
+        }
+        router_instance = MagicMock()
+        router_instance.route.return_value = str(tmp_path / "runway_scene_000.mp4")
+        mock_router_cls.return_value = router_instance
+
+        output_dir = tmp_path / "output"
+        runner.invoke(cli, [
+            str(audio_file), "--output", str(output_dir),
+            "--mode", "runway", "--preset", "full",
+        ])
+
+        # Verify create_scene_plan was called with mode='runway'
+        call_kwargs = mock_direct.call_args[1]
+        assert call_kwargs.get("mode") == "runway"
 
 
 class TestLyricsFlag:

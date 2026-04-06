@@ -268,7 +268,12 @@ def _print_startup_summary(mode, provider, preset, effects, animate_mode, lut_st
                             lut_intensity, subtitle_style_override, transitions_mode,
                             beat_sync, reel_duration):
     """Print a human-readable summary of the active generation settings."""
-    images_desc = f"BFL {provider.upper()} (AI)" if mode == "ai" else "Pexels (stock)"
+    if mode == "runway":
+        images_desc = "Runway Gen-4.5 AI video + Pexels przyroda"
+    elif mode == "ai":
+        images_desc = f"BFL {provider.upper()} (AI)"
+    else:
+        images_desc = "Pexels (stock)"
     animate_desc = "Runway Gen-4 (auto)" if animate_mode == "auto" else (
         "Runway Gen-4 (wszystkie)" if animate_mode == "always" else "wyłączone (Ken Burns)"
     )
@@ -401,7 +406,7 @@ def _assign_dynamic_transitions(scenes, bpm):
 
 @click.command()
 @click.argument("audio_file", type=click.Path(exists=True))
-@click.option("--mode", type=click.Choice(["stock", "ai", "hybrid"]), default="ai", help="Video source mode.")
+@click.option("--mode", type=click.Choice(["stock", "ai", "runway", "hybrid"]), default="runway", help="Video source mode.")
 @click.option("--provider", type=click.Choice(["flux-dev", "flux-pro", "flux-schnell"]), default="flux-pro", help="Image provider for --mode ai.")
 @click.option("--style", type=click.Choice(["auto", "contemplative", "joyful", "worship", "powerful"]), default="auto", help="Visual style.")
 @click.option("--output", type=click.Path(), default="./output/", help="Output directory.")
@@ -577,7 +582,7 @@ def cli(audio_file, mode, provider, style, output, resolution, lang, new, font_p
         click.echo("[2/4] Scene planning... CACHED (skipped)")
     else:
         click.echo("[2/4] Creating scene plan...")
-        scene_plan = create_scene_plan(analysis, style_override=style_override, output_dir=str(cache_dir))
+        scene_plan = create_scene_plan(analysis, style_override=style_override, output_dir=str(cache_dir), mode=mode)
         save_cache(str(cache_dir), scene_cache_name, scene_plan)
     click.echo(f"  Style: {scene_plan['overall_style']}, Scenes: {len(scene_plan['scenes'])}")
 
@@ -606,7 +611,7 @@ def cli(audio_file, mode, provider, style, output, resolution, lang, new, font_p
 
     # Stage 3: Fetch Videos or Generate Images
     manifest_suffix = f"_clip_{clip_duration}s" if clip_duration else ""
-    if mode == "ai":
+    if mode in ("ai", "runway"):
         image_cache_name = f"image_manifest{manifest_suffix}.json"
         image_manifest = load_cache(str(cache_dir), image_cache_name) if not new else None
         if image_manifest and _image_files_exist(image_manifest):

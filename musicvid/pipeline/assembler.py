@@ -405,6 +405,41 @@ def _create_title_card(text, size, duration=2.0):
     return CompositeVideoClip([bg, txt], size=size)
 
 
+def _create_bottom_gradient(width, height, duration, gradient_height_pct=0.3, opacity=0.6):
+    """Create a dark gradient overlay at the bottom of the frame for reels.
+
+    Gradient goes from transparent (top) to semi-opaque black (bottom).
+    Improves subtitle readability in portrait/reels mode.
+
+    Args:
+        width: Frame width in pixels.
+        height: Frame height in pixels.
+        duration: Clip duration in seconds.
+        gradient_height_pct: Gradient height as fraction of frame height (default 0.3).
+        opacity: Maximum opacity of gradient (default 0.6, mapped to 0-1 mask values).
+
+    Returns:
+        MoviePy ImageClip positioned at the bottom of the frame.
+    """
+    import numpy as np
+
+    grad_h = int(height * gradient_height_pct)
+
+    # Solid black frame
+    black_frame = np.zeros((grad_h, width, 3), dtype=np.uint8)
+    clip = ImageClip(black_frame).with_duration(duration)
+
+    # Gradient mask: 0 (transparent) at top, opacity at bottom
+    mask_values = np.linspace(0, opacity, grad_h)[:, np.newaxis] * np.ones((1, width))
+    mask_frame = mask_values.astype(np.float32)
+    mask_clip = ImageClip(mask_frame, is_mask=True).with_duration(duration)
+
+    clip = clip.with_mask(mask_clip)
+    clip = clip.with_position(("center", height - grad_h))
+
+    return clip
+
+
 def _load_scene_clip(video_path, scene, target_size, reels_style="blur-bg"):
     """Load a video or image clip for a scene."""
     if video_path is None:
@@ -473,6 +508,11 @@ def assemble_video(analysis, scene_plan, fetch_manifest, audio_path, output_path
     )
 
     layers = [video] + subtitle_clips
+
+    # Bottom gradient overlay for portrait/reels mode — improves subtitle readability
+    if target_size == (1080, 1920):
+        gradient = _create_bottom_gradient(target_size[0], target_size[1], video.duration)
+        layers.insert(1, gradient)
 
     if cinematic_bars:
         bars = create_cinematic_bars(target_size[0], target_size[1], video.duration)

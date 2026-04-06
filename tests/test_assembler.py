@@ -1654,3 +1654,72 @@ class TestReelsSubtitleFontSize(unittest.TestCase):
         call_kwargs = mock_textclip.call_args[1]
         # Should be 64 (chorus size from _SECTION_FONT_SIZES), not 72
         self.assertEqual(call_kwargs.get("font_size"), 64)
+
+
+class TestReelsGradientOverlay(unittest.TestCase):
+    def test_create_bottom_gradient_returns_clip(self):
+        from musicvid.pipeline.assembler import _create_bottom_gradient
+
+        mock_clip = MagicMock()
+        mock_clip.with_duration.return_value = mock_clip
+        mock_clip.with_position.return_value = mock_clip
+        mock_clip.with_mask.return_value = mock_clip
+
+        with patch("musicvid.pipeline.assembler.ImageClip", return_value=mock_clip):
+            clip = _create_bottom_gradient(width=1080, height=1920, duration=5.0)
+
+        self.assertIsNotNone(clip)
+        mock_clip.with_duration.assert_called_with(5.0)
+
+    def test_create_bottom_gradient_gradient_height(self):
+        """Gradient height should be 30% of frame height by default."""
+        import numpy as np
+        from musicvid.pipeline.assembler import _create_bottom_gradient
+
+        mock_clip = MagicMock()
+        mock_clip.with_duration.return_value = mock_clip
+        mock_clip.with_position.return_value = mock_clip
+        mock_clip.with_mask.return_value = mock_clip
+
+        captured_arrays = []
+
+        def capture_imageclip(arr, **kwargs):
+            captured_arrays.append(arr)
+            return mock_clip
+
+        with patch("musicvid.pipeline.assembler.ImageClip", side_effect=capture_imageclip):
+            _create_bottom_gradient(width=1080, height=1920, duration=5.0)
+
+        # First call is the black frame — height should be 30% of 1920 = 576
+        self.assertTrue(len(captured_arrays) > 0)
+        expected_grad_h = int(1920 * 0.3)
+        self.assertEqual(captured_arrays[0].shape[0], expected_grad_h)
+
+    def test_create_bottom_gradient_position(self):
+        """Gradient should be positioned at the bottom of the frame."""
+        from musicvid.pipeline.assembler import _create_bottom_gradient
+
+        mock_clip = MagicMock()
+        mock_clip.with_duration.return_value = mock_clip
+        mock_clip.with_position.return_value = mock_clip
+        mock_clip.with_mask.return_value = mock_clip
+
+        with patch("musicvid.pipeline.assembler.ImageClip", return_value=mock_clip):
+            _create_bottom_gradient(width=1080, height=1920, duration=5.0)
+
+        grad_h = int(1920 * 0.3)
+        mock_clip.with_position.assert_called_with(("center", 1920 - grad_h))
+
+    def test_create_bottom_gradient_mask_applied(self):
+        """Gradient should have a mask clip applied."""
+        from musicvid.pipeline.assembler import _create_bottom_gradient
+
+        mock_clip = MagicMock()
+        mock_clip.with_duration.return_value = mock_clip
+        mock_clip.with_position.return_value = mock_clip
+        mock_clip.with_mask.return_value = mock_clip
+
+        with patch("musicvid.pipeline.assembler.ImageClip", return_value=mock_clip):
+            _create_bottom_gradient(width=1080, height=1920, duration=5.0)
+
+        mock_clip.with_mask.assert_called_once()

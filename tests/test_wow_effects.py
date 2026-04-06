@@ -53,25 +53,57 @@ class TestBuildFilterChain(unittest.TestCase):
         self.assertIsNone(result)
 
     def test_returns_string_when_zoom_punch_enabled(self):
-        from musicvid.pipeline.wow_effects import build_ffmpeg_filter_chain
-        analysis = {
-            "sections": [{"label": "chorus", "start": 10.0, "end": 30.0}],
-            "beats": [0.5, 1.0, 1.5, 2.0, 10.5, 11.0, 11.5, 12.0,
-                      12.5, 13.0, 13.5, 14.0, 14.5, 15.0, 15.5, 16.0],
-            "duration": 60.0,
-        }
-        wow_config = {
-            "enabled": True, "zoom_punch": True, "light_flash": False,
-            "dynamic_grade": False, "dynamic_vignette": False,
-            "motion_blur": False, "particles": False,
-        }
-        result = build_ffmpeg_filter_chain(
-            analysis=analysis,
-            scene_plan={"scenes": [], "overall_style": "worship"},
-            wow_config=wow_config,
-        )
-        self.assertIsInstance(result, str)
-        self.assertTrue(len(result) > 0)
+        import musicvid.pipeline.wow_effects as wm
+        original = wm.ENABLE_ZOOMPAN
+        try:
+            wm.ENABLE_ZOOMPAN = True
+            from musicvid.pipeline.wow_effects import build_ffmpeg_filter_chain
+            analysis = {
+                "sections": [{"label": "chorus", "start": 10.0, "end": 30.0}],
+                "beats": [0.5, 1.0, 1.5, 2.0, 10.5, 11.0, 11.5, 12.0,
+                          12.5, 13.0, 13.5, 14.0, 14.5, 15.0, 15.5, 16.0],
+                "duration": 60.0,
+            }
+            wow_config = {
+                "enabled": True, "zoom_punch": True, "light_flash": False,
+                "dynamic_grade": False, "dynamic_vignette": False,
+                "motion_blur": False, "particles": False,
+            }
+            result = build_ffmpeg_filter_chain(
+                analysis=analysis,
+                scene_plan={"scenes": [], "overall_style": "worship"},
+                wow_config=wow_config,
+            )
+            self.assertIsInstance(result, str)
+            self.assertTrue(len(result) > 0)
+        finally:
+            wm.ENABLE_ZOOMPAN = original
+
+    def test_zoom_punch_skipped_when_enable_zoompan_false(self):
+        import musicvid.pipeline.wow_effects as wm
+        original = wm.ENABLE_ZOOMPAN
+        try:
+            wm.ENABLE_ZOOMPAN = False
+            from musicvid.pipeline.wow_effects import build_ffmpeg_filter_chain
+            analysis = {
+                "sections": [{"label": "chorus", "start": 2.0, "end": 8.0}],
+                "beats": [0.5, 1.0, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0,
+                          4.5, 5.0, 5.5, 6.0, 6.5, 7.0, 7.5, 8.0],
+                "duration": 10.0,
+            }
+            wow_config = {
+                "enabled": True, "zoom_punch": True, "light_flash": False,
+                "dynamic_grade": False, "dynamic_vignette": False,
+                "motion_blur": False, "particles": False,
+            }
+            result = build_ffmpeg_filter_chain(
+                analysis=analysis,
+                scene_plan={"scenes": [], "overall_style": "worship"},
+                wow_config=wow_config,
+            )
+            self.assertIsNone(result)
+        finally:
+            wm.ENABLE_ZOOMPAN = original
 
     def test_motion_blur_adds_tblend(self):
         from musicvid.pipeline.wow_effects import build_ffmpeg_filter_chain
@@ -228,9 +260,9 @@ class TestApplyWowEffects(unittest.TestCase):
             "duration": 10.0,
         }
         wow_config = {
-            "enabled": True, "zoom_punch": True, "light_flash": False,
+            "enabled": True, "zoom_punch": False, "light_flash": False,
             "dynamic_grade": False, "dynamic_vignette": False,
-            "motion_blur": False, "particles": False,
+            "motion_blur": True, "particles": False,
         }
         mock_result = MagicMock()
         mock_result.returncode = 0
@@ -261,9 +293,9 @@ class TestApplyWowEffects(unittest.TestCase):
             "duration": 10.0,
         }
         wow_config = {
-            "enabled": True, "zoom_punch": True, "light_flash": False,
+            "enabled": True, "zoom_punch": False, "light_flash": False,
             "dynamic_grade": False, "dynamic_vignette": False,
-            "motion_blur": False, "particles": False,
+            "motion_blur": True, "particles": False,
         }
         mock_result = MagicMock()
         mock_result.returncode = 1

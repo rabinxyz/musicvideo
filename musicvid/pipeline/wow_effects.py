@@ -11,6 +11,10 @@ import shutil
 import subprocess
 import tempfile
 
+# Set to False to skip the zoom-punch (scale+t) filter that crashes FFmpeg 7.x
+# in init eval_mode. Safe to re-enable when FFmpeg fixes scale eval.
+ENABLE_ZOOMPAN = False
+
 
 def default_wow_config():
     """Return default WOW effects configuration dict."""
@@ -46,7 +50,7 @@ def build_ffmpeg_filter_chain(analysis, scene_plan, wow_config, video_width=1920
 
     filters = []
 
-    if wow_config.get("zoom_punch", True):
+    if ENABLE_ZOOMPAN and wow_config.get("zoom_punch", True):
         f = _build_zoom_punch_filter(beats, sections, video_width, video_height)
         if f:
             filters.append(f)

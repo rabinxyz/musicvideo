@@ -18,6 +18,7 @@ from musicvid.pipeline.effects import apply_effects, create_cinematic_bars, crea
 from musicvid.pipeline.logo_overlay import apply_logo
 from musicvid.pipeline.color_grade import prepare_lut_ffmpeg_params
 from musicvid.pipeline.smart_crop import convert_for_platform
+from musicvid.pipeline.wow_effects import apply_wow_effects
 
 
 _SECTION_FONT_SIZES = {
@@ -273,7 +274,37 @@ def _concatenate_with_transitions(scene_clips, scenes, bpm, target_size):
     return CompositeVideoClip(all_clips, size=target_size).with_duration(total_duration)
 
 
-def _create_subtitle_clips(lyrics, subtitle_style, size, font_path=None, subtitle_margin_bottom=80, sections=None):
+def _make_scale_pop_transform(anim_duration=0.15):
+    """Return a MoviePy transform function for scale pop (1.15->1.0 over anim_duration).
+
+    Used for chorus subtitle entry animation.
+    """
+    from PIL import Image
+    import numpy as np
+
+    def scale_pop(get_frame, t):
+        frame = get_frame(t)
+        if t >= anim_duration:
+            return frame
+        progress = t / anim_duration  # 0.0 -> 1.0
+        scale = 1.15 - 0.15 * progress  # 1.15 -> 1.0
+        h, w = frame.shape[:2]
+        new_w = max(1, int(w / scale))
+        new_h = max(1, int(h / scale))
+        cx, cy = w // 2, h // 2
+        x1 = max(0, cx - new_w // 2)
+        y1 = max(0, cy - new_h // 2)
+        x2 = min(w, x1 + new_w)
+        y2 = min(h, y1 + new_h)
+        cropped = frame[y1:y2, x1:x2]
+        img = Image.fromarray(cropped)
+        img = img.resize((w, h), Image.LANCZOS)
+        return np.array(img)
+
+    return scale_pop
+
+
+def _create_subtitle_clips(lyrics, subtitle_style, size, font_path=None, subtitle_margin_bottom=80, sections=None, reels_mode=False):
     """Create subtitle TextClips from lyrics with word-level timing."""
     clips = []
     color = subtitle_style.get("color", "#FFFFFF")
@@ -295,7 +326,10 @@ def _create_subtitle_clips(lyrics, subtitle_style, size, font_path=None, subtitl
             section = _get_section_for_time(segment["start"], sections)
             font_size = _SECTION_FONT_SIZES.get(section, subtitle_style.get("font_size", _DEFAULT_FONT_SIZE))
         else:
+            section = None
             font_size = subtitle_style.get("font_size", _DEFAULT_FONT_SIZE)
+        if reels_mode and section == "chorus":
+            font_size = 72
         descender_pad = int(font_size * 0.35)
         padded_height = font_size + descender_pad
 
@@ -348,6 +382,10 @@ def _create_subtitle_clips(lyrics, subtitle_style, size, font_path=None, subtitl
             vfx.CrossFadeOut(fade_duration),
         ])
 
+        # Scale-pop animation for chorus subtitles
+        if sections and _get_section_for_time(segment["start"], sections) == "chorus":
+            txt_clip = txt_clip.transform(_make_scale_pop_transform(0.15))
+
         clips.append(txt_clip)
 
     return clips
@@ -398,7 +436,7 @@ def _load_scene_clip(video_path, scene, target_size, reels_style="blur-bg"):
     return _create_ken_burns_clip(clip, duration, scene.get("motion", "static"), target_size)
 
 
-def assemble_video(analysis, scene_plan, fetch_manifest, audio_path, output_path, resolution="1080p", font_path=None, effects_level="minimal", clip_start=None, clip_end=None, title_card_text=None, audio_fade_out=1.0, subtitle_margin_bottom=80, cinematic_bars=False, logo_path=None, logo_position="top-left", logo_size=None, logo_opacity=0.85, lut_path=None, lut_style=None, lut_intensity=0.85, reels_style="blur-bg"):
+def assemble_video(analysis, scene_plan, fetch_manifest, audio_path, output_path, resolution="1080p", font_path=None, effects_level="minimal", clip_start=None, clip_end=None, title_card_text=None, audio_fade_out=1.0, subtitle_margin_bottom=80, cinematic_bars=False, logo_path=None, logo_position="top-left", logo_size=None, logo_opacity=0.85, lut_path=None, lut_style=None, lut_intensity=0.85, reels_style="blur-bg", wow_config=None):
     """Assemble the final music video.
 
     Args:
@@ -431,6 +469,7 @@ def assemble_video(analysis, scene_plan, fetch_manifest, audio_path, output_path
         font_path=font_path,
         subtitle_margin_bottom=subtitle_margin_bottom,
         sections=analysis.get("sections"),
+        reels_mode=(target_size == (1080, 1920)),
     )
 
     layers = [video] + subtitle_clips
@@ -487,3 +526,13 @@ def assemble_video(analysis, scene_plan, fetch_manifest, audio_path, output_path
         write_kwargs["ffmpeg_params"] = lut_ffmpeg_params
 
     final.write_videofile(output_path, **write_kwargs)
+
+    if wow_config and wow_config.get("enabled", True):
+        apply_wow_effects(
+            video_path=output_path,
+            analysis=analysis,
+            scene_plan=scene_plan,
+            wow_config=wow_config,
+            video_width=target_size[0],
+            video_height=target_size[1],
+        )

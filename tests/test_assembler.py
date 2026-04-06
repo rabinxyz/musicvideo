@@ -1397,3 +1397,260 @@ class TestLoadSceneClipPortraitMp4:
             if "new_size" in kw:
                 assert kw["new_size"] != (1080, 1920), \
                     "resized(new_size=(1080,1920)) stretches video — use convert_16_9_to_9_16"
+
+
+class TestAssembleVideoWowConfig(unittest.TestCase):
+    """Tests for wow_config integration in assemble_video."""
+
+    def _make_scene_plan(self):
+        return {
+            "overall_style": "worship",
+            "subtitle_style": {"font_size": 54, "color": "#FFFFFF",
+                               "outline_color": "#000000",
+                               "position": "bottom", "animation": "fade"},
+            "scenes": [
+                {
+                    "section": "chorus", "start": 0.0, "end": 5.0,
+                    "visual_source": "TYPE_VIDEO_STOCK",
+                    "motion": "slow_zoom_in", "transition": "cut",
+                    "transition_to_next": "cut", "lyrics_in_scene": [],
+                    "search_query": "nature", "visual_prompt": "",
+                    "motion_prompt": "", "animate": False, "overlay": "none",
+                }
+            ],
+        }
+
+    def _make_analysis(self):
+        return {
+            "lyrics": [], "beats": [1.0, 2.0], "bpm": 120.0,
+            "duration": 5.0,
+            "sections": [{"label": "chorus", "start": 0.0, "end": 5.0}],
+            "energy_peaks": [],
+        }
+
+    def _make_manifest(self):
+        return [{"scene_index": 0, "video_path": "/fake/scene.mp4",
+                 "start": 0.0, "end": 5.0, "source": "stock"}]
+
+    @patch("pathlib.Path.mkdir")
+    @patch("musicvid.pipeline.assembler.apply_wow_effects")
+    @patch("musicvid.pipeline.assembler.prepare_lut_ffmpeg_params", return_value=[])
+    @patch("musicvid.pipeline.assembler._create_subtitle_clips", return_value=[])
+    @patch("musicvid.pipeline.assembler._concatenate_with_transitions")
+    @patch("musicvid.pipeline.assembler.apply_effects")
+    @patch("musicvid.pipeline.assembler.CompositeVideoClip")
+    @patch("musicvid.pipeline.assembler.AudioFileClip")
+    @patch("musicvid.pipeline.assembler.VideoFileClip")
+    def test_wow_effects_called_when_wow_config_provided(
+        self, mock_vfc, mock_afc, mock_comp, mock_effects,
+        mock_concat, mock_subtitles, mock_lut, mock_wow, mock_mkdir
+    ):
+        from musicvid.pipeline.assembler import assemble_video
+
+        mock_clip = MagicMock()
+        mock_clip.size = (1920, 1080)
+        mock_clip.w = 1920
+        mock_clip.h = 1080
+        mock_clip.duration = 5.0
+        mock_clip.subclipped.return_value = mock_clip
+        mock_clip.cropped.return_value = mock_clip
+        mock_clip.resized.return_value = mock_clip
+        mock_clip.with_duration.return_value = mock_clip
+        mock_vfc.return_value = mock_clip
+        mock_effects.return_value = mock_clip
+        mock_concat.return_value = mock_clip
+
+        mock_final = MagicMock()
+        mock_final.duration = 5.0
+        mock_final.with_audio.return_value = mock_final
+        mock_final.with_duration.return_value = mock_final
+        mock_comp.return_value = mock_final
+
+        mock_audio = MagicMock()
+        mock_audio.duration = 5.0
+        mock_afc.return_value = mock_audio
+
+        wow_config = {
+            "enabled": True, "zoom_punch": True, "light_flash": True,
+            "dynamic_grade": True, "dynamic_vignette": True,
+            "motion_blur": False, "particles": False,
+        }
+
+        assemble_video(
+            analysis=self._make_analysis(),
+            scene_plan=self._make_scene_plan(),
+            fetch_manifest=self._make_manifest(),
+            audio_path="/fake/audio.mp3",
+            output_path="/fake/output.mp4",
+            wow_config=wow_config,
+        )
+
+        mock_wow.assert_called_once()
+        call_kwargs = mock_wow.call_args[1]
+        self.assertEqual(call_kwargs["video_path"], "/fake/output.mp4")
+        self.assertEqual(call_kwargs["video_width"], 1920)
+        self.assertEqual(call_kwargs["video_height"], 1080)
+
+    @patch("pathlib.Path.mkdir")
+    @patch("musicvid.pipeline.assembler.apply_wow_effects")
+    @patch("musicvid.pipeline.assembler.prepare_lut_ffmpeg_params", return_value=[])
+    @patch("musicvid.pipeline.assembler._create_subtitle_clips", return_value=[])
+    @patch("musicvid.pipeline.assembler._concatenate_with_transitions")
+    @patch("musicvid.pipeline.assembler.apply_effects")
+    @patch("musicvid.pipeline.assembler.CompositeVideoClip")
+    @patch("musicvid.pipeline.assembler.AudioFileClip")
+    @patch("musicvid.pipeline.assembler.VideoFileClip")
+    def test_wow_effects_not_called_when_wow_config_is_none(
+        self, mock_vfc, mock_afc, mock_comp, mock_effects,
+        mock_concat, mock_subtitles, mock_lut, mock_wow, mock_mkdir
+    ):
+        from musicvid.pipeline.assembler import assemble_video
+
+        mock_clip = MagicMock()
+        mock_clip.size = (1920, 1080)
+        mock_clip.w = 1920
+        mock_clip.h = 1080
+        mock_clip.duration = 5.0
+        mock_clip.subclipped.return_value = mock_clip
+        mock_clip.cropped.return_value = mock_clip
+        mock_clip.resized.return_value = mock_clip
+        mock_clip.with_duration.return_value = mock_clip
+        mock_vfc.return_value = mock_clip
+        mock_effects.return_value = mock_clip
+        mock_concat.return_value = mock_clip
+
+        mock_final = MagicMock()
+        mock_final.duration = 5.0
+        mock_final.with_audio.return_value = mock_final
+        mock_final.with_duration.return_value = mock_final
+        mock_comp.return_value = mock_final
+
+        mock_audio = MagicMock()
+        mock_audio.duration = 5.0
+        mock_afc.return_value = mock_audio
+
+        assemble_video(
+            analysis=self._make_analysis(),
+            scene_plan=self._make_scene_plan(),
+            fetch_manifest=self._make_manifest(),
+            audio_path="/fake/audio.mp3",
+            output_path="/fake/output.mp4",
+            wow_config=None,
+        )
+
+        mock_wow.assert_not_called()
+
+
+class TestScalePopSubtitles(unittest.TestCase):
+    @patch("musicvid.pipeline.assembler.TextClip")
+    @patch("musicvid.pipeline.assembler.vfx")
+    def test_chorus_subtitle_gets_transform(self, mock_vfx, mock_textclip):
+        from musicvid.pipeline.assembler import _create_subtitle_clips
+
+        mock_clip = MagicMock()
+        mock_clip.duration = 2.0
+        mock_clip.w = 400
+        mock_clip.h = 80
+        mock_clip.with_duration.return_value = mock_clip
+        mock_clip.with_start.return_value = mock_clip
+        mock_clip.with_position.return_value = mock_clip
+        mock_clip.with_effects.return_value = mock_clip
+        mock_clip.transform.return_value = mock_clip
+        mock_textclip.return_value = mock_clip
+
+        lyrics = [{"start": 10.0, "end": 12.0, "text": "Chwała", "words": []}]
+        subtitle_style = {"font_size": 64, "color": "#FFFFFF",
+                          "outline_color": "#000000",
+                          "position": "bottom", "animation": "fade"}
+        sections = [{"label": "chorus", "start": 8.0, "end": 20.0}]
+
+        _create_subtitle_clips(lyrics, subtitle_style, (1920, 1080),
+                               sections=sections)
+
+        mock_clip.transform.assert_called_once()
+
+    @patch("musicvid.pipeline.assembler.TextClip")
+    @patch("musicvid.pipeline.assembler.vfx")
+    def test_verse_subtitle_has_no_scale_pop(self, mock_vfx, mock_textclip):
+        from musicvid.pipeline.assembler import _create_subtitle_clips
+
+        mock_clip = MagicMock()
+        mock_clip.duration = 2.0
+        mock_clip.w = 400
+        mock_clip.h = 80
+        mock_clip.with_duration.return_value = mock_clip
+        mock_clip.with_start.return_value = mock_clip
+        mock_clip.with_position.return_value = mock_clip
+        mock_clip.with_effects.return_value = mock_clip
+        mock_clip.transform.return_value = mock_clip
+        mock_textclip.return_value = mock_clip
+
+        lyrics = [{"start": 5.0, "end": 7.0, "text": "Bóg jest dobry", "words": []}]
+        subtitle_style = {"font_size": 54, "color": "#FFFFFF",
+                          "outline_color": "#000000",
+                          "position": "bottom", "animation": "fade"}
+        sections = [{"label": "verse", "start": 0.0, "end": 20.0}]
+
+        _create_subtitle_clips(lyrics, subtitle_style, (1920, 1080),
+                               sections=sections)
+
+        mock_clip.transform.assert_not_called()
+
+
+class TestReelsSubtitleFontSize(unittest.TestCase):
+    @patch("musicvid.pipeline.assembler.TextClip")
+    @patch("musicvid.pipeline.assembler.vfx")
+    def test_chorus_font_size_72_in_reels_mode(self, mock_vfx, mock_textclip):
+        from musicvid.pipeline.assembler import _create_subtitle_clips
+
+        mock_clip = MagicMock()
+        mock_clip.duration = 2.0
+        mock_clip.w = 400
+        mock_clip.h = 80
+        mock_clip.with_duration.return_value = mock_clip
+        mock_clip.with_start.return_value = mock_clip
+        mock_clip.with_position.return_value = mock_clip
+        mock_clip.with_effects.return_value = mock_clip
+        mock_clip.transform.return_value = mock_clip
+        mock_textclip.return_value = mock_clip
+
+        lyrics = [{"start": 10.0, "end": 12.0, "text": "Alleluja", "words": []}]
+        subtitle_style = {"font_size": 54, "color": "#FFFFFF",
+                          "outline_color": "#000000",
+                          "position": "bottom", "animation": "fade"}
+        sections = [{"label": "chorus", "start": 8.0, "end": 20.0}]
+
+        _create_subtitle_clips(lyrics, subtitle_style, (1080, 1920),
+                               sections=sections, reels_mode=True)
+
+        call_kwargs = mock_textclip.call_args[1]
+        self.assertEqual(call_kwargs.get("font_size"), 72)
+
+    @patch("musicvid.pipeline.assembler.TextClip")
+    @patch("musicvid.pipeline.assembler.vfx")
+    def test_chorus_font_size_unchanged_when_not_reels(self, mock_vfx, mock_textclip):
+        from musicvid.pipeline.assembler import _create_subtitle_clips
+
+        mock_clip = MagicMock()
+        mock_clip.duration = 2.0
+        mock_clip.w = 400
+        mock_clip.h = 80
+        mock_clip.with_duration.return_value = mock_clip
+        mock_clip.with_start.return_value = mock_clip
+        mock_clip.with_position.return_value = mock_clip
+        mock_clip.with_effects.return_value = mock_clip
+        mock_clip.transform.return_value = mock_clip
+        mock_textclip.return_value = mock_clip
+
+        lyrics = [{"start": 10.0, "end": 12.0, "text": "Alleluja", "words": []}]
+        subtitle_style = {"font_size": 54, "color": "#FFFFFF",
+                          "outline_color": "#000000",
+                          "position": "bottom", "animation": "fade"}
+        sections = [{"label": "chorus", "start": 8.0, "end": 20.0}]
+
+        _create_subtitle_clips(lyrics, subtitle_style, (1920, 1080),
+                               sections=sections, reels_mode=False)
+
+        call_kwargs = mock_textclip.call_args[1]
+        # Should be 64 (chorus size from _SECTION_FONT_SIZES), not 72
+        self.assertEqual(call_kwargs.get("font_size"), 64)

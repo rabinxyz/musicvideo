@@ -1,5 +1,3 @@
-# Idea
-
 # Spec: Domyślny mix — AI video (Runway) + przyroda stock (Pexels)
 
 ## Zmiana filozofii

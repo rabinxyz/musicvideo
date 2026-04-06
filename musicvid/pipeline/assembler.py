@@ -185,6 +185,21 @@ def _remap_motion_for_portrait(motion):
     return remap.get(motion, motion)
 
 
+def convert_16_9_to_9_16(clip, target_w=1080, target_h=1920):
+    """Convert a landscape clip to portrait 9:16 via scale + center crop.
+
+    Scales so height == target_h preserving aspect ratio, then crops width to target_w.
+    """
+    src_w, src_h = clip.size
+    scale = target_h / src_h
+    new_w = int(src_w * scale)
+    clip = clip.resized((new_w, target_h))
+    x1 = (new_w - target_w) // 2
+    x2 = x1 + target_w
+    clip = clip.cropped(x1=x1, y1=0, x2=x2, y2=target_h)
+    return clip
+
+
 def _concatenate_with_transitions(scene_clips, scenes, bpm, target_size):
     """Concatenate scene clips applying per-scene transitions.
 
@@ -354,6 +369,9 @@ def _create_title_card(text, size, duration=2.0):
 
 def _load_scene_clip(video_path, scene, target_size, reels_style="blur-bg"):
     """Load a video or image clip for a scene."""
+    if video_path is None:
+        raise ValueError("video_path is None — no asset for this scene")
+
     path = Path(video_path)
     duration = scene["end"] - scene["start"]
     is_portrait = target_size == (1080, 1920)
@@ -371,8 +389,10 @@ def _load_scene_clip(video_path, scene, target_size, reels_style="blur-bg"):
             clip = concatenate_videoclips([clip] * loops)
         clip = clip.subclipped(0, duration)
 
-    # Video files (.mp4): resize only, skip Ken Burns — video already has motion
+    # Video files (.mp4): skip Ken Burns — video already has motion
     if path.suffix.lower() == ".mp4":
+        if is_portrait:
+            return convert_16_9_to_9_16(clip, target_w=target_size[0], target_h=target_size[1])
         return clip.resized(new_size=target_size)
 
     return _create_ken_burns_clip(clip, duration, scene.get("motion", "static"), target_size)

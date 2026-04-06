@@ -1304,3 +1304,96 @@ class TestConcatenateWithTransitions:
         # dissolve_d = max(0.2, min(0.8, round(60/84/2, 2))) ≈ 0.36
         # naive start = 20.0 - dip_d/2; corrected start = (10-0.36+10) - dip_d/2 = 19.64 - dip_d/2
         assert actual_start < 19.5, f"Flash start {actual_start} should be < 19.5 (naive would be ~19.6, with overlap correction < that)"
+
+
+class TestConvert16To9_16:
+    """Tests for convert_16_9_to_9_16."""
+
+    def test_output_dimensions(self):
+        from musicvid.pipeline.assembler import convert_16_9_to_9_16
+
+        mock_clip = MagicMock()
+        mock_clip.size = (1920, 1080)
+        resized_clip = MagicMock()
+        resized_clip.size = (3413, 1920)
+        mock_clip.resized.return_value = resized_clip
+        cropped_clip = MagicMock()
+        resized_clip.cropped.return_value = cropped_clip
+
+        result = convert_16_9_to_9_16(mock_clip, target_w=1080, target_h=1920)
+
+        mock_clip.resized.assert_called_once()
+        args = mock_clip.resized.call_args[0]
+        new_w, new_h = args[0]
+        assert new_h == 1920
+        assert new_w == int(1920 * 1920 / 1080)  # 3413
+
+        resized_clip.cropped.assert_called_once()
+        ckwargs = resized_clip.cropped.call_args[1]
+        assert ckwargs["x1"] == (3413 - 1080) // 2
+        assert ckwargs["x2"] == (3413 - 1080) // 2 + 1080
+        assert ckwargs["y1"] == 0
+        assert ckwargs["y2"] == 1920
+
+    def test_does_not_stretch(self):
+        """Result must not resize directly to target dimensions (that stretches)."""
+        from musicvid.pipeline.assembler import convert_16_9_to_9_16
+
+        mock_clip = MagicMock()
+        mock_clip.size = (1280, 720)
+        scale = 1920 / 720
+        new_w = int(1280 * scale)
+        resized_clip = MagicMock()
+        resized_clip.size = (new_w, 1920)
+        mock_clip.resized.return_value = resized_clip
+        cropped_clip = MagicMock()
+        resized_clip.cropped.return_value = cropped_clip
+
+        convert_16_9_to_9_16(mock_clip, target_w=1080, target_h=1920)
+
+        call_args = mock_clip.resized.call_args[0]
+        w, h = call_args[0]
+        assert not (w == 1080 and h == 1920), "Should not resize directly to 1080x1920"
+
+
+class TestLoadSceneClipNonePath:
+    """Tests that _load_scene_clip raises for None path."""
+
+    def test_none_path_raises(self):
+        from musicvid.pipeline.assembler import _load_scene_clip
+
+        scene = {"start": 0.0, "end": 5.0, "motion": "slow_zoom_in"}
+        with pytest.raises((ValueError, TypeError)):
+            _load_scene_clip(None, scene, (1080, 1920))
+
+
+class TestLoadSceneClipPortraitMp4:
+    """Tests that _load_scene_clip uses crop (not stretch) for portrait .mp4."""
+
+    @patch("musicvid.pipeline.assembler.VideoFileClip")
+    def test_portrait_mp4_uses_convert_not_resize(self, mock_vfc, tmp_path):
+        from musicvid.pipeline.assembler import _load_scene_clip
+
+        fake_mp4 = tmp_path / "scene.mp4"
+        fake_mp4.write_bytes(b"fake video")
+
+        mock_clip = MagicMock()
+        mock_clip.duration = 10.0
+        mock_clip.size = (1920, 1080)
+        mock_clip.subclipped.return_value = mock_clip
+        resized_clip = MagicMock()
+        resized_clip.size = (3413, 1920)
+        mock_clip.resized.return_value = resized_clip
+        cropped_clip = MagicMock()
+        resized_clip.cropped.return_value = cropped_clip
+        mock_vfc.return_value = mock_clip
+
+        scene = {"start": 0.0, "end": 5.0, "motion": "slow_zoom_in"}
+        _load_scene_clip(str(fake_mp4), scene, (1080, 1920))
+
+        # resized must NOT be called with new_size=(1080, 1920) — that stretches
+        for call in mock_clip.resized.call_args_list:
+            kw = call[1]
+            if "new_size" in kw:
+                assert kw["new_size"] != (1080, 1920), \
+                    "resized(new_size=(1080,1920)) stretches video — use convert_16_9_to_9_16"

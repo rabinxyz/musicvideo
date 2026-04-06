@@ -19,9 +19,11 @@ BLOCKED_WORDS = [
     "alcohol", "beer", "wine", "whiskey", "vodka",
     "drinking", "bar", "pub", "cocktail", "champagne",
     "nightclub", "drunk",
+    # Non-Protestant religious imagery (icons)
+    "icon religious",
     # Other inappropriate content
     "gambling", "casino", "cigarette", "smoking",
-    "drugs", "violence", "nightlife",
+    "drugs", "violence", "nightlife", "fight", "party",
 ]
 
 SAFE_QUERY_MAP = {

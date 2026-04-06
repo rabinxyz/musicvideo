@@ -90,6 +90,9 @@ class TestSanitizeQueryBlockedDrugsGambling:
         "violence street fight",
         "party wild nightlife",
         "nightlife city lights",
+        "street fight crowd",
+        "wild party beach",
+        "icon religious art",
     ])
     def test_drugs_gambling_query_blocked(self, query):
         assert sanitize_query(query) == "BLOCKED"

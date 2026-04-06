@@ -316,3 +316,50 @@ class TestAnalyzeAudio:
 
         assert len(result["lyrics"]) == 1
         assert result["lyrics"][0]["text"] == "Bogu chwała na wieki"
+
+    @patch("musicvid.pipeline.lyrics_parser.merge_whisper_with_lyrics_file")
+    @patch("musicvid.pipeline.audio_analyzer.whisper")
+    @patch("musicvid.pipeline.audio_analyzer.librosa")
+    def test_lyrics_path_triggers_merge(self, mock_librosa, mock_whisper, mock_merge, mock_whisper_result, mock_audio_signal, tmp_path):
+        """When lyrics_path is provided, merge_whisper_with_lyrics_file is called."""
+        y, sr = mock_audio_signal
+        mock_model = MagicMock()
+        mock_model.transcribe.return_value = mock_whisper_result
+        mock_whisper.load_model.return_value = mock_model
+        mock_librosa.load.return_value = (y, sr)
+        mock_librosa.beat.beat_track.return_value = (120.0, np.array([0]))
+        mock_librosa.get_duration.return_value = 10.0
+        mock_librosa.frames_to_time.return_value = np.array([0.0])
+        mock_merge.return_value = [{"start": 0.5, "end": 2.0, "text": "Merged line"}]
+
+        lyrics_file = tmp_path / "tekst.txt"
+        lyrics_file.write_text("Merged line\n", encoding="utf-8")
+        audio_file = tmp_path / "test.mp3"
+        audio_file.write_bytes(b"fake audio data")
+
+        result = analyze_audio(str(audio_file), lyrics_path=str(lyrics_file))
+
+        mock_merge.assert_called_once()
+        assert result["lyrics"] == [{"start": 0.5, "end": 2.0, "text": "Merged line"}]
+
+    @patch("musicvid.pipeline.lyrics_parser.merge_whisper_with_lyrics_file")
+    @patch("musicvid.pipeline.audio_analyzer.whisper")
+    @patch("musicvid.pipeline.audio_analyzer.librosa")
+    def test_no_lyrics_path_skips_merge(self, mock_librosa, mock_whisper, mock_merge, mock_whisper_result, mock_audio_signal, tmp_path):
+        """When lyrics_path is None, merge is not called."""
+        y, sr = mock_audio_signal
+        mock_model = MagicMock()
+        mock_model.transcribe.return_value = mock_whisper_result
+        mock_whisper.load_model.return_value = mock_model
+        mock_librosa.load.return_value = (y, sr)
+        mock_librosa.beat.beat_track.return_value = (120.0, np.array([0]))
+        mock_librosa.get_duration.return_value = 10.0
+        mock_librosa.frames_to_time.return_value = np.array([0.0])
+
+        audio_file = tmp_path / "test.mp3"
+        audio_file.write_bytes(b"fake audio data")
+
+        result = analyze_audio(str(audio_file))
+
+        mock_merge.assert_not_called()
+        assert result["lyrics"][0]["text"] == "Amazing grace how sweet the sound"

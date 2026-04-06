@@ -80,7 +80,7 @@ def _estimate_mood(tempo, energy_mean):
         return "powerful"
 
 
-def analyze_audio(audio_path, output_dir=None, whisper_model="small"):
+def analyze_audio(audio_path, output_dir=None, whisper_model="small", lyrics_path=None):
     """Analyze audio file and return structured analysis.
 
     Args:
@@ -126,6 +126,18 @@ def analyze_audio(audio_path, output_dir=None, whisper_model="small"):
 
     y, sr = librosa.load(audio_path)
     duration = float(librosa.get_duration(y=y, sr=sr))
+
+    # Merge with lyrics file if provided (needs duration for timing corrections)
+    if lyrics_path and Path(lyrics_path).exists():
+        from musicvid.pipeline.lyrics_parser import merge_whisper_with_lyrics_file
+        with open(lyrics_path, encoding="utf-8") as f:
+            file_lines = [l.strip() for l in f.readlines() if l.strip()]
+        lyrics = merge_whisper_with_lyrics_file(lyrics, file_lines, duration)
+        print(f"[Lyrics] Plik: {len(file_lines)} linii → {len(lyrics)} napisów")
+        if lyrics:
+            print(f"[Lyrics] Pierwszy: '{lyrics[0]['text']}' @ {lyrics[0]['start']:.1f}s")
+    else:
+        print(f"[Lyrics] Whisper: {len(lyrics)} segmentów (brak pliku tekstu)")
 
     tempo, beat_frames = librosa.beat.beat_track(y=y, sr=sr)
     beat_times = librosa.frames_to_time(beat_frames, sr=sr)

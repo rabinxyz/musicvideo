@@ -43,35 +43,9 @@ def _get_headers():
 def _submit_animation(image_b64, motion_prompt, duration):
     """POST to Runway API to start image-to-video task. Returns task_id."""
     payload = {
-        "model": "gen4.5",
+        "model": "gen4_turbo",
         "promptImage": image_b64,
         "promptText": motion_prompt,
-        "duration": duration,
-        "ratio": "1280:720",
-    }
-    resp = requests.post(
-        f"{RUNWAY_API_BASE}/v1/image_to_video",
-        json=payload,
-        headers=_get_headers(),
-    )
-    try:
-        resp.raise_for_status()
-    except requests.exceptions.HTTPError:
-        print(f"Runway error {resp.status_code}: {resp.text}")
-        raise
-    return resp.json()["id"]
-
-
-@retry(
-    stop=stop_after_attempt(2),
-    wait=wait_exponential(multiplier=1, min=2, max=10),
-    retry=retry_if_exception(_is_retryable),
-)
-def _submit_text_to_video(prompt, duration):
-    """POST to Runway API to start text-to-video task (no input image). Returns task_id."""
-    payload = {
-        "model": "gen4.5",
-        "promptText": prompt,
         "duration": duration,
         "ratio": "1280:720",
     }
@@ -153,35 +127,6 @@ def animate_image(image_path, motion_prompt, duration=5, output_path=None):
     image_b64 = f"data:{mime};base64,{base64.b64encode(image_bytes).decode()}"
 
     task_id = _submit_animation(image_b64, motion_prompt, duration)
-    video_url = _poll_animation(task_id)
-    _download_video(video_url, output_path)
-    return str(output_path)
-
-
-def generate_video_from_text(prompt, duration=5, output_path=None):
-    """Generate video from text prompt using Runway Gen-4.5 (no input image).
-
-    Args:
-        prompt: Text describing the desired video scene.
-        duration: Video duration in seconds (default 5).
-        output_path: Path to write output .mp4. Required.
-
-    Returns:
-        str: Path to the generated .mp4 file.
-
-    Raises:
-        RuntimeError: If RUNWAY_API_KEY not set or Runway task fails.
-        TimeoutError: If Runway API does not respond within 300s.
-    """
-    if not os.environ.get("RUNWAY_API_KEY"):
-        raise RuntimeError(
-            "RUNWAY_API_KEY not set. Get a key from app.runwayml.com → Settings → API Keys"
-        )
-
-    if output_path and Path(output_path).exists():
-        return str(output_path)
-
-    task_id = _submit_text_to_video(prompt, duration)
     video_url = _poll_animation(task_id)
     _download_video(video_url, output_path)
     return str(output_path)

@@ -511,3 +511,67 @@ class TestValidateScenePlanNewFields:
         }
         result = _validate_scene_plan(plan, duration=10.0)
         assert result["scenes"][0]["visual_prompt"] == ""
+
+
+class TestValidateScenePlanModeDefaults:
+    """Tests for mode-aware _validate_scene_plan defaults."""
+
+    def test_default_visual_source_is_type_ai_when_no_mode(self):
+        from musicvid.pipeline.director import _validate_scene_plan
+        plan = {
+            "scenes": [
+                {"section": "verse", "start": 0.0, "end": 5.0,
+                 "visual_prompt": "test", "motion": "static",
+                 "transition": "cut", "overlay": "none"},
+            ]
+        }
+        result = _validate_scene_plan(plan, 5.0)
+        assert result["scenes"][0]["visual_source"] == "TYPE_AI"
+
+    def test_default_visual_source_is_type_video_runway_in_runway_mode(self):
+        from musicvid.pipeline.director import _validate_scene_plan
+        plan = {
+            "scenes": [
+                {"section": "chorus", "start": 0.0, "end": 5.0,
+                 "visual_prompt": "test", "motion": "static",
+                 "transition": "cut", "overlay": "none"},
+            ]
+        }
+        result = _validate_scene_plan(plan, 5.0, mode="runway")
+        assert result["scenes"][0]["visual_source"] == "TYPE_VIDEO_RUNWAY"
+
+    def test_explicit_visual_source_not_overridden_by_mode(self):
+        from musicvid.pipeline.director import _validate_scene_plan
+        plan = {
+            "scenes": [
+                {"section": "verse", "start": 0.0, "end": 5.0,
+                 "visual_source": "TYPE_VIDEO_STOCK",
+                 "visual_prompt": "", "motion": "static",
+                 "transition": "cut", "overlay": "none"},
+            ]
+        }
+        result = _validate_scene_plan(plan, 5.0, mode="runway")
+        assert result["scenes"][0]["visual_source"] == "TYPE_VIDEO_STOCK"
+
+
+class TestBuildUserMessageRunwayMode:
+    """Tests for runway mode hint in _build_user_message."""
+
+    def test_runway_mode_hint_in_message(self):
+        from musicvid.pipeline.director import _build_user_message
+        analysis = {
+            "duration": 60.0, "bpm": 120.0, "beats": [0.0, 0.5, 1.0, 1.5],
+            "lyrics": [], "sections": [],
+        }
+        msg = _build_user_message(analysis, mode="runway")
+        assert "TYPE_VIDEO_RUNWAY" in msg
+        assert "TYPE_VIDEO_STOCK" in msg
+
+    def test_no_runway_hint_in_default_mode(self):
+        from musicvid.pipeline.director import _build_user_message
+        analysis = {
+            "duration": 60.0, "bpm": 120.0, "beats": [0.0, 0.5, 1.0, 1.5],
+            "lyrics": [], "sections": [],
+        }
+        msg = _build_user_message(analysis)
+        assert "Use TYPE_VIDEO_RUNWAY" not in msg

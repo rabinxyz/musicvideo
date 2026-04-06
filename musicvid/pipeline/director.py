@@ -16,7 +16,7 @@ def _load_system_prompt():
     return prompt_file.read_text()
 
 
-def _build_user_message(analysis, style_override=None):
+def _build_user_message(analysis, style_override=None, mode=None):
     """Build the user message for Claude with analysis data."""
     duration = analysis.get("duration", 0)
     bpm = analysis.get("bpm", 120.0)
@@ -63,6 +63,14 @@ def _build_user_message(analysis, style_override=None):
 
     if style_override and style_override != "auto":
         msg += f"\n\nIMPORTANT: Override the style to be '{style_override}' regardless of the mood detected in the audio."
+
+    if mode == "runway":
+        msg += (
+            "\n\nMODE: runway — Use TYPE_VIDEO_RUNWAY for climactic scenes (chorus, bridge). "
+            "Use TYPE_VIDEO_STOCK for intro, verse, outro. "
+            "Minimum 40% of scenes must be TYPE_VIDEO_RUNWAY. "
+            "TYPE_AI is NOT available in this mode — do not use it."
+        )
     return msg
 
 
@@ -89,7 +97,7 @@ def _call_claude(system_prompt, user_message):
     return response.content[0].text
 
 
-def _validate_scene_plan(plan, duration):
+def _validate_scene_plan(plan, duration, mode=None):
     """Validate and fix the scene plan to ensure it covers the full duration."""
     if not plan.get("scenes"):
         raise ValueError("Scene plan has no scenes")
@@ -108,7 +116,7 @@ def _validate_scene_plan(plan, duration):
             scene["lyrics_in_scene"] = []
         # Hybrid visual sourcing fields (Spec 5)
         if "visual_source" not in scene:
-            scene["visual_source"] = "TYPE_AI"
+            scene["visual_source"] = "TYPE_VIDEO_RUNWAY" if mode == "runway" else "TYPE_AI"
         if "search_query" not in scene:
             scene["search_query"] = ""
         if "visual_prompt" not in scene:
@@ -221,7 +229,7 @@ def _repair_truncated_json_aggressive(text):
     return None
 
 
-def create_scene_plan(analysis, style_override=None, output_dir=None):
+def create_scene_plan(analysis, style_override=None, output_dir=None, mode=None):
     """Create a scene plan using Claude API.
 
     Args:
@@ -233,7 +241,7 @@ def create_scene_plan(analysis, style_override=None, output_dir=None):
         dict with keys: overall_style, color_palette, subtitle_style, scenes
     """
     system_prompt = _load_system_prompt()
-    user_message = _build_user_message(analysis, style_override)
+    user_message = _build_user_message(analysis, style_override, mode=mode)
 
     response_text = _call_claude(system_prompt, user_message)
 
@@ -257,7 +265,7 @@ def create_scene_plan(analysis, style_override=None, output_dir=None):
             response_text = _call_claude(system_prompt, retry_message)
             text = _strip_markdown(response_text)
             plan = json.loads(text)
-    plan = _validate_scene_plan(plan, analysis["duration"])
+    plan = _validate_scene_plan(plan, analysis["duration"], mode=mode)
 
     if output_dir:
         output_path = Path(output_dir)

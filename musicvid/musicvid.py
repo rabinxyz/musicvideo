@@ -19,7 +19,6 @@ from musicvid.pipeline.stock_fetcher import fetch_videos
 from musicvid.pipeline.image_generator import generate_images
 from musicvid.pipeline.assembler import assemble_video
 from musicvid.pipeline.font_loader import get_font_path
-from musicvid.pipeline.lyrics_parser import merge_whisper_with_lyrics_file
 from musicvid.pipeline.video_animator import animate_image
 from musicvid.pipeline.social_clip_selector import select_social_clips
 from musicvid.pipeline.visual_router import VisualRouter
@@ -558,28 +557,8 @@ def cli(audio_file, mode, provider, style, output, resolution, lang, new, font_p
         click.echo("[1/4] Audio analysis... CACHED (skipped)")
     else:
         click.echo("[1/4] Analyzing audio...")
-        analysis = analyze_audio(str(audio_path), output_dir=str(cache_dir))
+        analysis = analyze_audio(str(audio_path), output_dir=str(cache_dir), lyrics_path=str(lyrics_file) if lyrics_file else None)
         save_cache(str(cache_dir), analysis_cache_name, analysis)
-    # Replace lyrics using deterministic alignment if lyrics file available
-    if lyrics_file:
-        aligned_cache_name = f"lyrics_aligned_{lyrics_hash}.json"
-        aligned = load_cache(str(cache_dir), aligned_cache_name) if not new else None
-        if aligned:
-            analysis["lyrics"] = aligned
-            line_count = len(aligned)
-            click.echo(f"[1/4] Tekst: dopasowanie... CACHED ({line_count} linii)")
-        else:
-            with open(lyrics_file, "r", encoding="utf-8") as f:
-                raw = f.read()
-            file_lines = [l.strip() for l in raw.split("\n") if l.strip()]
-            aligned = merge_whisper_with_lyrics_file(
-                analysis["lyrics"], file_lines, analysis["duration"]
-            )
-            save_cache(str(cache_dir), aligned_cache_name, aligned)
-            analysis["lyrics"] = aligned
-            line_count = len(file_lines)
-            click.echo(f"[1/4] Tekst: Whisper timing + dopasowanie tekstu z pliku ({line_count} linii)")
-
     click.echo(f"  BPM: {analysis['bpm']}, Duration: {analysis['duration']}s, "
                f"Sections: {len(analysis['sections'])}, Mood: {analysis['mood_energy']}")
 

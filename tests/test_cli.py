@@ -993,16 +993,15 @@ class TestLyricsFlag:
         result = runner.invoke(cli, [str(audio_file), "--lyrics", str(tmp_path / "lyrics.txt"), "--help"])
         assert result.exit_code == 0
 
-    @patch("musicvid.musicvid.merge_whisper_with_lyrics_file")
     @patch("musicvid.musicvid.get_font_path", return_value="/fake/font.ttf")
     @patch("musicvid.musicvid.assemble_video")
     @patch("musicvid.musicvid.fetch_videos")
     @patch("musicvid.musicvid.create_scene_plan")
     @patch("musicvid.musicvid.analyze_audio")
     def test_lyrics_flag_skips_whisper(
-        self, mock_analyze, mock_direct, mock_fetch, mock_assemble, mock_font, mock_align, runner, tmp_path
+        self, mock_analyze, mock_direct, mock_fetch, mock_assemble, mock_font, runner, tmp_path
     ):
-        """When --lyrics is provided, lyrics from file replace Whisper output."""
+        """When --lyrics is provided, lyrics_path is passed to analyze_audio."""
         audio_file = tmp_path / "test.mp3"
         audio_file.write_bytes(b"fake audio")
         lyrics_file = tmp_path / "lyrics.txt"
@@ -1010,16 +1009,12 @@ class TestLyricsFlag:
 
         mock_analyze.return_value = {
             "lyrics": [
-                {"start": 0.0, "end": 5.0, "text": "whisper text 1", "words": []},
-                {"start": 5.0, "end": 10.0, "text": "whisper text 2", "words": []},
+                {"start": 0.0, "end": 5.0, "text": "Line one"},
+                {"start": 5.0, "end": 10.0, "text": "Line two"},
             ], "beats": [0.0, 0.5], "bpm": 120.0,
             "duration": 10.0, "sections": [{"label": "verse", "start": 0.0, "end": 10.0}],
             "mood_energy": "contemplative", "language": "en",
         }
-        mock_align.return_value = [
-            {"start": 0.0, "end": 5.0, "text": "Line one"},
-            {"start": 5.0, "end": 10.0, "text": "Line two"},
-        ]
         mock_direct.return_value = {
             "overall_style": "contemplative",
             "color_palette": ["#aaa"],
@@ -1042,20 +1037,19 @@ class TestLyricsFlag:
         ])
 
         assert result.exit_code == 0
-        mock_align.assert_called_once()
+        assert mock_analyze.call_args[1].get("lyrics_path") == str(lyrics_file)
         call_kwargs = mock_assemble.call_args[1]
         analysis_used = call_kwargs["analysis"]
         assert len(analysis_used["lyrics"]) == 2
         assert analysis_used["lyrics"][0]["text"] == "Line one"
 
-    @patch("musicvid.musicvid.merge_whisper_with_lyrics_file")
     @patch("musicvid.musicvid.get_font_path", return_value="/fake/font.ttf")
     @patch("musicvid.musicvid.assemble_video")
     @patch("musicvid.musicvid.fetch_videos")
     @patch("musicvid.musicvid.create_scene_plan")
     @patch("musicvid.musicvid.analyze_audio")
     def test_auto_detect_single_txt(
-        self, mock_analyze, mock_direct, mock_fetch, mock_assemble, mock_font, mock_align, runner, tmp_path
+        self, mock_analyze, mock_direct, mock_fetch, mock_assemble, mock_font, runner, tmp_path
     ):
         """When exactly one .txt exists in audio dir, use it automatically."""
         audio_dir = tmp_path / "music"
@@ -1067,16 +1061,12 @@ class TestLyricsFlag:
 
         mock_analyze.return_value = {
             "lyrics": [
-                {"start": 0.0, "end": 5.0, "text": "whisper 1", "words": []},
-                {"start": 5.0, "end": 10.0, "text": "whisper 2", "words": []},
+                {"start": 0.0, "end": 5.0, "text": "Auto line one"},
+                {"start": 5.0, "end": 10.0, "text": "Auto line two"},
             ], "beats": [0.0], "bpm": 120.0,
             "duration": 10.0, "sections": [{"label": "verse", "start": 0.0, "end": 10.0}],
             "mood_energy": "contemplative", "language": "en",
         }
-        mock_align.return_value = [
-            {"start": 0.0, "end": 5.0, "text": "Auto line one"},
-            {"start": 5.0, "end": 10.0, "text": "Auto line two"},
-        ]
         mock_direct.return_value = {
             "overall_style": "contemplative",
             "color_palette": ["#aaa"],
@@ -1095,7 +1085,7 @@ class TestLyricsFlag:
                                      "--mode", "stock", "--preset", "full"])
 
         assert result.exit_code == 0
-        mock_align.assert_called_once()
+        assert mock_analyze.call_args[1].get("lyrics_path") == str(lyrics_file)
         call_kwargs = mock_assemble.call_args[1]
         analysis_used = call_kwargs["analysis"]
         assert len(analysis_used["lyrics"]) == 2
@@ -1146,14 +1136,13 @@ class TestLyricsFlag:
         analysis_used = call_kwargs["analysis"]
         assert analysis_used["lyrics"][0]["text"] == "Whisper text"
 
-    @patch("musicvid.musicvid.merge_whisper_with_lyrics_file")
     @patch("musicvid.musicvid.get_font_path", return_value="/fake/font.ttf")
     @patch("musicvid.musicvid.assemble_video")
     @patch("musicvid.musicvid.fetch_videos")
     @patch("musicvid.musicvid.create_scene_plan")
     @patch("musicvid.musicvid.analyze_audio")
     def test_lyrics_hash_invalidates_cache(
-        self, mock_analyze, mock_direct, mock_fetch, mock_assemble, mock_font, mock_align, runner, tmp_path
+        self, mock_analyze, mock_direct, mock_fetch, mock_assemble, mock_font, runner, tmp_path
     ):
         """Changing lyrics file content should invalidate the audio_analysis cache."""
         audio_file = tmp_path / "test.mp3"
@@ -1163,16 +1152,12 @@ class TestLyricsFlag:
 
         mock_analyze.return_value = {
             "lyrics": [
-                {"start": 0.0, "end": 5.0, "text": "w1", "words": []},
-                {"start": 5.0, "end": 10.0, "text": "w2", "words": []},
+                {"start": 0.0, "end": 5.0, "text": "Line one"},
+                {"start": 5.0, "end": 10.0, "text": "Line two"},
             ], "beats": [0.0], "bpm": 120.0,
             "duration": 10.0, "sections": [{"label": "verse", "start": 0.0, "end": 10.0}],
             "mood_energy": "contemplative", "language": "en",
         }
-        mock_align.return_value = [
-            {"start": 0.0, "end": 5.0, "text": "Line one"},
-            {"start": 5.0, "end": 10.0, "text": "Line two"},
-        ]
         mock_direct.return_value = {
             "overall_style": "contemplative",
             "color_palette": ["#aaa"],
@@ -1198,7 +1183,6 @@ class TestLyricsFlag:
         # Modify lyrics file content
         lyrics_file.write_text("Changed line\n")
         mock_analyze.reset_mock()
-        mock_align.reset_mock()
 
         # Second run — lyrics hash changed, so analyze_audio should be called again
         result = runner.invoke(cli, [
@@ -1208,8 +1192,6 @@ class TestLyricsFlag:
         ])
         assert result.exit_code == 0
         mock_analyze.assert_called_once()
-        # merge_whisper_with_lyrics_file should also be called again (new lyrics hash = no cached alignment)
-        mock_align.assert_called_once()
 
     def test_lyrics_flag_missing_file(self, runner, tmp_path):
         """--lyrics with a nonexistent file should give a clear error."""
@@ -1318,11 +1300,10 @@ class TestAILyricsAlignment:
     @patch("musicvid.musicvid.fetch_videos")
     @patch("musicvid.musicvid.create_scene_plan")
     @patch("musicvid.musicvid.analyze_audio")
-    @patch("musicvid.musicvid.merge_whisper_with_lyrics_file")
     def test_lyrics_file_triggers_alignment(
-        self, mock_align, mock_analyze, mock_direct, mock_fetch, mock_assemble, mock_font, runner, tmp_path
+        self, mock_analyze, mock_direct, mock_fetch, mock_assemble, mock_font, runner, tmp_path
     ):
-        """When --lyrics is provided, merge_whisper_with_lyrics_file should be called."""
+        """When --lyrics is provided, lyrics_path is passed to analyze_audio."""
         audio_file = tmp_path / "test.mp3"
         audio_file.write_bytes(b"fake audio")
         lyrics_file = tmp_path / "lyrics.txt"
@@ -1330,17 +1311,13 @@ class TestAILyricsAlignment:
 
         mock_analyze.return_value = {
             "lyrics": [
-                {"start": 0.5, "end": 2.0, "text": "whisper text 1", "words": []},
-                {"start": 2.5, "end": 4.0, "text": "whisper text 2", "words": []},
+                {"start": 0.5, "end": 2.0, "text": "Correct line one"},
+                {"start": 2.5, "end": 4.0, "text": "Correct line two"},
             ],
             "beats": [0.0], "bpm": 120.0, "duration": 10.0,
             "sections": [{"label": "verse", "start": 0.0, "end": 10.0}],
             "mood_energy": "contemplative", "language": "en",
         }
-        mock_align.return_value = [
-            {"start": 0.5, "end": 2.0, "text": "Correct line one"},
-            {"start": 2.5, "end": 4.0, "text": "Correct line two"},
-        ]
         mock_direct.return_value = {
             "overall_style": "contemplative", "color_palette": ["#aaa"],
             "subtitle_style": {"font_size": 48, "color": "#FFF", "outline_color": "#000",
@@ -1361,7 +1338,7 @@ class TestAILyricsAlignment:
         ])
 
         assert result.exit_code == 0
-        mock_align.assert_called_once()
+        assert mock_analyze.call_args[1].get("lyrics_path") == str(lyrics_file)
         call_kwargs = mock_assemble.call_args[1]
         assert call_kwargs["analysis"]["lyrics"][0]["text"] == "Correct line one"
 
@@ -1370,11 +1347,10 @@ class TestAILyricsAlignment:
     @patch("musicvid.musicvid.fetch_videos")
     @patch("musicvid.musicvid.create_scene_plan")
     @patch("musicvid.musicvid.analyze_audio")
-    @patch("musicvid.musicvid.merge_whisper_with_lyrics_file")
     def test_alignment_result_cached(
-        self, mock_align, mock_analyze, mock_direct, mock_fetch, mock_assemble, mock_font, runner, tmp_path
+        self, mock_analyze, mock_direct, mock_fetch, mock_assemble, mock_font, runner, tmp_path
     ):
-        """Second run with same lyrics should use cached alignment."""
+        """Second run with same lyrics should use cached analysis (alignment included)."""
         audio_file = tmp_path / "test.mp3"
         audio_file.write_bytes(b"fake audio")
         lyrics_file = tmp_path / "lyrics.txt"
@@ -1382,17 +1358,13 @@ class TestAILyricsAlignment:
 
         mock_analyze.return_value = {
             "lyrics": [
-                {"start": 0.5, "end": 2.0, "text": "w1", "words": []},
-                {"start": 2.5, "end": 4.0, "text": "w2", "words": []},
+                {"start": 0.5, "end": 2.0, "text": "Line one"},
+                {"start": 2.5, "end": 4.0, "text": "Line two"},
             ],
             "beats": [0.0], "bpm": 120.0, "duration": 10.0,
             "sections": [{"label": "verse", "start": 0.0, "end": 10.0}],
             "mood_energy": "contemplative", "language": "en",
         }
-        mock_align.return_value = [
-            {"start": 0.5, "end": 2.0, "text": "Line one"},
-            {"start": 2.5, "end": 4.0, "text": "Line two"},
-        ]
         mock_direct.return_value = {
             "overall_style": "contemplative", "color_palette": ["#aaa"],
             "subtitle_style": {"font_size": 48, "color": "#FFF", "outline_color": "#000",
@@ -1414,16 +1386,16 @@ class TestAILyricsAlignment:
         ])
         assert result.exit_code == 0
 
-        # Second run — alignment should be cached
-        mock_align.reset_mock()
+        # Second run — analysis should be cached, analyze_audio not called again
+        mock_analyze.reset_mock()
         result = runner.invoke(cli, [
             str(audio_file), "--output", str(output_dir),
             "--lyrics", str(lyrics_file),
             "--mode", "stock", "--preset", "full",
         ])
         assert result.exit_code == 0
-        mock_align.assert_not_called()
-        assert "dopasowanie" in result.output
+        mock_analyze.assert_not_called()
+        assert "CACHED" in result.output
 
     @patch("musicvid.musicvid.get_font_path", return_value="/fake/font.ttf")
     @patch("musicvid.musicvid.assemble_video")
@@ -1468,27 +1440,25 @@ class TestAILyricsAlignment:
     @patch("musicvid.musicvid.fetch_videos")
     @patch("musicvid.musicvid.create_scene_plan")
     @patch("musicvid.musicvid.analyze_audio")
-    @patch("musicvid.musicvid.merge_whisper_with_lyrics_file")
     def test_alignment_log_message(
-        self, mock_align, mock_analyze, mock_direct, mock_fetch, mock_assemble, mock_font, runner, tmp_path
+        self, mock_analyze, mock_direct, mock_fetch, mock_assemble, mock_font, runner, tmp_path
     ):
-        """CLI should display alignment log message with line count."""
+        """When --lyrics is provided, lyrics_path is passed to analyze_audio."""
         audio_file = tmp_path / "test.mp3"
         audio_file.write_bytes(b"fake audio")
         lyrics_file = tmp_path / "lyrics.txt"
         lyrics_file.write_text("Line one\nLine two\nLine three\n")
 
         mock_analyze.return_value = {
-            "lyrics": [{"start": 0.0, "end": 3.0, "text": "w", "words": []}],
+            "lyrics": [
+                {"start": 0.0, "end": 1.0, "text": "Line one"},
+                {"start": 1.0, "end": 2.0, "text": "Line two"},
+                {"start": 2.0, "end": 3.0, "text": "Line three"},
+            ],
             "beats": [0.0], "bpm": 120.0, "duration": 10.0,
             "sections": [{"label": "verse", "start": 0.0, "end": 10.0}],
             "mood_energy": "contemplative", "language": "en",
         }
-        mock_align.return_value = [
-            {"start": 0.0, "end": 1.0, "text": "Line one"},
-            {"start": 1.0, "end": 2.0, "text": "Line two"},
-            {"start": 2.0, "end": 3.0, "text": "Line three"},
-        ]
         mock_direct.return_value = {
             "overall_style": "contemplative", "color_palette": ["#aaa"],
             "subtitle_style": {"font_size": 48, "color": "#FFF", "outline_color": "#000",
@@ -1509,8 +1479,7 @@ class TestAILyricsAlignment:
         ])
 
         assert result.exit_code == 0
-        assert "Whisper timing + dopasowanie" in result.output
-        assert "3 linii" in result.output
+        assert mock_analyze.call_args[1].get("lyrics_path") == str(lyrics_file)
 
 
 class TestAnimateCLI:

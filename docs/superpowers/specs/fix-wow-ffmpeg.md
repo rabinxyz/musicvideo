@@ -1,5 +1,3 @@
-# Idea
-
 # Spec: Naprawa FFmpeg WOW effects — błąd eval_mode
 
 ## Problem

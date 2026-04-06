@@ -38,28 +38,32 @@ TYPE_AI — BFL Flux image ($0.04, unique)
         spiritual light (theological concept not physical light).
   Fields: set visual_prompt (min 3 sentences, documentary style), set search_query to ""
 
-TYPE_VIDEO_RUNWAY — Runway Gen-4.5 text-to-video ($0.50, primary AI video)
+TYPE_VIDEO_RUNWAY — BFL image + Runway animate ($0.50, primary AI video)
   When: chorus and bridge ALWAYS. Verse when lyrics describe motion, emotion, action.
         Use when you want unique AI cinematography that stock cannot provide.
         Minimum 40% of scenes in runway mode.
-  Fields: set motion_prompt (full scene description 2-3 sentences: action + camera + mood + style),
-          set visual_prompt (optional descriptor), set search_query to ""
-  motion_prompt must contain: what happens + camera movement + mood + style
+  Fields: set visual_prompt (REQUIRED — BFL generates this image, min 3 sentences, documentary style),
+          set motion_prompt (REQUIRED — Runway animates the image, 2-3 sentences: camera movement + mood),
+          set search_query to ""
+  visual_prompt describes WHAT the image shows (subject, composition, lighting).
+  motion_prompt describes HOW the camera moves (pan, zoom, rise, push).
   Style keywords: documentary, authentic, cinematic, natural light, film grain
-  Example motion_prompts:
-    Chorus: "Slow camera rise over misty mountain valley, person silhouette on ridge with
-    arms open at dawn, documentary style, natural golden light, film grain"
-    Verse: "Gentle push through morning mist in mountain valley, soft diffused light,
-    peaceful atmosphere, no people, documentary nature cinematography, natural colors"
-    Bridge: "Dramatic slow pull-back revealing endless ocean horizon, waves catching
-    golden sunset light, emotional peak moment, cinematic documentary style, handheld feel"
-    Intro: "Static wide shot of misty forest at dawn, light slowly breaking through
-    trees, birds visible, nature documentary style, peaceful and contemplative"
+  Examples:
+    Chorus: visual_prompt: "Person silhouette on mountain ridge at dawn, arms open, golden light, wide shot, documentary style"
+            motion_prompt: "Slow camera rise revealing vast landscape below, golden morning light, film grain"
+    Verse:  visual_prompt: "Morning mist in mountain valley, soft diffused light, no people, nature documentary"
+            motion_prompt: "Gentle push forward through mist, peaceful atmosphere, natural colors"
+    Bridge: visual_prompt: "Endless ocean horizon, waves catching golden sunset light, cinematic wide shot"
+            motion_prompt: "Dramatic slow pull-back revealing vast seascape, emotional peak moment, handheld feel"
+    Intro:  visual_prompt: "Misty forest at dawn, light breaking through trees, birds visible, documentary style"
+            motion_prompt: "Static wide shot, peaceful and contemplative, slow subtle zoom"
 
-TYPE_ANIMATED — Runway Gen-4.5 text-to-video ($0.50, climactic)
+TYPE_ANIMATED — BFL image + Runway animate ($0.50, climactic)
   When: first chorus, last chorus, or bridge. Max 25% of scenes,
         never adjacent, min 3s scene. Also set animate: true.
-  Fields: set visual_prompt (can be empty), motion_prompt (FULL scene description), set search_query to ""
+  Fields: set visual_prompt (REQUIRED — BFL generates this image),
+          set motion_prompt (REQUIRED — Runway animates: camera movement + mood),
+          set search_query to ""
 
 EXAMPLES:
   "góry, dolina, chodzę" → TYPE_VIDEO_STOCK, search_query: "person walking mountain valley path"

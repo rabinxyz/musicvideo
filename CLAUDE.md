@@ -28,7 +28,7 @@ CLI tool that generates synchronized MP4 music videos from audio files using sto
 - `fetch_video_by_query(query, min_duration, output_path)` added to `stock_fetcher.py` — direct query without style mapping (used by VisualRouter)
 - `--provider [flux-dev|flux-pro|flux-schnell]` (default: flux-pro): selects BFL model for `--mode ai`
 - `--font PATH`: custom .ttf font for subtitles (optional, defaults to auto-downloaded Montserrat Light)
-- `--lyrics PATH`: custom .txt lyrics file (optional); auto-detects single .txt in audio dir. When provided, Whisper still runs for timing, then Claude API aligns file text to Whisper segments
+- `--lyrics PATH`: custom .txt lyrics file (optional); auto-detects single .txt in audio dir. When provided, Whisper still runs for timing, then `merge_whisper_with_lyrics_file` deterministically aligns file text to Whisper segments (no Claude API call for alignment)
 - `--effects [none|minimal|full]` (default: minimal): visual effects level — none (Ken Burns only), minimal (warm grade + vignette + subtle_film_look + cinematic bars), full (+ film grain + light leak)
 - `--clip [15|20|25|30]`: generate short social-media clip — Claude selects best fragment (chorus preferred); clips analysis to window before director; output named `{stem}_{N}s.mp4`
 - `--platform [reels|shorts|tiktok]`: forces portrait 9:16 resolution (1080×1920) and adds platform name to output filename; use with `--clip`
@@ -86,7 +86,7 @@ CLI tool that generates synchronized MP4 music videos from audio files using sto
 
 ## Caching
 - Content-addressed cache in `output/tmp/{audio_hash}/` (MD5 of first 64KB, 12 chars)
-- Cached files: `audio_analysis.json` (or `audio_analysis_{lyrics_hash}.json` when --lyrics used), `lyrics_aligned_{lyrics_hash}.json` (AI alignment result), `scene_plan.json`, `video_manifest.json`, `image_manifest.json` (ai mode)
+- Cached files: `audio_analysis.json` (or `audio_analysis_{lyrics_hash}.json` when --lyrics used), `lyrics_aligned_{lyrics_hash}.json` (deterministic alignment result), `scene_plan.json`, `video_manifest.json`, `image_manifest.json` (ai mode)
 - Clip mode adds separate cache files: `clip_{N}s.json` (clip selection), `scene_plan_clip_{N}s.json`, `video_manifest_clip_{N}s.json` / `image_manifest_clip_{N}s.json` — changing `--clip` only invalidates `clip_{N}s.json`
 - Preset mode adds `social_clips_{N}s.json` (3-clip selection); cache key includes reel duration so `--reel-duration 30` creates a separate cache entry
 - Stages 1-3 skip if cached; stage 3 also verifies video files exist on disk

@@ -1,5 +1,3 @@
-# Idea
-
 # Spec: Finalna naprawa napisów — lyrics_path w analyze_audio
 
 ## Diagnoza

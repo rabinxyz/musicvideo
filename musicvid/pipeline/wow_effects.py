@@ -120,10 +120,10 @@ def apply_wow_effects(video_path, analysis, scene_plan, wow_config, video_width=
                 f"FFmpeg WOW effects failed (rc={result.returncode}):\n{result.stderr}"
             )
         shutil.move(tmp_path, video_path)
-    except Exception:
+    except Exception as e:
         if os.path.exists(tmp_path):
             os.unlink(tmp_path)
-        raise
+        print(f"WARN: WOW effects failed — używam wideo bez efektów: {e}")
 
 
 # ---------------------------------------------------------------------------

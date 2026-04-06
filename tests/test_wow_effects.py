@@ -285,35 +285,85 @@ class TestApplyWowEffects(unittest.TestCase):
             self.assertIn("-vf", cmd)
             self.assertIn("/fake/out.mp4", cmd)
 
-    def test_raises_on_ffmpeg_failure(self):
+    def test_does_not_raise_on_ffmpeg_failure(self):
+        """apply_wow_effects must NOT raise on FFmpeg error — graceful fallback."""
         from musicvid.pipeline.wow_effects import apply_wow_effects
-        analysis = {
-            "sections": [{"label": "chorus", "start": 2.0, "end": 8.0}],
-            "beats": [0.5, 1.0, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0],
-            "duration": 10.0,
-        }
-        wow_config = {
-            "enabled": True, "zoom_punch": False, "light_flash": False,
-            "dynamic_grade": False, "dynamic_vignette": False,
-            "motion_blur": True, "particles": False,
-        }
-        mock_result = MagicMock()
-        mock_result.returncode = 1
-        mock_result.stderr = "ffmpeg error"
-        with patch("musicvid.pipeline.wow_effects.subprocess") as mock_sub, \
-             patch("musicvid.pipeline.wow_effects.tempfile.mkstemp",
-                   return_value=(0, "/tmp/wow_tmp.mp4")), \
-             patch("musicvid.pipeline.wow_effects.os.close"), \
-             patch("musicvid.pipeline.wow_effects.os.path.exists", return_value=True), \
-             patch("musicvid.pipeline.wow_effects.os.unlink"):
-            mock_sub.run.return_value = mock_result
-            with self.assertRaises(RuntimeError):
+        import musicvid.pipeline.wow_effects as wm
+        original = wm.ENABLE_ZOOMPAN
+        try:
+            wm.ENABLE_ZOOMPAN = True
+            analysis = {
+                "sections": [{"label": "chorus", "start": 2.0, "end": 8.0}],
+                "beats": [0.5, 1.0, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0],
+                "duration": 10.0,
+            }
+            wow_config = {
+                "enabled": True, "zoom_punch": True, "light_flash": False,
+                "dynamic_grade": False, "dynamic_vignette": False,
+                "motion_blur": False, "particles": False,
+            }
+            mock_result = MagicMock()
+            mock_result.returncode = 1
+            mock_result.stderr = "ffmpeg error"
+            with patch("musicvid.pipeline.wow_effects.subprocess") as mock_sub, \
+                 patch("musicvid.pipeline.wow_effects.tempfile.mkstemp",
+                       return_value=(0, "/tmp/wow_tmp.mp4")), \
+                 patch("musicvid.pipeline.wow_effects.os.close"), \
+                 patch("musicvid.pipeline.wow_effects.os.path.exists", return_value=True), \
+                 patch("musicvid.pipeline.wow_effects.os.unlink"), \
+                 patch("builtins.print"):
+                mock_sub.run.return_value = mock_result
+                # Must not raise
                 apply_wow_effects(
                     video_path="/fake/out.mp4",
                     analysis=analysis,
                     scene_plan={"scenes": [], "overall_style": "worship"},
                     wow_config=wow_config,
                 )
+        finally:
+            wm.ENABLE_ZOOMPAN = original
+
+    def test_warns_and_continues_on_ffmpeg_failure(self):
+        """apply_wow_effects should print WARN and not raise when FFmpeg fails."""
+        from musicvid.pipeline.wow_effects import apply_wow_effects
+        import musicvid.pipeline.wow_effects as wm
+        original = wm.ENABLE_ZOOMPAN
+        try:
+            wm.ENABLE_ZOOMPAN = True  # ensure filter chain is built
+            analysis = {
+                "sections": [{"label": "chorus", "start": 2.0, "end": 8.0}],
+                "beats": [0.5, 1.0, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0,
+                          4.5, 5.0, 5.5, 6.0, 6.5, 7.0, 7.5, 8.0],
+                "duration": 10.0,
+            }
+            wow_config = {
+                "enabled": True, "zoom_punch": True, "light_flash": False,
+                "dynamic_grade": False, "dynamic_vignette": False,
+                "motion_blur": False, "particles": False,
+            }
+            mock_result = MagicMock()
+            mock_result.returncode = 1
+            mock_result.stderr = "ffmpeg error: eval_mode"
+            with patch("musicvid.pipeline.wow_effects.subprocess") as mock_sub, \
+                 patch("musicvid.pipeline.wow_effects.tempfile.mkstemp",
+                       return_value=(0, "/tmp/wow_tmp.mp4")), \
+                 patch("musicvid.pipeline.wow_effects.os.close"), \
+                 patch("musicvid.pipeline.wow_effects.os.path.exists", return_value=True), \
+                 patch("musicvid.pipeline.wow_effects.os.unlink"), \
+                 patch("builtins.print") as mock_print:
+                mock_sub.run.return_value = mock_result
+                # Should NOT raise
+                apply_wow_effects(
+                    video_path="/fake/out.mp4",
+                    analysis=analysis,
+                    scene_plan={"scenes": [], "overall_style": "worship"},
+                    wow_config=wow_config,
+                )
+                # Should have printed a warning containing "WARN"
+                printed_args = " ".join(str(a) for call in mock_print.call_args_list for a in call[0])
+                self.assertIn("WARN", printed_args)
+        finally:
+            wm.ENABLE_ZOOMPAN = original
 
 
 if __name__ == "__main__":

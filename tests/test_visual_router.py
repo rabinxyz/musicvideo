@@ -262,95 +262,96 @@ class TestVisualRouterAI:
         assert result == str(cached)
 
 
-class TestVisualRouterAnimatedTextToVideo:
-    """Tests for _route_animated using text-to-video (no BFL image step)."""
+class TestVisualRouterAnimatedImageToVideo:
+    """Tests for _route_animated using BFL image → Runway animate_image."""
 
     @patch.dict(os.environ, {"RUNWAY_API_KEY": "rw-key"})
-    def test_route_animated_calls_generate_video_from_text(self, tmp_path):
+    def test_route_animated_generates_bfl_image_then_animates(self, tmp_path):
         from musicvid.pipeline.visual_router import VisualRouter
         router = VisualRouter(cache_dir=str(tmp_path), provider="flux-pro")
 
+        image_path = str(tmp_path / "scene_003.jpg")
         video_path = str(tmp_path / "animated_scene_003.mp4")
 
-        with patch("musicvid.pipeline.visual_router.generate_video_from_text",
-                   return_value=video_path) as mock_gen_video, \
-             patch("musicvid.pipeline.visual_router.generate_single_image") as mock_gen_img:
+        with patch("musicvid.pipeline.visual_router.generate_single_image",
+                   return_value=image_path) as mock_gen_img, \
+             patch("musicvid.pipeline.visual_router.animate_image",
+                   return_value=video_path) as mock_animate:
             result = router.route(SCENE_ANIMATED)
 
-        mock_gen_img.assert_not_called()
-        mock_gen_video.assert_called_once_with(
-            "Person on hilltop arms raised, golden sunrise, wide shot slow camera rises revealing vast landscape",
+        mock_gen_img.assert_called_once_with(
+            SCENE_ANIMATED["visual_prompt"],
+            image_path,
+            "flux-dev",
+        )
+        mock_animate.assert_called_once_with(
+            image_path,
+            SCENE_ANIMATED["motion_prompt"],
             duration=5,
             output_path=video_path,
         )
         assert result == video_path
 
     @patch.dict(os.environ, {"RUNWAY_API_KEY": "rw-key"})
-    def test_route_animated_builds_video_prompt_from_visual_and_motion(self, tmp_path):
+    def test_route_animated_uses_cached_bfl_image(self, tmp_path):
         from musicvid.pipeline.visual_router import VisualRouter
         router = VisualRouter(cache_dir=str(tmp_path), provider="flux-pro")
 
-        scene = {
-            "index": 0,
-            "visual_source": "TYPE_ANIMATED",
-            "visual_prompt": "Golden light over valley",
-            "motion_prompt": "slow camera rise",
-            "start": 0.0,
-            "end": 10.0,
-            "animate": True,
-        }
-        video_path = str(tmp_path / "animated_scene_000.mp4")
+        cached_img = tmp_path / "scene_003.jpg"
+        cached_img.write_bytes(b"cached-bfl-image")
+        video_path = str(tmp_path / "animated_scene_003.mp4")
 
-        with patch("musicvid.pipeline.visual_router.generate_video_from_text",
-                   return_value=video_path) as mock_gen:
-            router.route(scene)
+        with patch("musicvid.pipeline.visual_router.generate_single_image") as mock_gen_img, \
+             patch("musicvid.pipeline.visual_router.animate_image",
+                   return_value=video_path) as mock_animate:
+            result = router.route(SCENE_ANIMATED)
 
-        called_prompt = mock_gen.call_args[0][0]
-        assert called_prompt == "Golden light over valley slow camera rise"
+        mock_gen_img.assert_not_called()
+        mock_animate.assert_called_once_with(
+            str(cached_img),
+            SCENE_ANIMATED["motion_prompt"],
+            duration=5,
+            output_path=video_path,
+        )
+        assert result == video_path
 
     @patch.dict(os.environ, {"RUNWAY_API_KEY": "rw-key"})
-    def test_route_animated_truncates_long_visual_prompt(self, tmp_path):
+    def test_route_animated_returns_cached_video(self, tmp_path):
         from musicvid.pipeline.visual_router import VisualRouter
         router = VisualRouter(cache_dir=str(tmp_path), provider="flux-pro")
 
-        long_visual = "A" * 501
-        scene = {
-            "index": 0,
-            "visual_source": "TYPE_ANIMATED",
-            "visual_prompt": long_visual,
-            "motion_prompt": "slow pan left",
-            "start": 0.0,
-            "end": 10.0,
-            "animate": True,
-        }
-        video_path = str(tmp_path / "animated_scene_000.mp4")
+        cached_video = tmp_path / "animated_scene_003.mp4"
+        cached_video.write_bytes(b"cached-animation")
 
-        with patch("musicvid.pipeline.visual_router.generate_video_from_text",
-                   return_value=video_path) as mock_gen:
-            router.route(scene)
+        with patch("musicvid.pipeline.visual_router.generate_single_image") as mock_gen_img, \
+             patch("musicvid.pipeline.visual_router.animate_image") as mock_animate:
+            result = router.route(SCENE_ANIMATED)
 
-        called_prompt = mock_gen.call_args[0][0]
-        assert called_prompt == "A" * 400 + " slow pan left"
-        assert len(called_prompt) <= 400 + 1 + len("slow pan left")
+        mock_gen_img.assert_not_called()
+        mock_animate.assert_not_called()
+        assert result == str(cached_video)
 
     @patch.dict(os.environ, {"RUNWAY_API_KEY": "rw-key"})
-    def test_route_animated_fallback_to_type_ai_on_error(self, tmp_path):
+    def test_route_animated_fallback_to_type_ai_on_runway_error(self, tmp_path):
         from musicvid.pipeline.visual_router import VisualRouter
         router = VisualRouter(cache_dir=str(tmp_path), provider="flux-pro")
 
         image_path = str(tmp_path / "scene_003.jpg")
 
-        with patch("musicvid.pipeline.visual_router.generate_video_from_text",
-                   side_effect=RuntimeError("Runway failed")) as mock_gen_video, \
-             patch("musicvid.pipeline.visual_router.generate_single_image",
-                   return_value=image_path) as mock_gen_img:
+        with patch("musicvid.pipeline.visual_router.generate_single_image",
+                   return_value=image_path) as mock_gen_img, \
+             patch("musicvid.pipeline.visual_router.animate_image",
+                   side_effect=RuntimeError("Runway failed")):
             result = router.route(SCENE_ANIMATED)
 
-        mock_gen_video.assert_called_once()
-        mock_gen_img.assert_called_once_with(
-            SCENE_ANIMATED["visual_prompt"],
-            image_path,
-            "flux-pro",
+        assert mock_gen_img.call_count == 2
+        # First call: BFL for Runway input (flux-dev)
+        assert mock_gen_img.call_args_list[0] == (
+            (SCENE_ANIMATED["visual_prompt"], image_path, "flux-dev"),
+        )
+        # Second call: fallback with self.provider
+        assert mock_gen_img.call_args_list[1] == (
+            (SCENE_ANIMATED["visual_prompt"], image_path, "flux-pro"),
         )
         assert result == image_path
 
@@ -361,30 +362,14 @@ class TestVisualRouterAnimatedTextToVideo:
         image_path = str(tmp_path / "scene_003.jpg")
 
         with patch.dict(os.environ, {"RUNWAY_API_KEY": ""}, clear=False), \
-             patch("musicvid.pipeline.visual_router.generate_video_from_text") as mock_gen_video, \
+             patch("musicvid.pipeline.visual_router.animate_image") as mock_animate, \
              patch("musicvid.pipeline.visual_router.generate_single_image",
                    return_value=image_path) as mock_gen_img:
             result = router.route(SCENE_ANIMATED)
 
-        mock_gen_video.assert_not_called()
+        mock_animate.assert_not_called()
         mock_gen_img.assert_called_once()
         assert result == image_path
-
-    @patch.dict(os.environ, {"RUNWAY_API_KEY": "rw-key"})
-    def test_route_animated_returns_cached_video(self, tmp_path):
-        from musicvid.pipeline.visual_router import VisualRouter
-        router = VisualRouter(cache_dir=str(tmp_path), provider="flux-pro")
-
-        cached_video = tmp_path / "animated_scene_003.mp4"
-        cached_video.write_bytes(b"cached-animation")
-
-        with patch("musicvid.pipeline.visual_router.generate_video_from_text") as mock_gen_video, \
-             patch("musicvid.pipeline.visual_router.generate_single_image") as mock_gen_img:
-            result = router.route(SCENE_ANIMATED)
-
-        mock_gen_video.assert_not_called()
-        mock_gen_img.assert_not_called()
-        assert result == str(cached_video)
 
     @patch.dict(os.environ, {"RUNWAY_API_KEY": "rw-key"})
     def test_route_animated_uses_default_motion_when_missing(self, tmp_path):
@@ -399,14 +384,17 @@ class TestVisualRouterAnimatedTextToVideo:
             "end": 10.0,
             "animate": True,
         }
+        image_path = str(tmp_path / "scene_000.jpg")
         video_path = str(tmp_path / "animated_scene_000.mp4")
 
-        with patch("musicvid.pipeline.visual_router.generate_video_from_text",
-                   return_value=video_path) as mock_gen:
+        with patch("musicvid.pipeline.visual_router.generate_single_image",
+                   return_value=image_path), \
+             patch("musicvid.pipeline.visual_router.animate_image",
+                   return_value=video_path) as mock_animate:
             router.route(scene)
 
-        called_prompt = mock_gen.call_args[0][0]
-        assert called_prompt == "Mountain scene slow camera push forward"
+        called_motion = mock_animate.call_args[0][1]
+        assert called_motion == "slow camera push forward, gentle movement"
 
 
 SCENE_RUNWAY = {
@@ -423,44 +411,48 @@ SCENE_RUNWAY = {
 
 
 class TestVisualRouterRunway:
-    """Tests for TYPE_VIDEO_RUNWAY routing."""
+    """Tests for TYPE_VIDEO_RUNWAY routing — BFL image → Runway animate_image."""
 
     @patch.dict(os.environ, {"RUNWAY_API_KEY": "rw-key"})
-    def test_route_runway_calls_generate_video_from_text(self, tmp_path):
+    def test_route_runway_generates_bfl_image_then_animates(self, tmp_path):
         from musicvid.pipeline.visual_router import VisualRouter
         router = VisualRouter(cache_dir=str(tmp_path), provider="flux-pro")
+
+        image_path = str(tmp_path / "runway_img_004.jpg")
         video_path = str(tmp_path / "runway_scene_004.mp4")
 
-        with patch(
-            "musicvid.pipeline.visual_router.generate_video_from_text",
-            return_value=video_path,
-        ) as mock_gen:
+        with patch("musicvid.pipeline.visual_router.generate_single_image",
+                   return_value=image_path) as mock_gen_img, \
+             patch("musicvid.pipeline.visual_router.animate_image",
+                   return_value=video_path) as mock_animate:
             result = router.route(SCENE_RUNWAY)
 
-        expected_prompt = (
-            "Person on hilltop arms raised, golden sunrise, wide shot "
-            "slow camera rises revealing vast mountain landscape, golden light"
+        mock_gen_img.assert_called_once_with(
+            SCENE_RUNWAY["visual_prompt"],
+            image_path,
+            "flux-dev",
         )
-        mock_gen.assert_called_once_with(
-            expected_prompt,
+        mock_animate.assert_called_once_with(
+            image_path,
+            SCENE_RUNWAY["motion_prompt"],
             duration=5,
             output_path=video_path,
         )
         assert result == video_path
 
     @patch.dict(os.environ, {"RUNWAY_API_KEY": "rw-key"})
-    def test_route_runway_uses_cache_if_exists(self, tmp_path):
+    def test_route_runway_uses_cache_if_video_exists(self, tmp_path):
         from musicvid.pipeline.visual_router import VisualRouter
         router = VisualRouter(cache_dir=str(tmp_path), provider="flux-pro")
         video_path = tmp_path / "runway_scene_004.mp4"
         video_path.write_bytes(b"cached")
 
-        with patch(
-            "musicvid.pipeline.visual_router.generate_video_from_text"
-        ) as mock_gen:
+        with patch("musicvid.pipeline.visual_router.generate_single_image") as mock_gen_img, \
+             patch("musicvid.pipeline.visual_router.animate_image") as mock_animate:
             result = router.route(SCENE_RUNWAY)
 
-        mock_gen.assert_not_called()
+        mock_gen_img.assert_not_called()
+        mock_animate.assert_not_called()
         assert result == str(video_path)
 
     @patch.dict(os.environ, {}, clear=True)
@@ -469,15 +461,12 @@ class TestVisualRouterRunway:
         router = VisualRouter(cache_dir=str(tmp_path), provider="flux-pro")
         pexels_path = str(tmp_path / "scene_004.mp4")
 
-        with patch(
-            "musicvid.pipeline.visual_router.generate_video_from_text"
-        ) as mock_gen, patch(
-            "musicvid.pipeline.visual_router.fetch_video_by_query",
-            return_value=pexels_path,
-        ) as mock_fetch:
+        with patch("musicvid.pipeline.visual_router.animate_image") as mock_animate, \
+             patch("musicvid.pipeline.visual_router.fetch_video_by_query",
+                   return_value=pexels_path) as mock_fetch:
             result = router.route(SCENE_RUNWAY)
 
-        mock_gen.assert_not_called()
+        mock_animate.assert_not_called()
         mock_fetch.assert_called()
         assert result == pexels_path
 
@@ -486,35 +475,35 @@ class TestVisualRouterRunway:
         from musicvid.pipeline.visual_router import VisualRouter
         router = VisualRouter(cache_dir=str(tmp_path), provider="flux-pro")
         pexels_path = str(tmp_path / "scene_004.mp4")
+        image_path = str(tmp_path / "runway_img_004.jpg")
 
-        with patch(
-            "musicvid.pipeline.visual_router.generate_video_from_text",
-            side_effect=RuntimeError("Runway error"),
-        ), patch(
-            "musicvid.pipeline.visual_router.fetch_video_by_query",
-            return_value=pexels_path,
-        ) as mock_fetch:
+        with patch("musicvid.pipeline.visual_router.generate_single_image",
+                   return_value=image_path), \
+             patch("musicvid.pipeline.visual_router.animate_image",
+                   side_effect=RuntimeError("Runway error")), \
+             patch("musicvid.pipeline.visual_router.fetch_video_by_query",
+                   return_value=pexels_path) as mock_fetch:
             result = router.route(SCENE_RUNWAY)
 
         mock_fetch.assert_called()
         assert result == pexels_path
 
     @patch.dict(os.environ, {"RUNWAY_API_KEY": "rw-key"})
-    def test_route_runway_falls_back_to_nature_query_when_no_motion_prompt(self, tmp_path):
+    def test_route_runway_uses_visual_prompt_fallback_for_bfl(self, tmp_path):
         from musicvid.pipeline.visual_router import VisualRouter
-        scene = {**SCENE_RUNWAY, "motion_prompt": "", "visual_prompt": ""}
+        scene = {**SCENE_RUNWAY, "visual_prompt": "", "motion_prompt": "slow pan"}
         router = VisualRouter(cache_dir=str(tmp_path), provider="flux-pro")
+        image_path = str(tmp_path / "runway_img_004.jpg")
         video_path = str(tmp_path / "runway_scene_004.mp4")
 
-        with patch(
-            "musicvid.pipeline.visual_router.generate_video_from_text",
-            return_value=video_path,
-        ) as mock_gen:
-            result = router.route(scene)
+        with patch("musicvid.pipeline.visual_router.generate_single_image",
+                   return_value=image_path) as mock_gen_img, \
+             patch("musicvid.pipeline.visual_router.animate_image",
+                   return_value=video_path):
+            router.route(scene)
 
-        call_args = mock_gen.call_args[0][0]
-        assert len(call_args) > 0
-        assert result == video_path
+        bfl_prompt = mock_gen_img.call_args[0][0]
+        assert bfl_prompt == "nature landscape"
 
 
 class TestVisualRouterDefaultSource:

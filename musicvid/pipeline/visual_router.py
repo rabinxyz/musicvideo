@@ -6,7 +6,7 @@ from pathlib import Path
 
 from musicvid.pipeline.stock_fetcher import fetch_video_by_query
 from musicvid.pipeline.image_generator import generate_single_image
-from musicvid.pipeline.video_animator import animate_image, generate_video_from_text
+from musicvid.pipeline.video_animator import animate_image
 
 BLOCKED_WORDS = [
     # Non-Protestant religious imagery
@@ -58,12 +58,16 @@ class VisualRouter:
       TYPE_VIDEO_STOCK  → Pexels video (fetch_video_by_query)
       TYPE_PHOTO_STOCK  → Unsplash photo (requests + UNSPLASH_ACCESS_KEY)
       TYPE_AI           → BFL Flux image (generate_single_image)
-      TYPE_ANIMATED     → BFL image + Runway Gen-4 video (generate_single_image + animate_image)
+      TYPE_ANIMATED     → BFL flux-dev image + Runway animate_image (image-to-video)
+      TYPE_VIDEO_RUNWAY → BFL flux-dev image + Runway animate_image (image-to-video)
 
     Fallback hierarchy:
       TYPE_VIDEO_STOCK failure → simplified query → BFL (visual_prompt or default)
       TYPE_PHOTO_STOCK         → Unsplash → Pexels → BFL
       TYPE_ANIMATED no key     → static TYPE_AI image (Ken Burns in assembler)
+      TYPE_ANIMATED error      → static TYPE_AI image (Ken Burns in assembler)
+      TYPE_VIDEO_RUNWAY no key → Pexels stock video
+      TYPE_VIDEO_RUNWAY error  → Pexels stock video
     """
 
     def __init__(self, cache_dir, provider="flux-pro"):
@@ -83,7 +87,7 @@ class VisualRouter:
         elif source == "TYPE_ANIMATED":
             return self._route_animated(scene, idx, duration)
         elif source == "TYPE_VIDEO_RUNWAY":
-            return self._route_runway_text_to_video(scene, idx, duration)
+            return self._route_runway(scene, idx, duration)
         else:  # TYPE_AI (default)
             return self._generate_bfl(scene.get("visual_prompt", "nature landscape"), idx)
 
@@ -168,35 +172,43 @@ class VisualRouter:
             print(f"  Fallback: scene {idx} TYPE_ANIMATED → TYPE_AI (no RUNWAY_API_KEY)")
             return self._generate_bfl(scene.get("visual_prompt", "nature landscape"), idx)
 
-        visual = scene.get("visual_prompt", "")
-        motion = scene.get("motion_prompt", "slow camera push forward")
-        if len(visual) > 500:
-            visual = visual[:400]
-        video_prompt = f"{visual} {motion}".strip()
+        # Step 1: generate BFL image (flux-dev — cheap)
+        image_path = str(self.cache_dir / f"scene_{idx:03d}.jpg")
+        if not Path(image_path).exists():
+            image_path = generate_single_image(
+                scene.get("visual_prompt", "nature landscape"),
+                image_path,
+                "flux-dev",
+            )
 
+        # Step 2: animate via Runway image-to-video
+        motion = scene.get("motion_prompt", "slow camera push forward, gentle movement")
         try:
-            return generate_video_from_text(video_prompt, duration=5, output_path=output_path)
+            return animate_image(image_path, motion, duration=5, output_path=output_path)
         except Exception as exc:
-            print(f"  WARN: Runway text-to-video failed for scene {idx} — fallback TYPE_AI ({exc})")
+            print(f"  WARN: Runway animate failed for scene {idx} — fallback TYPE_AI ({exc})")
             return self._generate_bfl(scene.get("visual_prompt", "nature landscape"), idx)
 
-    def _route_runway_text_to_video(self, scene, idx, duration):
-        """Route TYPE_VIDEO_RUNWAY → Runway text-to-video, fallback → Pexels stock."""
+    def _route_runway(self, scene, idx, duration):
+        """Route TYPE_VIDEO_RUNWAY → BFL image + Runway animate, fallback → Pexels stock."""
         output_path = str(self.cache_dir / f"runway_scene_{idx:03d}.mp4")
         if Path(output_path).exists():
             return output_path
 
         runway_key = os.environ.get("RUNWAY_API_KEY", "")
         if runway_key:
-            visual = scene.get("visual_prompt", "")
-            motion = scene.get("motion_prompt", "")
-            if len(visual) > 500:
-                visual = visual[:400]
-            video_prompt = f"{visual} {motion}".strip() or "nature landscape slow camera movement"
+            # Step 1: generate BFL image (flux-dev — cheap)
+            image_path = str(self.cache_dir / f"runway_img_{idx:03d}.jpg")
+            if not Path(image_path).exists():
+                bfl_prompt = scene.get("visual_prompt", "") or "nature landscape"
+                image_path = generate_single_image(bfl_prompt, image_path, "flux-dev")
+
+            # Step 2: animate via Runway image-to-video
+            motion = scene.get("motion_prompt", "slow camera push forward, gentle movement")
             try:
-                return generate_video_from_text(video_prompt, duration=5, output_path=output_path)
+                return animate_image(image_path, motion, duration=5, output_path=output_path)
             except Exception as exc:
-                print(f"  WARN: Runway text-to-video failed for scene {idx} — fallback Pexels ({exc})")
+                print(f"  WARN: Runway animate failed for scene {idx} — fallback Pexels ({exc})")
 
         # Fallback: Pexels stock (no BFL — runway mode avoids AI images)
         query = scene.get("search_query", "") or "nature landscape peaceful"

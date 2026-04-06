@@ -9,10 +9,19 @@ from musicvid.pipeline.image_generator import generate_single_image
 from musicvid.pipeline.video_animator import animate_image, generate_video_from_text
 
 BLOCKED_WORDS = [
+    # Non-Protestant religious imagery
     "muslim", "mosque", "islamic", "quran", "hindu",
     "buddha", "buddhist", "catholic", "cathedral",
     "shrine", "temple", "prayer rug", "hijab",
     "church interior", "altar", "rosary", "statue",
+    "pope", "nun", "monk", "orthodox", "meditation",
+    # Alcohol and intoxicants
+    "alcohol", "beer", "wine", "whiskey", "vodka",
+    "drinking", "bar", "pub", "cocktail", "champagne",
+    "nightclub", "drunk",
+    # Other inappropriate content
+    "gambling", "casino", "cigarette", "smoking",
+    "drugs", "violence", "nightlife",
 ]
 
 SAFE_QUERY_MAP = {
@@ -23,7 +32,6 @@ SAFE_QUERY_MAP = {
     "prayer outdoor": "person sitting field morning light",
     "worship": "outdoor gathering people singing sunset",
     "spiritual": "peaceful nature landscape morning",
-    "meditation": "person sitting peaceful nature",
 }
 
 

@@ -57,6 +57,58 @@ class TestSanitizeQueryBlocked:
         assert sanitize_query(f"beautiful {word} scenery") == "BLOCKED"
 
 
+class TestSanitizeQueryBlockedAlcohol:
+    """Alcohol-related words must return 'BLOCKED'."""
+
+    @pytest.mark.parametrize("query", [
+        "alcohol party",
+        "beer glass table",
+        "wine bottle sunset",
+        "whiskey pour rocks",
+        "vodka shot glass",
+        "drinking friends bar",
+        "bar interior night",
+        "pub gathering people",
+        "cocktail shaker hands",
+        "champagne toast celebration",
+        "nightclub crowd music",
+        "drunk person street",
+    ])
+    def test_alcohol_query_blocked(self, query):
+        assert sanitize_query(query) == "BLOCKED"
+
+
+class TestSanitizeQueryBlockedDrugsGambling:
+    """Drugs and gambling words must return 'BLOCKED'."""
+
+    @pytest.mark.parametrize("query", [
+        "gambling casino",
+        "casino slot machine",
+        "cigarette smoking man",
+        "smoking outdoor people",
+        "drugs dealer street",
+        "violence street fight",
+        "party wild nightlife",
+        "nightlife city lights",
+    ])
+    def test_drugs_gambling_query_blocked(self, query):
+        assert sanitize_query(query) == "BLOCKED"
+
+
+class TestSanitizeQueryBlockedNewReligious:
+    """Additional non-Protestant religious words must return 'BLOCKED'."""
+
+    @pytest.mark.parametrize("query", [
+        "pope blessing crowd",
+        "nun walking convent",
+        "monk meditation garden",
+        "orthodox church exterior",
+        "meditation room peaceful",
+    ])
+    def test_new_religious_query_blocked(self, query):
+        assert sanitize_query(query) == "BLOCKED"
+
+
 class TestSanitizeQuerySafeReplacement:
     """Unsafe queries get mapped to safe replacements."""
 

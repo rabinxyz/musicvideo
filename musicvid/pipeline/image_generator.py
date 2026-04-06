@@ -26,7 +26,12 @@ DOCUMENTARY_SUFFIX = (
 
 NEGATIVE_CONTEXT = (
     "no Catholic imagery, no religious figures, no rosary, no crucifix, "
-    "no saints, natural light not artificial, authentic not staged, "
+    "no saints, no Islamic imagery, no Buddhist imagery, no Hindu imagery, "
+    "Protestant Christian context only, "
+    "no alcohol, no drinking, no beer, no wine, no cigarettes, no smoking, "
+    "no gambling, no casino, no drugs, no violence, "
+    "family friendly, no inappropriate content, "
+    "natural light not artificial, authentic not staged, "
     "film grain not oversaturated"
 )
 

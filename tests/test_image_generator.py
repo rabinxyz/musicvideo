@@ -539,3 +539,31 @@ class TestGenerateSingleImage:
         payload = mock_requests.post.call_args[1]["json"]
         assert payload["width"] == 1024
         assert payload["height"] == 768
+
+
+class TestNegativeContextContent:
+    """NEGATIVE_CONTEXT constant must contain alcohol and inappropriate content exclusions."""
+
+    def test_negative_context_excludes_alcohol(self):
+        from musicvid.pipeline.image_generator import NEGATIVE_CONTEXT
+        assert "no alcohol" in NEGATIVE_CONTEXT.lower()
+
+    def test_negative_context_excludes_islamic(self):
+        from musicvid.pipeline.image_generator import NEGATIVE_CONTEXT
+        assert "no islamic" in NEGATIVE_CONTEXT.lower() or "islamic" in NEGATIVE_CONTEXT.lower()
+
+    def test_negative_context_excludes_buddhist(self):
+        from musicvid.pipeline.image_generator import NEGATIVE_CONTEXT
+        assert "no buddhist" in NEGATIVE_CONTEXT.lower() or "buddhist" in NEGATIVE_CONTEXT.lower()
+
+    def test_negative_context_excludes_hindu(self):
+        from musicvid.pipeline.image_generator import NEGATIVE_CONTEXT
+        assert "no hindu" in NEGATIVE_CONTEXT.lower() or "hindu" in NEGATIVE_CONTEXT.lower()
+
+    def test_negative_context_excludes_gambling(self):
+        from musicvid.pipeline.image_generator import NEGATIVE_CONTEXT
+        assert "no gambling" in NEGATIVE_CONTEXT.lower()
+
+    def test_negative_context_excludes_cigarettes(self):
+        from musicvid.pipeline.image_generator import NEGATIVE_CONTEXT
+        assert "no cigarette" in NEGATIVE_CONTEXT.lower()

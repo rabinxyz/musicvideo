@@ -3314,3 +3314,170 @@ class TestPresetSocialNoneVideoPath(unittest.TestCase):
                     new=True,
                 )
         # No exception raised = pass
+
+
+class TestWowCliFlags(unittest.TestCase):
+    def setUp(self):
+        from click.testing import CliRunner
+        self.runner = CliRunner()
+
+    @patch("musicvid.musicvid.assemble_video")
+    @patch("musicvid.musicvid.get_font_path", return_value="/fake/font.ttf")
+    @patch("musicvid.musicvid.VisualRouter")
+    @patch("musicvid.musicvid.create_scene_plan")
+    @patch("musicvid.musicvid.analyze_audio")
+    def test_wow_config_passed_to_assemble_video(
+        self, mock_analyze, mock_direct, mock_router, mock_font, mock_assemble
+    ):
+        from musicvid.musicvid import cli
+        mock_analyze.return_value = {
+            "lyrics": [], "beats": [], "bpm": 120.0, "duration": 10.0,
+            "sections": [{"label": "chorus", "start": 0.0, "end": 10.0}],
+            "energy_peaks": [], "mood_energy": "high",
+        }
+        mock_direct.return_value = {
+            "overall_style": "worship",
+            "subtitle_style": {"font_size": 54, "color": "#FFFFFF",
+                               "outline_color": "#000000",
+                               "position": "bottom", "animation": "fade"},
+            "scenes": [
+                {"section": "verse", "start": 0.0, "end": 10.0,
+                 "visual_source": "TYPE_VIDEO_STOCK", "motion": "slow_zoom_in",
+                 "transition": "cut", "transition_to_next": "cut",
+                 "lyrics_in_scene": [], "search_query": "nature",
+                 "visual_prompt": "", "motion_prompt": "", "animate": False,
+                 "overlay": "none"},
+            ],
+        }
+        mock_router_instance = MagicMock()
+        mock_router_instance.route.return_value = "/fake/scene.mp4"
+        mock_router.return_value = mock_router_instance
+
+        with self.runner.isolated_filesystem():
+            open("song.mp3", "w").close()
+            result = self.runner.invoke(
+                cli,
+                ["song.mp3", "--mode", "stock", "--preset", "full",
+                 "--wow", "--effects", "minimal", "--yes"],
+                catch_exceptions=False,
+            )
+
+        self.assertEqual(result.exit_code, 0, result.output)
+        # assemble_video should have been called with wow_config
+        mock_assemble.assert_called_once()
+        call_kwargs = mock_assemble.call_args[1]
+        self.assertIsNotNone(call_kwargs.get("wow_config"))
+        self.assertTrue(call_kwargs["wow_config"]["enabled"])
+
+    @patch("musicvid.musicvid.assemble_video")
+    @patch("musicvid.musicvid.get_font_path", return_value="/fake/font.ttf")
+    @patch("musicvid.musicvid.VisualRouter")
+    @patch("musicvid.musicvid.create_scene_plan")
+    @patch("musicvid.musicvid.analyze_audio")
+    def test_no_wow_config_when_no_wow_flag(
+        self, mock_analyze, mock_direct, mock_router, mock_font, mock_assemble
+    ):
+        from musicvid.musicvid import cli
+        mock_analyze.return_value = {
+            "lyrics": [], "beats": [], "bpm": 120.0, "duration": 10.0,
+            "sections": [], "energy_peaks": [], "mood_energy": "low",
+        }
+        mock_direct.return_value = {
+            "overall_style": "worship",
+            "subtitle_style": {"font_size": 54, "color": "#FFFFFF",
+                               "outline_color": "#000000",
+                               "position": "bottom", "animation": "fade"},
+            "scenes": [
+                {"section": "verse", "start": 0.0, "end": 10.0,
+                 "visual_source": "TYPE_VIDEO_STOCK", "motion": "slow_zoom_in",
+                 "transition": "cut", "transition_to_next": "cut",
+                 "lyrics_in_scene": [], "search_query": "nature",
+                 "visual_prompt": "", "motion_prompt": "", "animate": False,
+                 "overlay": "none"},
+            ],
+        }
+        mock_router_instance = MagicMock()
+        mock_router_instance.route.return_value = "/fake/scene.mp4"
+        mock_router.return_value = mock_router_instance
+
+        with self.runner.isolated_filesystem():
+            open("song.mp3", "w").close()
+            result = self.runner.invoke(
+                cli,
+                ["song.mp3", "--mode", "stock", "--preset", "full",
+                 "--no-wow", "--effects", "minimal", "--yes"],
+                catch_exceptions=False,
+            )
+
+        self.assertEqual(result.exit_code, 0, result.output)
+        mock_assemble.assert_called_once()
+        call_kwargs = mock_assemble.call_args[1]
+        self.assertIsNone(call_kwargs.get("wow_config"))
+
+    @patch("musicvid.musicvid.assemble_video")
+    @patch("musicvid.musicvid.get_font_path", return_value="/fake/font.ttf")
+    @patch("musicvid.musicvid.VisualRouter")
+    @patch("musicvid.musicvid.create_scene_plan")
+    @patch("musicvid.musicvid.analyze_audio")
+    def test_wow_config_none_when_effects_none(
+        self, mock_analyze, mock_direct, mock_router, mock_font, mock_assemble
+    ):
+        from musicvid.musicvid import cli
+        mock_analyze.return_value = {
+            "lyrics": [], "beats": [], "bpm": 120.0, "duration": 10.0,
+            "sections": [], "energy_peaks": [], "mood_energy": "low",
+        }
+        mock_direct.return_value = {
+            "overall_style": "worship",
+            "subtitle_style": {"font_size": 54, "color": "#FFFFFF",
+                               "outline_color": "#000000",
+                               "position": "bottom", "animation": "fade"},
+            "scenes": [
+                {"section": "verse", "start": 0.0, "end": 10.0,
+                 "visual_source": "TYPE_VIDEO_STOCK", "motion": "slow_zoom_in",
+                 "transition": "cut", "transition_to_next": "cut",
+                 "lyrics_in_scene": [], "search_query": "nature",
+                 "visual_prompt": "", "motion_prompt": "", "animate": False,
+                 "overlay": "none"},
+            ],
+        }
+        mock_router_instance = MagicMock()
+        mock_router_instance.route.return_value = "/fake/scene.mp4"
+        mock_router.return_value = mock_router_instance
+
+        with self.runner.isolated_filesystem():
+            open("song.mp3", "w").close()
+            result = self.runner.invoke(
+                cli,
+                ["song.mp3", "--mode", "stock", "--preset", "full",
+                 "--wow", "--effects", "none", "--yes"],
+                catch_exceptions=False,
+            )
+
+        self.assertEqual(result.exit_code, 0, result.output)
+        mock_assemble.assert_called_once()
+        call_kwargs = mock_assemble.call_args[1]
+        # wow disabled when effects=none even if --wow flag set
+        self.assertIsNone(call_kwargs.get("wow_config"))
+
+
+class TestLutAutoSelection(unittest.TestCase):
+    def test_lut_for_style_worship(self):
+        from musicvid.musicvid import _lut_for_style
+        self.assertEqual(_lut_for_style("worship"), "warm")
+
+    def test_lut_for_style_contemplative(self):
+        from musicvid.musicvid import _lut_for_style
+        self.assertEqual(_lut_for_style("contemplative"), "cinematic")
+
+    def test_lut_for_style_powerful(self):
+        from musicvid.musicvid import _lut_for_style
+        self.assertEqual(_lut_for_style("powerful"), "cold")
+
+    def test_lut_for_style_joyful(self):
+        from musicvid.musicvid import _lut_for_style
+        self.assertEqual(_lut_for_style("joyful"), "natural")
+
+    def test_lut_for_style_unknown_defaults_warm(self):
+        from musicvid.musicvid import _lut_for_style
+        self.assertEqual(_lut_for_style("unknown"), "warm")

@@ -404,6 +404,19 @@ def _assign_dynamic_transitions(scenes, bpm):
     return scenes
 
 
+_STYLE_TO_LUT = {
+    "worship": "warm",
+    "contemplative": "cinematic",
+    "powerful": "cold",
+    "joyful": "natural",
+}
+
+
+def _lut_for_style(overall_style):
+    """Return LUT style name for a given director overall_style."""
+    return _STYLE_TO_LUT.get(overall_style, "warm")
+
+
 @click.command()
 @click.argument("audio_file", type=click.Path(exists=True))
 @click.option("--mode", type=click.Choice(["stock", "ai", "runway", "hybrid"]), default="runway", help="Video source mode.")
@@ -426,7 +439,7 @@ def _assign_dynamic_transitions(scenes, bpm):
 @click.option("--logo-position", type=click.Choice(["top-left", "top-right", "bottom-left", "bottom-right"]), default="top-left", help="Logo position on screen.")
 @click.option("--logo-size", type=int, default=None, help="Logo width in pixels (default: auto 12%% of frame width).")
 @click.option("--logo-opacity", type=float, default=0.85, help="Logo opacity 0.0-1.0.")
-@click.option("--lut-style", type=click.Choice(["warm", "cold", "cinematic", "natural", "faded"]), default="warm", help="Built-in LUT color grade style.")
+@click.option("--lut-style", type=click.Choice(["warm", "cold", "cinematic", "natural", "faded"]), default=None, help="Built-in LUT color grade style.")
 @click.option("--lut-intensity", type=float, default=0.85, help="LUT intensity 0.0-1.0.")
 @click.option("--subtitle-style", "subtitle_style_override", type=click.Choice(["fade", "karaoke", "none"]), default="karaoke", help="Subtitle animation style.")
 @click.option("--transitions", "transitions_mode", type=click.Choice(["cut", "auto"]), default="auto", help="Scene transition style (auto: director decides, cut: force hard cuts).")
@@ -434,6 +447,11 @@ def _assign_dynamic_transitions(scenes, bpm):
 @click.option("--yes", "skip_confirm", is_flag=True, default=False, help="Skip confirmation prompt.")
 @click.option("--quick", "quick_mode", is_flag=True, default=False, help="Quick mode: stock images, no animation, cut transitions, no LUT.")
 @click.option("--economy", "economy_mode", is_flag=True, default=False, help="Economy mode: flux-dev AI images, no Runway animation, warm LUT.")
+@click.option("--wow/--no-wow", "wow_effects", default=True, help="Enable WOW effects (zoom punch, light flash, reactive color grade). Active when --effects minimal or full.")
+@click.option("--zoom-punch/--no-zoom-punch", "wow_zoom_punch", default=True, help="Zoom punch on chorus downbeats.")
+@click.option("--light-flash/--no-light-flash", "wow_light_flash", default=True, help="Light flash on chorus entry.")
+@click.option("--dynamic-grade/--no-dynamic-grade", "wow_dynamic_grade", default=True, help="Reactive color grade (verse vs chorus palettes).")
+@click.option("--particles/--no-particles", "wow_particles", default=False, help="Particle overlay on AI/animated clips (expensive).")
 @click.option("--sequential-assembly", is_flag=True, default=False,
               help="Disable parallel Stage 4 assembly (use on low-RAM Macs)")
 @click.option("--reels-style", "reels_style", type=click.Choice(["crop", "blur-bg"]), default="blur-bg", help="Portrait conversion style for social reels: blur-bg (blurred background) or crop (smart crop).")
@@ -441,7 +459,8 @@ def cli(audio_file, mode, provider, style, output, resolution, lang, new, font_p
         effects, clip_duration, platform, title_card, animate_mode, preset, reel_duration,
         logo_path, logo_position, logo_size, logo_opacity,
         lut_style, lut_intensity, subtitle_style_override, transitions_mode, beat_sync,
-        skip_confirm, quick_mode, economy_mode, sequential_assembly, reels_style):
+        skip_confirm, quick_mode, economy_mode, sequential_assembly, reels_style,
+        wow_effects, wow_zoom_punch, wow_light_flash, wow_dynamic_grade, wow_particles):
     """Generate a music video from AUDIO_FILE."""
     # Apply --quick mode overrides
     if quick_mode:
@@ -452,6 +471,7 @@ def cli(audio_file, mode, provider, style, output, resolution, lang, new, font_p
         lut_style = None
         transitions_mode = "cut"
         beat_sync = "off"
+        wow_effects = False
 
     # Apply --economy mode overrides
     if economy_mode:
@@ -480,6 +500,16 @@ def cli(audio_file, mode, provider, style, output, resolution, lang, new, font_p
             "Rejestracja: https://app.runwayml.com"
         )
         animate_mode = "never"
+
+    # Build wow_config: only active when effects level is not "none" AND --wow flag set
+    wow_config = None
+    if wow_effects and effects != "none":
+        from musicvid.pipeline.wow_effects import default_wow_config
+        wow_config = default_wow_config()
+        wow_config["zoom_punch"] = wow_zoom_punch
+        wow_config["light_flash"] = wow_light_flash
+        wow_config["dynamic_grade"] = wow_dynamic_grade
+        wow_config["particles"] = wow_particles
 
     _print_startup_summary(mode, provider, preset, effects, animate_mode, lut_style,
                            lut_intensity, subtitle_style_override, transitions_mode,
@@ -585,6 +615,11 @@ def cli(audio_file, mode, provider, style, output, resolution, lang, new, font_p
         scene_plan = create_scene_plan(analysis, style_override=style_override, output_dir=str(cache_dir), mode=mode)
         save_cache(str(cache_dir), scene_cache_name, scene_plan)
     click.echo(f"  Style: {scene_plan['overall_style']}, Scenes: {len(scene_plan['scenes'])}")
+
+    # Auto-select LUT from overall_style if not explicitly set by user
+    if lut_style is None and not quick_mode:
+        lut_style = _lut_for_style(scene_plan.get("overall_style", "worship"))
+        click.echo(f"  Auto LUT: {lut_style} (styl: {scene_plan.get('overall_style')})")
 
     # Override transitions if --transitions cut
     if transitions_mode == "cut":
@@ -698,6 +733,7 @@ def cli(audio_file, mode, provider, style, output, resolution, lang, new, font_p
             lut_intensity=lut_intensity,
             sequential_assembly=sequential_assembly,
             reels_style=reels_style,
+            wow_config=wow_config,
         )
         return
 
@@ -737,6 +773,7 @@ def cli(audio_file, mode, provider, style, output, resolution, lang, new, font_p
         lut_style=lut_style,
         lut_intensity=lut_intensity,
         reels_style=reels_style,
+        wow_config=wow_config,
     )
     click.echo(f"  Done! Output: {output_path}")
 
@@ -745,7 +782,7 @@ def _run_preset_mode(preset, reel_duration, analysis, scene_plan, fetch_manifest
                      audio_path, output_dir, stem, font, effects, cache_dir, new,
                      logo_path=None, logo_position="top-left", logo_size=None, logo_opacity=0.85,
                      lut_style=None, lut_intensity=0.85, sequential_assembly=False,
-                     reels_style="blur-bg"):
+                     reels_style="blur-bg", wow_config=None):
     """Handle --preset flag: generate full video and/or social reels."""
     generate_full = preset in ("full", "all")
     generate_social = preset in ("social", "all")
@@ -792,6 +829,7 @@ def _run_preset_mode(preset, reel_duration, analysis, scene_plan, fetch_manifest
                 cinematic_bars=(effects == "full"),
                 lut_style=lut_style,
                 lut_intensity=lut_intensity,
+                wow_config=wow_config,
             ),
         ))
 
@@ -837,6 +875,7 @@ def _run_preset_mode(preset, reel_duration, analysis, scene_plan, fetch_manifest
                     lut_style=lut_style,
                     lut_intensity=lut_intensity,
                     reels_style=reels_style,
+                    wow_config=wow_config,
                 ),
             ))
 

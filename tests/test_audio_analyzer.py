@@ -171,7 +171,7 @@ class TestAnalyzeAudio:
 
         result = analyze_audio(str(audio_file), output_dir=str(output_dir))
 
-        saved_file = output_dir / "analysis.json"
+        saved_file = output_dir / "audio_analysis.json"
         assert saved_file.exists()
         saved_data = json.loads(saved_file.read_text())
         assert saved_data["bpm"] == result["bpm"]
@@ -363,3 +363,24 @@ class TestAnalyzeAudio:
 
         mock_merge.assert_not_called()
         assert result["lyrics"][0]["text"] == "Amazing grace how sweet the sound"
+
+    @patch("musicvid.pipeline.audio_analyzer.whisper")
+    @patch("musicvid.pipeline.audio_analyzer.librosa")
+    def test_output_file_named_audio_analysis(self, mock_librosa, mock_whisper, mock_whisper_result, mock_audio_signal, tmp_path):
+        """analyze_audio saves to audio_analysis.json, not analysis.json."""
+        y, sr = mock_audio_signal
+        mock_model = MagicMock()
+        mock_model.transcribe.return_value = mock_whisper_result
+        mock_whisper.load_model.return_value = mock_model
+        mock_librosa.load.return_value = (y, sr)
+        mock_librosa.beat.beat_track.return_value = (120.0, np.array([0]))
+        mock_librosa.get_duration.return_value = 10.0
+        mock_librosa.frames_to_time.return_value = np.array([0.0])
+
+        audio_file = tmp_path / "test.mp3"
+        audio_file.write_bytes(b"fake audio data")
+
+        analyze_audio(str(audio_file), output_dir=str(tmp_path))
+
+        assert (tmp_path / "audio_analysis.json").exists()
+        assert not (tmp_path / "analysis.json").exists()

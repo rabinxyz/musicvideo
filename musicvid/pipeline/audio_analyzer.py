@@ -172,7 +172,7 @@ def analyze_audio(audio_path, output_dir=None, whisper_model="small", lyrics_pat
     if output_dir:
         output_path = Path(output_dir)
         output_path.mkdir(parents=True, exist_ok=True)
-        with open(output_path / "analysis.json", "w") as f:
+        with open(output_path / "audio_analysis.json", "w") as f:
             json.dump(result, f, indent=2)
 
     return result

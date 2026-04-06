@@ -1,146 +1,195 @@
 # Idea
 
-# Spec: Naprawa rolek — imread crash i błędny crop 9:16
+# Spec: WOW efekty — CapCut style, dynamika, energia
 
-## Problem 1 — NoneType imread przy montażu rolek
+## Cel
+Teledysk ma robić wrażenie. Nie "ok" — WOW.
+Wzorzec: profesjonalne lyric video Hillsong, Elevation Worship, Bethel Music.
+Narzędzie: FFmpeg filtry (szybkie, nie frame-by-frame Python).
 
-Assembler rolek wywołuje imread() (OpenCV) na asset_path który:
-a) Jest None bo find_nearest_scene() zwróciło None
-b) Jest plikiem .mp4 a imread() obsługuje tylko obrazy
+## Efekt 1 — Energy-reactive cuts (cięcia na peak energii)
 
-Napraw w assembler.py dla trybu rolek:
+Obecny problem: cięcia co równe odcinki — monotonia.
+Rozwiązanie: wykryj momenty peak energii w audio i tnij tam.
 
-Krok 1 — sprawdź typ pliku przed załadowaniem:
-  from pathlib import Path
+W audio_analyzer.py dodaj energy_peaks:
+  onset_env = librosa.onset.onset_strength(y=y, sr=sr)
+  peaks = librosa.util.peak_pick(onset_env, pre_max=3, post_max=3,
+                                  pre_avg=3, post_avg=5, delta=0.5, wait=10)
+  peak_times = librosa.frames_to_time(peaks, sr=sr)
+  analysis["energy_peaks"] = [float(t) for t in peak_times]
 
-  def load_asset_clip(asset_path, scene_duration, motion):
-      if asset_path is None:
-          raise ValueError(f"asset_path is None — brak assetu dla sceny")
+Użyj peak_times jako preferowane punkty cięcia w director.py.
+Sceny MUSZĄ zaczynać się i kończyć na nearest peak (±0.3s).
 
-      ext = Path(asset_path).suffix.lower()
+## Efekt 2 — Zoom punch na beat (CapCut signature)
 
-      if ext == '.mp4':
-          clip = VideoFileClip(asset_path)
-          if clip.duration < scene_duration:
-              clip = clip.loop(duration=scene_duration)
-          else:
-              clip = clip.subclipped(0, scene_duration)
-          clip = clip.without_audio()
-          return clip
+Na każdym mocnym uderzeniu (downbeat refrenu):
+Szybki zoom in 1.0 → 1.08 w ciągu 0.1s potem powrót 1.08 → 1.0 w 0.3s.
+Efekt "uderzenia" zsynchronizowany z muzyką.
 
-      elif ext in ('.jpg', '.jpeg', '.png'):
-          clip = ImageClip(asset_path, duration=scene_duration)
-          clip = apply_ken_burns(clip, motion)
-          return clip
+Implementacja przez FFmpeg zoompan filter:
+  Dla każdego downbeat w refrenie dodaj:
+  zoompan=z='if(between(t,{t},{ t+0.1}),1+0.08*((t-{t})/0.1),
+             if(between(t,{t+0.1},{t+0.4}),1.08-0.08*((t-{t+0.1})/0.3),1))'
 
-      else:
-          raise ValueError(f"Nieobsługiwane rozszerzenie: {ext}")
+Stosuj TYLKO przy refrenie — nie przy zwrotce (zbyt agresywne).
+Maksymalnie na co 2. downbeat żeby nie przesadzić.
 
-Krok 2 — find_nearest_scene() nigdy nie zwraca None:
-  def find_nearest_scene(start, end, fetch_manifest):
-      valid = [e for e in fetch_manifest
-               if e.get("video_path") and Path(e["video_path"]).exists()]
+## Efekt 3 — Color grade reaktywny na energię
 
-      if not valid:
-          return None  # caller obsługuje
+Dwie palety kolorów przełączające się zależnie od energii sekcji:
 
-      clip_mid = (start + end) / 2
-      best = min(valid, key=lambda e: abs(
-          (e.get("start", 0) + e.get("end", 0)) / 2 - clip_mid
-      ))
-      return best
+Paleta VERSE (spokojna, ciepła):
+  Lekko desaturowana, ciepły amber, subtelna
+  FFmpeg: eq=saturation=0.85:brightness=0.02:contrast=1.05,
+          colorbalance=rs=0.05:gs=0.02:bs=-0.03
 
-Krok 3 — gdy find_nearest_scene zwraca None:
-  Użyj pierwszego dostępnego assetu z fetch_manifest
-  entry = next((e for e in fetch_manifest
-                if e.get("video_path") and Path(e["video_path"]).exists()), None)
-  if entry is None:
-      raise RuntimeError("Brak jakichkolwiek assetów w cache")
+Paleta CHORUS (dynamiczna, intensywna):
+  Wyższy kontrast, żywsze kolory, bardziej nasycona
+  FFmpeg: eq=saturation=1.15:brightness=0.0:contrast=1.15,
+          colorbalance=rs=0.08:gs=0.03:bs=-0.05
 
-## Problem 2 — crop 9:16 resizuje zamiast cropować
+Przejście między paletami: 0.5s cross-fade żeby nie było skoku.
 
-Obecny kod dla rolek 9:16 robi resize całego obrazu do 1080x1920
-co rozciąga obraz 16:9 — wygląda jak ściśnięty obraz.
+## Efekt 4 — Light flash na pierwsze uderzenie refrenu
 
-Napraw w assembler.py lub smart_crop.py:
+Przy pierwszym uderzeniu każdego refrenu:
+Błysk białego światła który znika w 0.3s.
+Efekt "wejście w refren" — bardzo popularny w worship music.
 
-Poprawny algorytm konwersji 16:9 → 9:16:
+Implementacja: nakładka białego ColorClip z opacity:
+  t=0: opacity 0
+  t=0.05s: opacity 0.7 (peak flash)
+  t=0.3s: opacity 0 (zanika)
 
-def convert_16_9_to_9_16(clip, target_w=1080, target_h=1920):
-    src_w, src_h = clip.size
+Tylko raz per refren — nie na każdym uderzeniu.
 
-    # Krok 1: skaluj tak żeby wysokość = target_h
-    scale = target_h / src_h
-    new_w = int(src_w * scale)
-    new_h = target_h
+## Efekt 5 — Motion blur na szybkich cięciach
 
-    # Krok 2: resize zachowując proporcje
-    clip = clip.resized((new_w, new_h))
+Przy cut transitions (verse→chorus):
+Dodaj motion blur 0.05s przed i po cięciu.
+Efekt: cięcie wygląda bardziej kinowo, mniej twardo.
 
-    # Krok 3: crop poziomo do target_w (przytnij boki)
-    x_center = new_w / 2
-    x1 = int(x_center - target_w / 2)
-    x2 = int(x_center + target_w / 2)
-    clip = clip.cropped(x1=x1, y1=0, x2=x2, y2=new_h)
+FFmpeg: minterpolate z motion blur na 2 klatki przed/po cięciu.
+Alternatywnie: krótki zoom 1.0→1.03 na ostatniej klatce przed cięciem.
 
-    return clip
+## Efekt 6 — Vignette dynamiczny
 
-Wariant z wykryciem twarzy (smart crop):
-    Użyj OpenCV haar cascade żeby znaleźć twarz
-    Wycentruj crop na twarzy zamiast na środku geometrycznym
+Obecny vignette: stały przez cały film.
+Nowy: vignette intensywniejszy przy spokojnych momentach,
+      słabszy przy energetycznych (więcej przestrzeni, więcej oddechu).
 
-    import cv2
-    def find_face_center(image_path):
-        img = cv2.imread(image_path)
-        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-        cascade = cv2.CascadeClassifier(
-            cv2.data.haarcascades + 'haarcascade_frontalface_default.xml'
-        )
-        faces = cascade.detectMultiScale(gray, 1.1, 4)
-        if len(faces) > 0:
-            x, y, w, h = max(faces, key=lambda f: f[2]*f[3])
-            return x + w//2  # x centrum twarzy
-        return None  # brak twarzy — użyj centrum obrazu
+  VERSE: vignette sigma=0.6 (mocniejszy, intymny)
+  CHORUS: vignette sigma=0.3 (słabszy, otwarty, energetyczny)
 
-    Gdy twarz wykryta: wycentruj crop na twarzy (x_center = face_x)
-    Gdy brak twarzy: wycentruj geometrycznie (x_center = src_w / 2)
+FFmpeg vignette filter z parametrami per sekcja.
 
-Wariant blur-bg (gdy aspect ratio bardzo różne):
-    Stwórz rozmyte tło z całego obrazu skalowanego do 9:16
-    Nałóż na środku ostry smart crop
-    Efekt profesjonalny — nic nie jest ucięte
+## Efekt 7 — Tekst animowany CapCut style
 
-    def blur_bg_composite(image_path, target_w=1080, target_h=1920):
-        # Tło: cały obraz skalowany + mocny blur
-        bg = ImageClip(image_path).resized((target_w, target_h))
-        bg = bg.image_transform(lambda f: cv2.GaussianBlur(f, (99,99), 30))
+Zamiast prostego fade dla napisów przy refrenie:
 
-        # Foreground: smart crop wycentrowany
-        fg = convert_16_9_to_9_16(ImageClip(image_path), target_w, target_h)
+Efekt SCALE POP:
+  Napis wjeżdża z scale 1.3 → 1.0 w 0.15s (pop effect)
+  Jednocześnie opacity 0 → 1 w 0.15s
 
-        # Kompozyt
-        return CompositeVideoClip([bg, fg.with_position("center")])
+Efekt SLIDE UP z bounce:
+  Napis wjeżdża z dołu, overshoots o 5px, wraca na miejsce
+  Czas: 0.2s wejście + 0.05s bounce
 
-## Gdzie zastosować konwersję
+Implementacja przez ASS subtitle format (już mamy):
+  Chorus: {\t(0,150,\fscx130\fscy130\alpha&HFF&)
+           \t(0,150,\fscx100\fscy100\alpha&H00&)} text
+  Verse: standardowy fade
 
-W assembler.py dla każdego klipu gdy platform == "reels" lub "shorts":
-  clip = load_asset_clip(asset_path, scene_duration, motion)
-  clip = convert_16_9_to_9_16(clip, 1080, 1920)
-  # Dopiero teraz dodaj napisy i efekty
+## Efekt 8 — Rolki EXTRA dynamiczne (9:16)
 
-NIE rób resize na całym klipie bez crop — to rozciąga obraz.
+Dla rolek social media dodaj:
+- Szybsze cięcia (2x krótsze sceny niż w pełnym filmie)
+- Hook w pierwszych 2s: najlepszy moment z refrenu + flash
+- Tekst większy i bardziej agresywny (font_size=72 dla chorus)
+- Gradient overlay na dole (czarny 60% opacity) pod napisami
+- Efekt zoom punch na każdym downbeat (agresywniejszy niż film)
+
+## Efekt 9 — Cinematic LUT zamiast prostego warm grade
+
+Zamiast ręcznego warm grade użyj prawdziwego LUT filmowego.
+Generuj LUT programowo który symuluje popularne filmowe look:
+
+"Teal and Orange" (standard Hollywood):
+  Shadows: shift w kierunku teal (#008080)
+  Highlights: shift w kierunku orange (#FF8C00)
+  Midtones: lekko desaturowane
+
+"Bleach Bypass" (kontrast + desaturacja):
+  Kontrast +20%, saturacja -25%
+  Zimne shadows, ciepłe highlights
+
+Wybór LUT przez Claude-reżysera per overall_style:
+  contemplative → Teal and Orange (ciepły, filmowy)
+  worship → Warm Golden (amber shadows, cream highlights)
+  powerful → Bleach Bypass (dramatyczny, kontrastowy)
+  joyful → Vibrant (lekko nasycony, jasny)
+
+## Efekt 10 — Particles overlay
+
+Na klipach TYPE_AI i TYPE_ANIMATED dodaj subtelne particles:
+Małe białe/złote punkty unoszące się powoli w górę.
+Opacity: 0.15 — ledwo widoczne ale dodają "magic touch".
+
+Implementacja: generuj particles jako numpy array overlay
+lub użyj gotowego particles video z Pexels jako multiply blend.
+
+## Implementacja — kolejność
+
+1. Energy peaks w audio_analyzer (baza dla wszystkiego)
+2. Zoom punch na downbeat refrenu (największy WOW efekt)
+3. Light flash na wejście refrenu
+4. Color grade reaktywny (verse vs chorus)
+5. Cinematic LUT per styl
+6. Tekst animowany CapCut style (scale pop)
+7. Dynamiczny vignette
+8. Motion blur na cięciach
+9. Rolki extra dynamiczne
+10. Particles overlay (opcjonalne)
+
+## Nowa flaga CLI
+--wow    Włącza wszystkie WOW efekty naraz (zoom punch, flash, dynamic grade)
+         Domyślnie: włączone gdy --effects minimal lub full
+
+## Nowe flagi szczegółowe
+--zoom-punch [on|off]     domyślnie: on
+--light-flash [on|off]    domyślnie: on
+--dynamic-grade [on|off]  domyślnie: on
+--particles [on|off]      domyślnie: off (droższe obliczeniowo)
+
+## Implementacja techniczna
+
+Wszystkie efekty przez FFmpeg filtry (nie Python frame-by-frame):
+  Szybciej: FFmpeg jest ~20x szybszy niż MoviePy dla efektów per-frame
+  Jakość: lepsza niż numpy manipulacje
+
+Nowy moduł: musicvid/pipeline/wow_effects.py
+  build_ffmpeg_filter_chain(analysis, scene_plan, effects_config) -> str
+  Zwraca string filter_complex dla FFmpeg z wszystkimi efektami.
+
+Integracja w assembler.py:
+  Po złączeniu wszystkich scen przez MoviePy:
+  Wywołaj FFmpeg z filter_chain na gotowym pliku MP4.
+  Finalny output = MoviePy MP4 → FFmpeg WOW effects → gotowy plik.
 
 ## Testy
-- load_asset_clip z .mp4: zwraca VideoFileClip bez imread
-- load_asset_clip z .jpg: zwraca ImageClip z Ken Burns
-- load_asset_clip z None: rzuca ValueError
-- convert_16_9_to_9_16: wynik ma wymiary 1080x1920
-- convert_16_9_to_9_16: nie rozciąga (zachowuje proporcje przez crop)
-- find_nearest_scene z pustym manifest: zwraca None (nie crashuje)
+- energy_peaks: lista float z wartościami w zakresie 0 do duration
+- zoom_punch: klatki przy downbeat mają zoom > 1.0
+- light_flash: klatka przy wejściu chorus ma wyższy brightness
+- color_grade: klatki chorus mają wyższy kontrast niż verse
+- Czas generowania: nie wzrasta o więcej niż 30% (FFmpeg jest szybki)
 
 ## Acceptance Criteria
-- Rolki generują się bez błędu NoneType imread
-- Rolki 9:16 mają prawidłowy crop (nie rozciąganie)
-- Twarze i główne motywy wycentrowane w kadrze 9:16
-- Ken Burns na obrazach, subclipped na wideo
+- Wideo ma wyraźne zoom punch przy każdym downbeat refrenu
+- Light flash przy wejściu w refren
+- Różny color grade dla verse i chorus
+- Napisy refrenu mają efekt scale pop
+- Rolki mają hook w pierwszych 2s
+- Całość wygląda jak profesjonalne worship lyric video
 - python3 -m pytest tests/ -v przechodzi

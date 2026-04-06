@@ -1,5 +1,3 @@
-# Idea
-
 # Spec: Naprawa timingu napisów i Runway 400
 
 ## Problem 1 — napisy zaczynają się od 0.0s zamiast od ~30s

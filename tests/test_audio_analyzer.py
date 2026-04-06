@@ -225,6 +225,65 @@ class TestAnalyzeAudio:
 
     @patch("musicvid.pipeline.audio_analyzer.whisper")
     @patch("musicvid.pipeline.audio_analyzer.librosa")
+    def test_analyze_audio_returns_energy_peaks_key(self, mock_librosa, mock_whisper, mock_whisper_result, mock_audio_signal, tmp_path):
+        """analyze_audio result must contain energy_peaks key as a list."""
+        y, sr = mock_audio_signal
+
+        mock_model = MagicMock()
+        mock_model.transcribe.return_value = mock_whisper_result
+        mock_whisper.load_model.return_value = mock_model
+
+        mock_librosa.load.return_value = (y, sr)
+        mock_librosa.beat.beat_track.return_value = (120.0, np.array([0, 11025, 22050]))
+        mock_librosa.get_duration.return_value = 10.0
+        mock_librosa.onset.onset_strength.return_value = np.zeros(100)
+        mock_librosa.util.peak_pick.return_value = np.array([10, 30, 50])
+        # frames_to_time is called multiple times: beats AND energy_peaks
+        mock_librosa.frames_to_time.side_effect = [
+            np.array([0.0, 0.5, 1.0]),  # beats
+            np.array([0.46, 1.39, 2.32]),  # energy_peaks
+        ]
+
+        audio_file = tmp_path / "test.mp3"
+        audio_file.write_bytes(b"fake audio data")
+
+        result = analyze_audio(str(audio_file))
+
+        assert "energy_peaks" in result
+        assert isinstance(result["energy_peaks"], list)
+
+    @patch("musicvid.pipeline.audio_analyzer.whisper")
+    @patch("musicvid.pipeline.audio_analyzer.librosa")
+    def test_energy_peaks_are_floats_within_duration(self, mock_librosa, mock_whisper, mock_whisper_result, mock_audio_signal, tmp_path):
+        """All energy_peaks must be floats within [0, duration]."""
+        y, sr = mock_audio_signal
+
+        mock_model = MagicMock()
+        mock_model.transcribe.return_value = mock_whisper_result
+        mock_whisper.load_model.return_value = mock_model
+
+        mock_librosa.load.return_value = (y, sr)
+        mock_librosa.beat.beat_track.return_value = (120.0, np.array([0, 11025, 22050]))
+        mock_librosa.get_duration.return_value = 10.0
+        mock_librosa.onset.onset_strength.return_value = np.zeros(100)
+        mock_librosa.util.peak_pick.return_value = np.array([10, 30, 50])
+        mock_librosa.frames_to_time.side_effect = [
+            np.array([0.0, 0.5, 1.0]),  # beats
+            np.array([0.46, 1.39, 2.32]),  # energy_peaks
+        ]
+
+        audio_file = tmp_path / "test.mp3"
+        audio_file.write_bytes(b"fake audio data")
+
+        result = analyze_audio(str(audio_file))
+
+        duration = result["duration"]
+        for peak in result["energy_peaks"]:
+            assert isinstance(peak, float), f"peak {peak} is not a float"
+            assert 0.0 <= peak <= duration, f"peak {peak} out of [0, {duration}]"
+
+    @patch("musicvid.pipeline.audio_analyzer.whisper")
+    @patch("musicvid.pipeline.audio_analyzer.librosa")
     def test_filters_out_short_segments(self, mock_librosa, mock_whisper, mock_audio_signal, tmp_path):
         y, sr = mock_audio_signal
 

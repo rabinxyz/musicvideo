@@ -137,6 +137,15 @@ def analyze_audio(audio_path, output_dir=None, whisper_model="small"):
     energy_mean = float(np.mean(librosa.power_to_db(S)))
     mood_energy = _estimate_mood(bpm, energy_mean)
 
+    # Energy peaks: onset strength peaks (used by WOW effects for cut timing)
+    onset_env = librosa.onset.onset_strength(y=y, sr=sr)
+    raw_peaks = librosa.util.peak_pick(
+        onset_env, pre_max=3, post_max=3,
+        pre_avg=3, post_avg=5, delta=0.5, wait=10
+    )
+    peak_times = librosa.frames_to_time(raw_peaks, sr=sr)
+    energy_peaks = [round(float(t), 2) for t in peak_times]
+
     result = {
         "lyrics": lyrics,
         "beats": beats,
@@ -145,6 +154,7 @@ def analyze_audio(audio_path, output_dir=None, whisper_model="small"):
         "sections": sections,
         "mood_energy": mood_energy,
         "language": language,
+        "energy_peaks": energy_peaks,
     }
 
     if output_dir:

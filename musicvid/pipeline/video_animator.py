@@ -54,7 +54,11 @@ def _submit_animation(image_b64, motion_prompt, duration):
         json=payload,
         headers=_get_headers(),
     )
-    resp.raise_for_status()
+    try:
+        resp.raise_for_status()
+    except requests.exceptions.HTTPError:
+        print(f"Runway error {resp.status_code}: {resp.text}")
+        raise
     return resp.json()["id"]
 
 
@@ -76,7 +80,11 @@ def _submit_text_to_video(prompt, duration):
         json=payload,
         headers=_get_headers(),
     )
-    resp.raise_for_status()
+    try:
+        resp.raise_for_status()
+    except requests.exceptions.HTTPError:
+        print(f"Runway error {resp.status_code}: {resp.text}")
+        raise
     return resp.json()["id"]
 
 

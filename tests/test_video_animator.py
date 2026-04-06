@@ -338,3 +338,57 @@ class TestGenerateVideoFromText:
         out = tmp_path / "out.mp4"
         with pytest.raises(RuntimeError, match="FAILED"):
             generate_video_from_text("A prompt", output_path=str(out))
+
+
+class TestRunwayErrorLogging:
+    """Tests that Runway API error bodies are logged before re-raising."""
+
+    @patch.dict(os.environ, {"RUNWAY_API_KEY": "test-key"})
+    @patch("musicvid.pipeline.video_animator.requests")
+    @patch("musicvid.pipeline.video_animator.time")
+    def test_submit_text_to_video_logs_error_body(self, mock_time, mock_requests, capsys):
+        import requests as requests_lib
+        mock_resp = MagicMock()
+        mock_resp.status_code = 400
+        mock_resp.text = '{"error": "promptText too long"}'
+        mock_resp.raise_for_status.side_effect = requests_lib.exceptions.HTTPError(
+            response=mock_resp
+        )
+        mock_requests.post.return_value = mock_resp
+        mock_requests.exceptions.HTTPError = requests_lib.exceptions.HTTPError
+        mock_requests.exceptions.ConnectionError = requests_lib.exceptions.ConnectionError
+        mock_requests.exceptions.Timeout = requests_lib.exceptions.Timeout
+        mock_requests.HTTPError = requests_lib.HTTPError
+
+        with pytest.raises(requests_lib.exceptions.HTTPError):
+            from musicvid.pipeline.video_animator import _submit_text_to_video
+            _submit_text_to_video("test prompt", 5)
+
+        captured = capsys.readouterr()
+        assert "Runway error" in captured.out
+        assert "promptText too long" in captured.out
+
+    @patch.dict(os.environ, {"RUNWAY_API_KEY": "test-key"})
+    @patch("musicvid.pipeline.video_animator.requests")
+    @patch("musicvid.pipeline.video_animator.time")
+    def test_submit_animation_logs_error_body(self, mock_time, mock_requests, capsys):
+        import requests as requests_lib
+        mock_resp = MagicMock()
+        mock_resp.status_code = 400
+        mock_resp.text = '{"error": "invalid ratio"}'
+        mock_resp.raise_for_status.side_effect = requests_lib.exceptions.HTTPError(
+            response=mock_resp
+        )
+        mock_requests.post.return_value = mock_resp
+        mock_requests.exceptions.HTTPError = requests_lib.exceptions.HTTPError
+        mock_requests.exceptions.ConnectionError = requests_lib.exceptions.ConnectionError
+        mock_requests.exceptions.Timeout = requests_lib.exceptions.Timeout
+        mock_requests.HTTPError = requests_lib.HTTPError
+
+        with pytest.raises(requests_lib.exceptions.HTTPError):
+            from musicvid.pipeline.video_animator import _submit_animation
+            _submit_animation("base64data", "zoom in", 5)
+
+        captured = capsys.readouterr()
+        assert "Runway error" in captured.out
+        assert "invalid ratio" in captured.out

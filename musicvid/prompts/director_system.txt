@@ -25,6 +25,8 @@ TYPE_VIDEO_STOCK — Pexels video (free, realistic)
          "people outdoor arms up sunset", "person peaceful field morning"
   TYPE_VIDEO_STOCK is SAFEST for nature and landscapes only.
   For people in prayer/worship — prefer TYPE_AI to avoid non-Protestant content.
+  For all scenes with people (any activity) — prefer TYPE_AI for full prompt control.
+  TYPE_VIDEO_STOCK: landscapes, sky, water, forests, mountains ONLY — no people, no activities.
 
 TYPE_PHOTO_STOCK — Unsplash photo (free, documentary)
   When: still/contemplative moments, specific objects (open Bible, wooden cross, candle),
@@ -99,6 +101,10 @@ bokeh everywhere, heavy bokeh, extreme bokeh,
 oversaturated, vivid colors, vibrant, ultra sharp,
 perfect lighting, studio lighting, professional lighting,
 HDR, ultra-realistic, 8K, ultra HD, hyper-detailed
+alcohol, beer, wine, whiskey, vodka, drinking glass, bar interior,
+pub, cocktail, champagne, nightclub, drunk,
+gambling, casino, cigarette, smoking, drugs,
+violence, fight, nightlife, party wild
 
 POSITIVE MOTIFS TO USE:
 - Nature: golden wheat fields, mountain peaks, morning mist, calm lakes, ancient forests

@@ -35,6 +35,28 @@ class TestDirectorPromptFiltering:
         assert "TYPE_VIDEO_STOCK" in prompt_text
         assert "prayer" in prompt_text.lower() or "worship" in prompt_text.lower()
 
+    def test_director_prompt_bans_alcohol_in_banned_words(self):
+        prompt_path = Path(__file__).parent.parent / "musicvid" / "prompts" / "director_system.txt"
+        prompt_text = prompt_path.read_text().lower()
+        for word in ["alcohol", "beer", "wine", "whiskey", "drinking", "bar", "nightclub"]:
+            assert word in prompt_text, f"Missing banned word in director prompt: {word}"
+
+    def test_director_prompt_bans_smoking_gambling(self):
+        prompt_path = Path(__file__).parent.parent / "musicvid" / "prompts" / "director_system.txt"
+        prompt_text = prompt_path.read_text().lower()
+        for word in ["gambling", "casino", "cigarette", "smoking"]:
+            assert word in prompt_text, f"Missing banned word in director prompt: {word}"
+
+    def test_director_prompt_restricts_pexels_to_nature_no_people(self):
+        prompt_path = Path(__file__).parent.parent / "musicvid" / "prompts" / "director_system.txt"
+        prompt_text = prompt_path.read_text()
+        assert "TYPE_VIDEO_STOCK" in prompt_text
+        # Must mention nature-only without people
+        has_no_people = ("no people" in prompt_text.lower() or
+                        "without people" in prompt_text.lower() or
+                        "NOT" in prompt_text)
+        assert has_no_people
+
 
 # ------------------------------------------------------------------ #
 # Task 1: sanitize_query unit tests

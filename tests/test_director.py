@@ -1,6 +1,7 @@
 """Tests for director module."""
 
 import json
+import re
 from pathlib import Path
 from unittest.mock import patch, MagicMock
 
@@ -602,25 +603,24 @@ class TestBuildUserMessageFiltering:
             "mood_energy": "medium",
         }
 
+    def _extract_analysis_json(self, msg):
+        """Extract the JSON blob embedded in the message (first { ... } block)."""
+        match = re.search(r'(\{.*?\})\s*\n\nBPM:', msg, re.DOTALL)
+        assert match, "Could not find JSON block in message"
+        return json.loads(match.group(1))
+
     def test_energy_curve_excluded(self):
         msg = _build_user_message(self._base_analysis())
         assert "energy_curve" not in msg
 
     def test_beats_capped_at_100(self):
-        msg = _build_user_message(self._base_analysis())
-        # Extract the JSON blob between the intro phrase and the BPM line
-        json_str = msg.split("Here is the audio analysis for the music video:\n\n")[1].split("\n\nBPM:")[0]
-        data = json.loads(json_str)
+        data = self._extract_analysis_json(_build_user_message(self._base_analysis()))
         assert len(data["beats"]) <= 100
 
     def test_energy_peaks_capped_at_20(self):
-        msg = _build_user_message(self._base_analysis())
-        json_str = msg.split("Here is the audio analysis for the music video:\n\n")[1].split("\n\nBPM:")[0]
-        data = json.loads(json_str)
+        data = self._extract_analysis_json(_build_user_message(self._base_analysis()))
         assert len(data["energy_peaks"]) <= 20
 
     def test_lyrics_capped_at_50(self):
-        msg = _build_user_message(self._base_analysis())
-        json_str = msg.split("Here is the audio analysis for the music video:\n\n")[1].split("\n\nBPM:")[0]
-        data = json.loads(json_str)
+        data = self._extract_analysis_json(_build_user_message(self._base_analysis()))
         assert len(data["lyrics"]) <= 50

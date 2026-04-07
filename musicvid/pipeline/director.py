@@ -32,7 +32,7 @@ def _build_user_message(analysis, style_override=None, mode=None):
     # Strip heavy fields not needed by the director for scene planning
     analysis_for_director = {k: v for k, v in analysis.items() if k != "energy_curve"}
 
-    beats_full = analysis_for_director.get("beats", [])
+    beats_full = beats
     if len(beats_full) > 100:
         step = len(beats_full) // 100
         analysis_for_director["beats"] = beats_full[::step][:100]
@@ -60,16 +60,15 @@ def _build_user_message(analysis, style_override=None, mode=None):
     msg += f"\n\nGenerate approximately {suggested_scene_count} scenes (maximum {suggested_scene_count + 4})."
 
     # Section-based length guidance
-    bar_duration_val = bar_duration
     section_lengths = {
-        "intro":  (6 * bar_duration_val, 8 * bar_duration_val),
-        "verse":  (4 * bar_duration_val, 6 * bar_duration_val),
-        "chorus": (2 * bar_duration_val, 3 * bar_duration_val),
-        "bridge": (4 * bar_duration_val, 8 * bar_duration_val),
-        "outro":  (6 * bar_duration_val, 10 * bar_duration_val),
+        "intro":  (6 * bar_duration, 8 * bar_duration),
+        "verse":  (4 * bar_duration, 6 * bar_duration),
+        "chorus": (2 * bar_duration, 3 * bar_duration),
+        "bridge": (4 * bar_duration, 8 * bar_duration),
+        "outro":  (6 * bar_duration, 10 * bar_duration),
     }
     msg += f"\n\nDŁUGOŚCI SCEN (KRYTYCZNE — stosuj się dokładnie):"
-    msg += f"\nBPM={bpm:.0f}, jeden takt = {bar_duration_val:.2f}s"
+    msg += f"\nBPM={bpm:.0f}, jeden takt = {bar_duration:.2f}s"
     msg += f"\n- intro:  {section_lengths['intro'][0]:.1f}s - {section_lengths['intro'][1]:.1f}s"
     msg += f"\n- verse:  {section_lengths['verse'][0]:.1f}s - {section_lengths['verse'][1]:.1f}s"
     msg += f"\n- chorus: {section_lengths['chorus'][0]:.1f}s - {section_lengths['chorus'][1]:.1f}s (KRÓTKIE = ENERGIA)"

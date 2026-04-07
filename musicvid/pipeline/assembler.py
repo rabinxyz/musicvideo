@@ -40,14 +40,21 @@ _SECTION_GRADES = {
 _DEFAULT_GRADE = (0.92, 1.10, 0.0)
 
 
-def apply_section_grade(clip, section):
+def apply_section_grade(clip, section, reactor=None, scene_start=None):
     """Apply per-section color grade (saturation, contrast, brightness).
 
+    When reactor (EnergyReactor) is provided, uses energy-reactive values.
+    Otherwise falls back to static _SECTION_GRADES dict.
     Uses NumPy luminance-based saturation — no cv2 dependency.
     """
     import numpy as np
 
-    sat, cont, bright = _SECTION_GRADES.get(section, _DEFAULT_GRADE)
+    if reactor is not None and scene_start is not None:
+        sat = reactor.get_saturation(scene_start)
+        cont = reactor.get_contrast(scene_start)
+        bright = 0.0
+    else:
+        sat, cont, bright = _SECTION_GRADES.get(section, _DEFAULT_GRADE)
 
     def grade_frame(frame):
         f = frame.astype(np.float32) + bright * 255
@@ -618,6 +625,12 @@ def assemble_video(analysis, scene_plan, fetch_manifest, audio_path, output_path
     target_size = _get_resolution(resolution)
     scenes = scene_plan["scenes"]
 
+    from musicvid.pipeline.energy_reactor import EnergyReactor
+    reactor = None
+    if analysis.get("energy_curve"):
+        is_reel = target_size == (1080, 1920)
+        reactor = EnergyReactor(analysis, reel_mode=is_reel)
+
     scene_clips = []
     for manifest_entry in fetch_manifest:
         idx = manifest_entry["scene_index"]
@@ -625,7 +638,8 @@ def assemble_video(analysis, scene_plan, fetch_manifest, audio_path, output_path
         clip = _load_scene_clip(manifest_entry["video_path"], scene, target_size, reels_style=reels_style)
         clip = apply_effects(clip, level=effects_level)
         section = scene.get("section", "verse")
-        clip = apply_section_grade(clip, section)
+        clip = apply_section_grade(clip, section,
+                                   reactor=reactor, scene_start=scene.get("start", 0.0))
         scene_clips.append(clip)
 
     bpm = analysis.get("bpm", 120.0)

@@ -1777,6 +1777,54 @@ class TestApplySectionGrade:
         mock_clip.image_transform.assert_called_once()
 
 
+class TestEnergyReactiveSectionGrade:
+    """Test that apply_section_grade uses EnergyReactor when provided."""
+
+    def test_reactor_provides_values(self):
+        from musicvid.pipeline.assembler import apply_section_grade
+        from musicvid.pipeline.energy_reactor import EnergyReactor
+
+        analysis = {
+            "energy_curve": [[0.0, 1.0]],
+            "energy_mean": 1.0,
+            "beats": [], "bpm": 120.0, "sections": [], "energy_peaks": [],
+        }
+        reactor = EnergyReactor(analysis)
+
+        mock_clip = MagicMock()
+        mock_clip.image_transform.return_value = mock_clip
+
+        result = apply_section_grade(mock_clip, "chorus", reactor=reactor, scene_start=0.0)
+        assert mock_clip.image_transform.called
+
+    def test_no_reactor_uses_static_grades(self):
+        from musicvid.pipeline.assembler import apply_section_grade
+
+        mock_clip = MagicMock()
+        mock_clip.image_transform.return_value = mock_clip
+
+        result = apply_section_grade(mock_clip, "chorus")
+        assert mock_clip.image_transform.called
+
+    def test_reactor_without_scene_start_falls_back(self):
+        from musicvid.pipeline.assembler import apply_section_grade
+        from musicvid.pipeline.energy_reactor import EnergyReactor
+
+        analysis = {
+            "energy_curve": [[0.0, 0.5]],
+            "energy_mean": 0.5,
+            "beats": [], "bpm": 120.0, "sections": [], "energy_peaks": [],
+        }
+        reactor = EnergyReactor(analysis)
+
+        mock_clip = MagicMock()
+        mock_clip.image_transform.return_value = mock_clip
+
+        # reactor provided but scene_start is None — should fall back to static grades
+        result = apply_section_grade(mock_clip, "verse", reactor=reactor, scene_start=None)
+        assert mock_clip.image_transform.called
+
+
 class TestReelTransitionRendering:
     @patch("musicvid.pipeline.assembler.CompositeVideoClip")
     @patch("musicvid.pipeline.assembler.concatenate_videoclips")

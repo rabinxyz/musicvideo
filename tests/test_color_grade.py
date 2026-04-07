@@ -3,10 +3,14 @@
 import os
 import numpy as np
 import pytest
+from unittest.mock import patch, MagicMock
 
 from musicvid.pipeline.color_grade import generate_builtin_lut, save_lut_as_cube, load_lut_file
 from musicvid.pipeline.color_grade import get_ffmpeg_lut_filter
 from musicvid.pipeline.color_grade import prepare_lut_ffmpeg_params
+from musicvid.pipeline.color_grade import (
+    get_curves_grade_filter, CURVES_GRADES, apply_global_color_grade,
+)
 
 
 class TestGenerateBuiltinLut:
@@ -181,3 +185,61 @@ class TestPrepareLutFfmpegParams:
         vf_idx = params.index("-vf")
         filter_str = params[vf_idx + 1]
         assert "0.50" in filter_str
+
+
+class TestCurvesGrades:
+    def test_all_grade_names_defined(self):
+        for name in ["worship-warm", "teal-orange", "bleach", "natural"]:
+            assert name in CURVES_GRADES
+
+    def test_worship_warm_contains_curves(self):
+        f = get_curves_grade_filter("worship-warm")
+        assert "curves=" in f
+
+    def test_teal_orange_contains_curves(self):
+        f = get_curves_grade_filter("teal-orange")
+        assert "curves=" in f
+
+    def test_bleach_contains_eq(self):
+        f = get_curves_grade_filter("bleach")
+        assert "eq=" in f
+
+    def test_natural_contains_eq(self):
+        f = get_curves_grade_filter("natural")
+        assert "eq=" in f
+
+    def test_unknown_grade_defaults_to_worship_warm(self):
+        f = get_curves_grade_filter("nonexistent")
+        assert f == get_curves_grade_filter("worship-warm")
+
+    def test_social_mode_adjusts_filter(self):
+        full = get_curves_grade_filter("worship-warm", is_social=False)
+        social = get_curves_grade_filter("worship-warm", is_social=True)
+        assert full != social
+
+
+class TestApplyGlobalColorGrade:
+    @patch("musicvid.pipeline.color_grade.subprocess")
+    def test_runs_ffmpeg_with_curves(self, mock_subprocess):
+        mock_subprocess.run.return_value = MagicMock(returncode=0)
+        result = apply_global_color_grade("/tmp/in.mp4", "/tmp/out.mp4", "worship-warm")
+        assert result is True
+        mock_subprocess.run.assert_called_once()
+        cmd = mock_subprocess.run.call_args[0][0]
+        assert "ffmpeg" in cmd[0]
+        assert "-vf" in cmd
+
+    @patch("musicvid.pipeline.color_grade.subprocess")
+    def test_ffmpeg_failure_returns_false(self, mock_subprocess):
+        mock_subprocess.run.side_effect = Exception("ffmpeg crashed")
+        result = apply_global_color_grade("/tmp/in.mp4", "/tmp/out.mp4", "worship-warm")
+        assert result is False
+
+    @patch("musicvid.pipeline.color_grade.subprocess")
+    def test_social_flag_passes_social_filter(self, mock_subprocess):
+        mock_subprocess.run.return_value = MagicMock(returncode=0)
+        apply_global_color_grade("/tmp/in.mp4", "/tmp/out.mp4", "worship-warm", is_social=True)
+        cmd = mock_subprocess.run.call_args[0][0]
+        vf_idx = cmd.index("-vf")
+        vf_str = cmd[vf_idx + 1]
+        assert "1.05" in vf_str or "1.15" in vf_str

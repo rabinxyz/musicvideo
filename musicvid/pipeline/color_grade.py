@@ -3,6 +3,7 @@
 import numpy as np
 import tempfile
 import os
+import subprocess
 
 
 def _identity_lut(size=33):
@@ -179,3 +180,67 @@ def prepare_lut_ffmpeg_params(lut_path=None, lut_style=None, intensity=0.85):
         return []
 
     return ["-vf", vf_filter]
+
+
+CURVES_GRADES = {
+    "worship-warm": {
+        "curves": "curves=r='0/0 0.3/0.28 0.7/0.75 1/1':g='0/0 0.3/0.29 0.7/0.72 1/0.97':b='0/0.05 0.3/0.32 0.7/0.68 1/0.92'",
+        "eq_full": "eq=saturation=0.92:contrast=1.12",
+        "eq_social": "eq=saturation=1.05:contrast=1.15",
+    },
+    "teal-orange": {
+        "curves": "curves=r='0/0 0.5/0.58 1/1':g='0/0 0.5/0.50 1/0.96':b='0/0.08 0.5/0.45 1/0.88'",
+        "eq_full": "eq=saturation=1.05:contrast=1.15",
+        "eq_social": "eq=saturation=1.10:contrast=1.18",
+    },
+    "bleach": {
+        "curves": None,
+        "eq_full": "eq=saturation=0.75:contrast=1.30:brightness=-0.01",
+        "eq_social": "eq=saturation=0.78:contrast=1.35:brightness=-0.01",
+    },
+    "natural": {
+        "curves": None,
+        "eq_full": "eq=saturation=0.95:contrast=1.05",
+        "eq_social": "eq=saturation=0.98:contrast=1.08",
+    },
+}
+
+
+def get_curves_grade_filter(grade_name, is_social=False):
+    """Return FFmpeg -vf filter string for the given color grade.
+
+    Args:
+        grade_name: One of worship-warm, teal-orange, bleach, natural.
+        is_social: If True, use slightly stronger eq for social reels.
+
+    Returns:
+        FFmpeg -vf filter string.
+    """
+    grade = CURVES_GRADES.get(grade_name, CURVES_GRADES["worship-warm"])
+    eq_key = "eq_social" if is_social else "eq_full"
+    parts = []
+    if grade["curves"]:
+        parts.append(grade["curves"])
+    parts.append(grade[eq_key])
+    return ",".join(parts)
+
+
+def apply_global_color_grade(input_path, output_path, grade_name, is_social=False):
+    """Apply global color grade via FFmpeg as a post-processing step.
+
+    Returns True on success, False on failure (original preserved).
+    """
+    vf = get_curves_grade_filter(grade_name, is_social=is_social)
+    cmd = [
+        "ffmpeg", "-i", input_path,
+        "-vf", vf,
+        "-c:v", "libx264", "-preset", "fast",
+        "-c:a", "copy",
+        "-y", output_path,
+    ]
+    try:
+        subprocess.run(cmd, check=True, capture_output=True)
+        return True
+    except Exception:
+        print(f"WARN: Global color grade failed for {input_path} — using original")
+        return False

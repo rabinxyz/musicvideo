@@ -1,5 +1,3 @@
-# Idea
-
 # Spec: Naprawa rozmiaru promptu dla director — za dużo tokenów
 
 ## Problem

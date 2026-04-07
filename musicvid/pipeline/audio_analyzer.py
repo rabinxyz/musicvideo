@@ -127,13 +127,11 @@ def analyze_audio(audio_path, output_dir=None, whisper_model="small", lyrics_pat
     y, sr = librosa.load(audio_path)
     duration = float(librosa.get_duration(y=y, sr=sr))
 
-    # Merge with lyrics file if provided (needs duration for timing corrections)
+    # Align with lyrics file if provided (fuzzy match Whisper to file text)
     if lyrics_path and Path(lyrics_path).exists():
-        from musicvid.pipeline.lyrics_parser import merge_whisper_with_lyrics_file
-        with open(lyrics_path, encoding="utf-8") as f:
-            file_lines = [l.strip() for l in f.readlines() if l.strip()]
-        lyrics = merge_whisper_with_lyrics_file(lyrics, file_lines, duration)
-        print(f"[Lyrics] Plik: {len(file_lines)} linii → {len(lyrics)} napisów")
+        from musicvid.pipeline.lyrics_aligner import align_lyrics
+        lyrics = align_lyrics(lyrics, lyrics_path)
+        print(f"[Lyrics] Aligned: {len(lyrics)} napisów")
         if lyrics:
             print(f"[Lyrics] Pierwszy: '{lyrics[0]['text']}' @ {lyrics[0]['start']:.1f}s")
     else:

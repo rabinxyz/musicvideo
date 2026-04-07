@@ -1,5 +1,3 @@
-# Idea
-
 # Spec: Synchronizacja napisów — fuzzy match z cursor (sliding window)
 
 ## Koncepcja

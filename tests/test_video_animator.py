@@ -1,6 +1,7 @@
 """Tests for Runway Gen-4 video animation module."""
 
 import os
+import requests
 from pathlib import Path
 from unittest.mock import patch, MagicMock
 
@@ -261,3 +262,83 @@ class TestRunwayErrorLogging:
         captured = capsys.readouterr()
         assert "Runway error" in captured.out
         assert "invalid ratio" in captured.out
+
+
+class TestEmptyPromptFallback:
+    """Ensure _submit_animation uses fallback when motion_prompt is empty or None."""
+
+    @patch("musicvid.pipeline.video_animator.time")
+    @patch("musicvid.pipeline.video_animator.requests")
+    def test_empty_string_gets_fallback(self, mock_requests, mock_time):
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = {"id": "task123"}
+        mock_requests.post.return_value = mock_resp
+        mock_requests.exceptions = requests.exceptions
+
+        from musicvid.pipeline.video_animator import _submit_animation
+        _submit_animation("base64data", "", 5)
+
+        payload = mock_requests.post.call_args[1]["json"]
+        assert payload["promptText"] == "Slow cinematic camera movement, natural light"
+
+    @patch("musicvid.pipeline.video_animator.time")
+    @patch("musicvid.pipeline.video_animator.requests")
+    def test_none_gets_fallback(self, mock_requests, mock_time):
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = {"id": "task123"}
+        mock_requests.post.return_value = mock_resp
+        mock_requests.exceptions = requests.exceptions
+
+        from musicvid.pipeline.video_animator import _submit_animation
+        _submit_animation("base64data", None, 5)
+
+        payload = mock_requests.post.call_args[1]["json"]
+        assert payload["promptText"] == "Slow cinematic camera movement, natural light"
+
+    @patch("musicvid.pipeline.video_animator.time")
+    @patch("musicvid.pipeline.video_animator.requests")
+    def test_whitespace_only_gets_fallback(self, mock_requests, mock_time):
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = {"id": "task123"}
+        mock_requests.post.return_value = mock_resp
+        mock_requests.exceptions = requests.exceptions
+
+        from musicvid.pipeline.video_animator import _submit_animation
+        _submit_animation("base64data", "   ", 5)
+
+        payload = mock_requests.post.call_args[1]["json"]
+        assert payload["promptText"] == "Slow cinematic camera movement, natural light"
+
+    @patch("musicvid.pipeline.video_animator.time")
+    @patch("musicvid.pipeline.video_animator.requests")
+    def test_valid_prompt_passes_through_stripped(self, mock_requests, mock_time):
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = {"id": "task123"}
+        mock_requests.post.return_value = mock_resp
+        mock_requests.exceptions = requests.exceptions
+
+        from musicvid.pipeline.video_animator import _submit_animation
+        _submit_animation("base64data", "  zoom in slowly  ", 5)
+
+        payload = mock_requests.post.call_args[1]["json"]
+        assert payload["promptText"] == "zoom in slowly"
+
+    @patch("musicvid.pipeline.video_animator.time")
+    @patch("musicvid.pipeline.video_animator.requests")
+    def test_long_prompt_truncated_to_500(self, mock_requests, mock_time):
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = {"id": "task123"}
+        mock_requests.post.return_value = mock_resp
+        mock_requests.exceptions = requests.exceptions
+
+        from musicvid.pipeline.video_animator import _submit_animation
+        long_prompt = "a" * 600
+        _submit_animation("base64data", long_prompt, 5)
+
+        payload = mock_requests.post.call_args[1]["json"]
+        assert len(payload["promptText"]) == 500

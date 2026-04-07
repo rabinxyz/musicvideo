@@ -444,10 +444,12 @@ def _create_subtitle_clips(lyrics, subtitle_style, size, font_path=None, subtitl
         else:
             section = None
             font_size = subtitle_style.get("font_size", _DEFAULT_FONT_SIZE)
-        if reels_mode and section == "chorus":
-            font_size = 72
+        if reels_mode:
+            font_size = min(font_size, 52)
         descender_pad = int(font_size * 0.35)
         padded_height = font_size + descender_pad
+
+        subtitle_width = 900 if reels_mode else size[0] - 100
 
         y_pos = size[1] - margin_bottom - padded_height
         if y_pos >= size[1]:
@@ -464,7 +466,7 @@ def _create_subtitle_clips(lyrics, subtitle_style, size, font_path=None, subtitl
                 stroke_width=2,
                 font=effective_font,
                 method="caption",
-                size=(size[0] - 100, padded_height),
+                size=(subtitle_width, padded_height),
             )
         except Exception as e:
             print(f"Warning: subtitle failed for '{segment['text']}' with font {effective_font!r}: {e}")
@@ -478,7 +480,7 @@ def _create_subtitle_clips(lyrics, subtitle_style, size, font_path=None, subtitl
                         stroke_width=2,
                         font=None,
                         method="caption",
-                        size=(size[0] - 100, padded_height),
+                        size=(subtitle_width, padded_height),
                     )
                 except Exception as e2:
                     print(f"Warning: subtitle fallback also failed: {e2}")

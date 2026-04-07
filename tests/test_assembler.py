@@ -1602,7 +1602,7 @@ class TestScalePopSubtitles(unittest.TestCase):
 class TestReelsSubtitleFontSize(unittest.TestCase):
     @patch("musicvid.pipeline.assembler.TextClip")
     @patch("musicvid.pipeline.assembler.vfx")
-    def test_chorus_font_size_72_in_reels_mode(self, mock_vfx, mock_textclip):
+    def test_chorus_font_size_52_in_reels_mode(self, mock_vfx, mock_textclip):
         from musicvid.pipeline.assembler import _create_subtitle_clips
 
         mock_clip = MagicMock()
@@ -1626,7 +1626,7 @@ class TestReelsSubtitleFontSize(unittest.TestCase):
                                sections=sections, reels_mode=True)
 
         call_kwargs = mock_textclip.call_args[1]
-        self.assertEqual(call_kwargs.get("font_size"), 72)
+        self.assertEqual(call_kwargs.get("font_size"), 52)
 
     @patch("musicvid.pipeline.assembler.TextClip")
     @patch("musicvid.pipeline.assembler.vfx")
@@ -1656,6 +1656,98 @@ class TestReelsSubtitleFontSize(unittest.TestCase):
         call_kwargs = mock_textclip.call_args[1]
         # Should be 64 (chorus size from _SECTION_FONT_SIZES), not 72
         self.assertEqual(call_kwargs.get("font_size"), 64)
+
+
+class TestReelsSubtitleWidth(unittest.TestCase):
+    @patch("musicvid.pipeline.assembler.vfx")
+    @patch("musicvid.pipeline.assembler.TextClip")
+    def test_reels_subtitle_width_900(self, mock_textclip, mock_vfx):
+        from musicvid.pipeline.assembler import _create_subtitle_clips
+
+        mock_clip = MagicMock()
+        mock_clip.with_duration.return_value = mock_clip
+        mock_clip.with_start.return_value = mock_clip
+        mock_clip.with_position.return_value = mock_clip
+        mock_clip.with_effects.return_value = mock_clip
+        mock_clip.transform.return_value = mock_clip
+        mock_textclip.return_value = mock_clip
+
+        lyrics = [{"start": 1.0, "end": 3.0, "text": "Test", "words": []}]
+        style = {"color": "#FFFFFF", "outline_color": "#000000"}
+
+        _create_subtitle_clips(lyrics, style, (1080, 1920), reels_mode=True)
+
+        call_kwargs = mock_textclip.call_args[1]
+        width = call_kwargs["size"][0]
+        assert width == 900, f"Expected 900, got {width}"
+
+    @patch("musicvid.pipeline.assembler.vfx")
+    @patch("musicvid.pipeline.assembler.TextClip")
+    def test_landscape_subtitle_width_unchanged(self, mock_textclip, mock_vfx):
+        from musicvid.pipeline.assembler import _create_subtitle_clips
+
+        mock_clip = MagicMock()
+        mock_clip.with_duration.return_value = mock_clip
+        mock_clip.with_start.return_value = mock_clip
+        mock_clip.with_position.return_value = mock_clip
+        mock_clip.with_effects.return_value = mock_clip
+        mock_textclip.return_value = mock_clip
+
+        lyrics = [{"start": 1.0, "end": 3.0, "text": "Test", "words": []}]
+        style = {"color": "#FFFFFF", "outline_color": "#000000"}
+
+        _create_subtitle_clips(lyrics, style, (1920, 1080), reels_mode=False)
+
+        call_kwargs = mock_textclip.call_args[1]
+        width = call_kwargs["size"][0]
+        assert width == 1920 - 100, f"Expected 1820, got {width}"
+
+
+class TestReelsFontSizeCap(unittest.TestCase):
+    @patch("musicvid.pipeline.assembler.vfx")
+    @patch("musicvid.pipeline.assembler.TextClip")
+    def test_chorus_font_capped_at_52_in_reels(self, mock_textclip, mock_vfx):
+        from musicvid.pipeline.assembler import _create_subtitle_clips
+
+        mock_clip = MagicMock()
+        mock_clip.with_duration.return_value = mock_clip
+        mock_clip.with_start.return_value = mock_clip
+        mock_clip.with_position.return_value = mock_clip
+        mock_clip.with_effects.return_value = mock_clip
+        mock_clip.transform.return_value = mock_clip
+        mock_textclip.return_value = mock_clip
+
+        lyrics = [{"start": 10.0, "end": 12.0, "text": "Alleluja", "words": []}]
+        style = {"color": "#FFFFFF", "outline_color": "#000000"}
+        sections = [{"label": "chorus", "start": 8.0, "end": 20.0}]
+
+        _create_subtitle_clips(lyrics, style, (1080, 1920),
+                               sections=sections, reels_mode=True)
+
+        call_kwargs = mock_textclip.call_args[1]
+        assert call_kwargs["font_size"] <= 52, f"Expected <=52, got {call_kwargs['font_size']}"
+
+    @patch("musicvid.pipeline.assembler.vfx")
+    @patch("musicvid.pipeline.assembler.TextClip")
+    def test_verse_font_capped_at_52_in_reels(self, mock_textclip, mock_vfx):
+        from musicvid.pipeline.assembler import _create_subtitle_clips
+
+        mock_clip = MagicMock()
+        mock_clip.with_duration.return_value = mock_clip
+        mock_clip.with_start.return_value = mock_clip
+        mock_clip.with_position.return_value = mock_clip
+        mock_clip.with_effects.return_value = mock_clip
+        mock_textclip.return_value = mock_clip
+
+        lyrics = [{"start": 1.0, "end": 3.0, "text": "Test", "words": []}]
+        style = {"color": "#FFFFFF", "outline_color": "#000000"}
+        sections = [{"label": "verse", "start": 0.0, "end": 10.0}]
+
+        _create_subtitle_clips(lyrics, style, (1080, 1920),
+                               sections=sections, reels_mode=True)
+
+        call_kwargs = mock_textclip.call_args[1]
+        assert call_kwargs["font_size"] <= 52, f"Expected <=52, got {call_kwargs['font_size']}"
 
 
 class TestReelsGradientOverlay(unittest.TestCase):

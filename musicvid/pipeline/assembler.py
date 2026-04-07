@@ -446,12 +446,19 @@ def _create_subtitle_clips(lyrics, subtitle_style, size, font_path=None, subtitl
             font_size = subtitle_style.get("font_size", _DEFAULT_FONT_SIZE)
         if reels_mode:
             font_size = min(font_size, 52)
-        descender_pad = int(font_size * 0.35)
-        padded_height = font_size + descender_pad
+
+        lyric_text = segment["text"]
+        if reels_mode:
+            lyric_text = wrap_for_portrait(lyric_text, max_chars=25)
+
+        lines_count = lyric_text.count("\n") + 1
+        line_height = int(font_size * 1.4)
+        total_height = lines_count * line_height
+        padded_height = total_height
 
         subtitle_width = 900 if reels_mode else size[0] - 100
 
-        y_pos = size[1] - margin_bottom - padded_height
+        y_pos = size[1] - total_height - margin_bottom
         if y_pos >= size[1]:
             print(f"Warning: subtitle y={y_pos} is outside frame height={size[1]}, clamping")
             y_pos = size[1] - padded_height - 10
@@ -459,7 +466,7 @@ def _create_subtitle_clips(lyrics, subtitle_style, size, font_path=None, subtitl
         effective_font = font_path
         try:
             txt_clip = TextClip(
-                text=segment["text"],
+                text=lyric_text,
                 font_size=font_size,
                 color=color,
                 stroke_color=outline_color,
@@ -469,11 +476,11 @@ def _create_subtitle_clips(lyrics, subtitle_style, size, font_path=None, subtitl
                 size=(subtitle_width, padded_height),
             )
         except Exception as e:
-            print(f"Warning: subtitle failed for '{segment['text']}' with font {effective_font!r}: {e}")
+            print(f"Warning: subtitle failed for '{lyric_text}' with font {effective_font!r}: {e}")
             if effective_font is not None:
                 try:
                     txt_clip = TextClip(
-                        text=segment["text"],
+                        text=lyric_text,
                         font_size=font_size,
                         color=color,
                         stroke_color=outline_color,

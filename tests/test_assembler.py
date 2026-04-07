@@ -1189,7 +1189,7 @@ class TestSubtitleErrorHandling:
     @patch("musicvid.pipeline.assembler.vfx")
     @patch("musicvid.pipeline.assembler.TextClip")
     def test_textclip_height_includes_descender_padding(self, mock_text_clip, mock_vfx, sample_analysis, sample_scene_plan):
-        """TextClip height must be font_size + 35% to accommodate descenders."""
+        """TextClip height must accommodate descenders (single line = int(font_size * 1.4))."""
         mock_clip = MagicMock()
         mock_clip.with_duration.return_value = mock_clip
         mock_clip.with_start.return_value = mock_clip
@@ -1207,7 +1207,7 @@ class TestSubtitleErrorHandling:
         call_kwargs = mock_text_clip.call_args_list[0][1]
         w, h = call_kwargs["size"]
         font_size = 58
-        expected_h = font_size + int(font_size * 0.35)
+        expected_h = int(font_size * 1.4)
         assert h == expected_h, f"Expected TextClip height={expected_h}, got {h}"
 
     @patch("musicvid.pipeline.assembler.vfx")
@@ -1235,7 +1235,7 @@ class TestSubtitleErrorHandling:
         pos_call = mock_clip.with_position.call_args_list[0]
         args, _ = pos_call
         y_pos = args[0][1]
-        padded_h = font_size + int(font_size * 0.35)
+        padded_h = int(font_size * 1.4)
         assert y_pos + padded_h == frame_h - margin_bottom, (
             f"Expected y_pos + padded_h = {frame_h - margin_bottom}, got {y_pos + padded_h}"
         )
@@ -2108,3 +2108,115 @@ class TestWrapForPortrait(unittest.TestCase):
         assert len(lines) >= 3
         for line in lines:
             assert len(line) <= 15
+
+
+class TestReelsSubtitleWrapping(unittest.TestCase):
+    @patch("musicvid.pipeline.assembler.vfx")
+    @patch("musicvid.pipeline.assembler.TextClip")
+    def test_long_text_wrapped_in_reels(self, mock_textclip, mock_vfx):
+        from musicvid.pipeline.assembler import _create_subtitle_clips
+
+        mock_clip = MagicMock()
+        mock_clip.with_duration.return_value = mock_clip
+        mock_clip.with_start.return_value = mock_clip
+        mock_clip.with_position.return_value = mock_clip
+        mock_clip.with_effects.return_value = mock_clip
+        mock_textclip.return_value = mock_clip
+
+        lyrics = [{"start": 1.0, "end": 3.0,
+                    "text": "Panie Boże prowadź mnie dalej", "words": []}]
+        style = {"color": "#FFFFFF", "outline_color": "#000000"}
+
+        _create_subtitle_clips(lyrics, style, (1080, 1920), reels_mode=True)
+
+        call_kwargs = mock_textclip.call_args[1]
+        assert "\n" in call_kwargs["text"], "Long text should be wrapped in reels mode"
+
+    @patch("musicvid.pipeline.assembler.vfx")
+    @patch("musicvid.pipeline.assembler.TextClip")
+    def test_short_text_not_wrapped_in_reels(self, mock_textclip, mock_vfx):
+        from musicvid.pipeline.assembler import _create_subtitle_clips
+
+        mock_clip = MagicMock()
+        mock_clip.with_duration.return_value = mock_clip
+        mock_clip.with_start.return_value = mock_clip
+        mock_clip.with_position.return_value = mock_clip
+        mock_clip.with_effects.return_value = mock_clip
+        mock_textclip.return_value = mock_clip
+
+        lyrics = [{"start": 1.0, "end": 3.0, "text": "Alleluja", "words": []}]
+        style = {"color": "#FFFFFF", "outline_color": "#000000"}
+
+        _create_subtitle_clips(lyrics, style, (1080, 1920), reels_mode=True)
+
+        call_kwargs = mock_textclip.call_args[1]
+        assert "\n" not in call_kwargs["text"]
+
+    @patch("musicvid.pipeline.assembler.vfx")
+    @patch("musicvid.pipeline.assembler.TextClip")
+    def test_text_not_wrapped_in_landscape(self, mock_textclip, mock_vfx):
+        from musicvid.pipeline.assembler import _create_subtitle_clips
+
+        mock_clip = MagicMock()
+        mock_clip.with_duration.return_value = mock_clip
+        mock_clip.with_start.return_value = mock_clip
+        mock_clip.with_position.return_value = mock_clip
+        mock_clip.with_effects.return_value = mock_clip
+        mock_textclip.return_value = mock_clip
+
+        lyrics = [{"start": 1.0, "end": 3.0,
+                    "text": "Panie Boże prowadź mnie dalej", "words": []}]
+        style = {"color": "#FFFFFF", "outline_color": "#000000"}
+
+        _create_subtitle_clips(lyrics, style, (1920, 1080), reels_mode=False)
+
+        call_kwargs = mock_textclip.call_args[1]
+        assert "\n" not in call_kwargs["text"]
+
+
+class TestReelsMultilinePosition(unittest.TestCase):
+    @patch("musicvid.pipeline.assembler.vfx")
+    @patch("musicvid.pipeline.assembler.TextClip")
+    def test_two_line_subtitle_position_higher(self, mock_textclip, mock_vfx):
+        from musicvid.pipeline.assembler import _create_subtitle_clips
+
+        mock_clip = MagicMock()
+        mock_clip.with_duration.return_value = mock_clip
+        mock_clip.with_start.return_value = mock_clip
+        mock_clip.with_position.return_value = mock_clip
+        mock_clip.with_effects.return_value = mock_clip
+        mock_textclip.return_value = mock_clip
+
+        long_text = "Panie Boże prowadź mnie dalej"
+        lyrics = [{"start": 1.0, "end": 3.0, "text": long_text, "words": []}]
+        style = {"color": "#FFFFFF", "outline_color": "#000000"}
+
+        _create_subtitle_clips(lyrics, style, (1080, 1920),
+                               reels_mode=True, subtitle_margin_bottom=200)
+
+        pos_call = mock_clip.with_position.call_args[0][0]
+        y_pos = pos_call[1]
+        assert y_pos < 1920 - 200, f"y_pos {y_pos} should be well above bottom margin"
+
+    @patch("musicvid.pipeline.assembler.vfx")
+    @patch("musicvid.pipeline.assembler.TextClip")
+    def test_multiline_textclip_height_accounts_for_lines(self, mock_textclip, mock_vfx):
+        from musicvid.pipeline.assembler import _create_subtitle_clips
+
+        mock_clip = MagicMock()
+        mock_clip.with_duration.return_value = mock_clip
+        mock_clip.with_start.return_value = mock_clip
+        mock_clip.with_position.return_value = mock_clip
+        mock_clip.with_effects.return_value = mock_clip
+        mock_textclip.return_value = mock_clip
+
+        long_text = "Panie Boże prowadź mnie dalej"
+        lyrics = [{"start": 1.0, "end": 3.0, "text": long_text, "words": []}]
+        style = {"color": "#FFFFFF", "outline_color": "#000000"}
+
+        _create_subtitle_clips(lyrics, style, (1080, 1920), reels_mode=True)
+
+        call_kwargs = mock_textclip.call_args[1]
+        height = call_kwargs["size"][1]
+        single_line_height = 52 + int(52 * 0.35)
+        assert height > single_line_height, f"Height {height} should account for 2 lines"

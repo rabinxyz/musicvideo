@@ -1,5 +1,3 @@
-# Idea
-
 # Spec: Naprawa napisów na rolkach — tekst przechodzi do niewidocznej drugiej linii
 
 ## Problem

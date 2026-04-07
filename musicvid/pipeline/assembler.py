@@ -546,6 +546,32 @@ def _create_bottom_gradient(width, height, duration, gradient_height_pct=0.3, op
     return clip
 
 
+def _create_reel_intro_hook(video_clip, target_size, freeze_duration=0.5, fade_duration=0.3):
+    """Create a freeze frame intro hook for reels.
+
+    Takes the frame at 50% of the first second (the 'peak visual moment'),
+    displays it for freeze_duration, then fades out into the normal video.
+
+    Args:
+        video_clip: The concatenated video clip.
+        target_size: (width, height) tuple.
+        freeze_duration: How long to show the freeze frame (default 0.5s).
+        fade_duration: Fade out duration (default 0.3s).
+
+    Returns:
+        ImageClip of the freeze frame, or None if extraction fails.
+    """
+    try:
+        sample_t = min(0.5, video_clip.duration / 2)
+        frame = video_clip.get_frame(sample_t)
+        freeze = ImageClip(frame).with_duration(freeze_duration)
+        freeze = freeze.with_effects([vfx.FadeOut(fade_duration)])
+        return freeze
+    except Exception as e:
+        print(f"WARN: reel intro hook failed: {e}")
+        return None
+
+
 def _load_scene_clip(video_path, scene, target_size, reels_style="blur-bg"):
     """Load a video or image clip for a scene."""
     if video_path is None:
@@ -658,6 +684,12 @@ def assemble_video(analysis, scene_plan, fetch_manifest, audio_path, output_path
         layers.append(logo_clip)
 
     final = CompositeVideoClip(layers, size=target_size)
+
+    # Reel intro hook: freeze frame prepended to reel
+    if target_size == (1080, 1920):
+        intro_hook = _create_reel_intro_hook(video, target_size)
+        if intro_hook:
+            final = concatenate_videoclips([intro_hook, final])
 
     if clip_start is not None:
         final = final.with_effects([vfx.FadeIn(0.5), vfx.FadeOut(1.0)])

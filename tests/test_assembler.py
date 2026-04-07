@@ -14,6 +14,7 @@ from musicvid.pipeline.assembler import (
     _create_subtitle_clips,
     _get_resolution,
     _make_reel_zoom_punch,
+    _create_reel_intro_hook,
 )
 
 
@@ -1903,3 +1904,33 @@ class TestTextFlash:
         clips = _create_subtitle_clips(lyrics, subtitle_style, (1920, 1080),
                                        sections=None, reels_mode=False)
         assert len(clips) == 1  # only subtitle, no flash
+
+
+class TestReelIntroHook:
+    def test_returns_clip_when_video_has_frames(self):
+        mock_video = MagicMock()
+        mock_video.get_frame.return_value = np.full((1920, 1080, 3), 128, dtype=np.uint8)
+        mock_video.duration = 30.0
+        result = _create_reel_intro_hook(mock_video, (1080, 1920))
+        assert result is not None
+
+    @patch("musicvid.pipeline.assembler.ImageClip")
+    def test_creates_freeze_frame_from_video(self, mock_image_clip):
+        mock_video = MagicMock()
+        mock_video.get_frame.return_value = np.full((1920, 1080, 3), 128, dtype=np.uint8)
+        mock_video.duration = 30.0
+        mock_freeze = MagicMock()
+        mock_freeze.with_duration.return_value = mock_freeze
+        mock_freeze.with_effects.return_value = mock_freeze
+        mock_image_clip.return_value = mock_freeze
+
+        result = _create_reel_intro_hook(mock_video, (1080, 1920))
+        mock_image_clip.assert_called_once()
+        mock_video.get_frame.assert_called()
+
+    def test_returns_none_on_failure(self):
+        mock_video = MagicMock()
+        mock_video.get_frame.side_effect = Exception("frame error")
+        mock_video.duration = 30.0
+        result = _create_reel_intro_hook(mock_video, (1080, 1920))
+        assert result is None

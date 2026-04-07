@@ -392,14 +392,17 @@ _TRANSITIONS_MAP = {
 _DEFAULT_TRANSITION = "cross_dissolve"
 
 
-def _assign_dynamic_transitions(scenes, bpm):
-    """Assign transition_to_next on each scene (except the last) based on section pairs.
-
-    Does not affect the last scene. Returns mutated scenes list.
-    """
+def _assign_dynamic_transitions(scenes, bpm, reactor=None):
+    """Set transition_to_next per scene based on section pairs or energy reactor."""
     for i in range(len(scenes) - 1):
-        key = (scenes[i].get("section", ""), scenes[i + 1].get("section", ""))
-        scenes[i]["transition_to_next"] = _TRANSITIONS_MAP.get(key, _DEFAULT_TRANSITION)
+        if reactor is not None:
+            trans = reactor.get_transition(scenes[i]["end"])
+            scenes[i]["transition_to_next"] = trans["type"]
+        else:
+            key = (scenes[i].get("section", ""), scenes[i + 1].get("section", ""))
+            scenes[i]["transition_to_next"] = _TRANSITIONS_MAP.get(key, _DEFAULT_TRANSITION)
+    if scenes:
+        scenes[-1]["transition_to_next"] = "cut"
     return scenes
 
 
@@ -659,9 +662,14 @@ def cli(audio_file, mode, provider, style, output, resolution, lang, new, font_p
     scene_plan["scenes"] = _enforce_motion_variety(scene_plan["scenes"])
 
     # Assign section-based transitions (only when --transitions auto)
+    reactor = None
+    if analysis.get("energy_curve"):
+        from musicvid.pipeline.energy_reactor import EnergyReactor
+        reactor = EnergyReactor(analysis)
+
     if transitions_mode == "auto":
         bpm = analysis.get("bpm", 120.0)
-        _assign_dynamic_transitions(scene_plan["scenes"], bpm)
+        _assign_dynamic_transitions(scene_plan["scenes"], bpm, reactor=reactor)
 
     # Stage 3: Fetch Videos or Generate Images
     manifest_suffix = f"_clip_{clip_duration}s" if clip_duration else ""
@@ -899,7 +907,7 @@ def _run_preset_mode(preset, reel_duration, analysis, scene_plan, fetch_manifest
                     lut_intensity=lut_intensity,
                     color_grade=color_grade,
                     reels_style=reels_style,
-                    wow_config=wow_config,
+                    wow_config=None,  # Balance spec: disable WOW for social reels
                 ),
             ))
 

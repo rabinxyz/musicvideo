@@ -58,6 +58,7 @@ class TestAnalyzeAudio:
         mock_librosa.beat.beat_track.return_value = (120.0, np.array([0, 11025, 22050]))
         mock_librosa.get_duration.return_value = 10.0
         mock_librosa.frames_to_time.return_value = np.array([0.0, 0.5, 1.0])
+        mock_librosa.feature.rms.return_value = np.array([[0.1, 0.5, 0.9]])
 
         audio_file = tmp_path / "test.mp3"
         audio_file.write_bytes(b"fake audio data")
@@ -85,6 +86,7 @@ class TestAnalyzeAudio:
         mock_librosa.beat.beat_track.return_value = (120.0, np.array([0]))
         mock_librosa.get_duration.return_value = 10.0
         mock_librosa.frames_to_time.return_value = np.array([0.0])
+        mock_librosa.feature.rms.return_value = np.array([[0.1, 0.5, 0.9]])
 
         audio_file = tmp_path / "test.mp3"
         audio_file.write_bytes(b"fake audio data")
@@ -116,6 +118,7 @@ class TestAnalyzeAudio:
         mock_librosa.beat.beat_track.return_value = (120.0, np.array([0, 11025, 22050]))
         mock_librosa.get_duration.return_value = 10.0
         mock_librosa.frames_to_time.return_value = np.array([0.0, 0.5, 1.0])
+        mock_librosa.feature.rms.return_value = np.array([[0.1, 0.5, 0.9]])
 
         audio_file = tmp_path / "test.mp3"
         audio_file.write_bytes(b"fake audio data")
@@ -138,6 +141,7 @@ class TestAnalyzeAudio:
         mock_librosa.beat.beat_track.return_value = (120.0, np.array([0]))
         mock_librosa.get_duration.return_value = 10.0
         mock_librosa.frames_to_time.return_value = np.array([0.0])
+        mock_librosa.feature.rms.return_value = np.array([[0.1, 0.5, 0.9]])
 
         audio_file = tmp_path / "test.mp3"
         audio_file.write_bytes(b"fake audio data")
@@ -163,6 +167,7 @@ class TestAnalyzeAudio:
         mock_librosa.beat.beat_track.return_value = (120.0, np.array([0]))
         mock_librosa.get_duration.return_value = 10.0
         mock_librosa.frames_to_time.return_value = np.array([0.0])
+        mock_librosa.feature.rms.return_value = np.array([[0.1, 0.5, 0.9]])
 
         audio_file = tmp_path / "test.mp3"
         audio_file.write_bytes(b"fake audio data")
@@ -189,6 +194,7 @@ class TestAnalyzeAudio:
         mock_librosa.beat.beat_track.return_value = (120.0, np.array([0]))
         mock_librosa.get_duration.return_value = 10.0
         mock_librosa.frames_to_time.return_value = np.array([0.0])
+        mock_librosa.feature.rms.return_value = np.array([[0.1, 0.5, 0.9]])
 
         audio_file = tmp_path / "test.mp3"
         audio_file.write_bytes(b"fake audio data")
@@ -215,6 +221,7 @@ class TestAnalyzeAudio:
         mock_librosa.beat.beat_track.return_value = (120.0, np.array([0]))
         mock_librosa.get_duration.return_value = 10.0
         mock_librosa.frames_to_time.return_value = np.array([0.0])
+        mock_librosa.feature.rms.return_value = np.array([[0.1, 0.5, 0.9]])
 
         audio_file = tmp_path / "test.mp3"
         audio_file.write_bytes(b"fake audio data")
@@ -238,10 +245,12 @@ class TestAnalyzeAudio:
         mock_librosa.get_duration.return_value = 10.0
         mock_librosa.onset.onset_strength.return_value = np.zeros(100)
         mock_librosa.util.peak_pick.return_value = np.array([10, 30, 50])
-        # frames_to_time is called multiple times: beats AND energy_peaks
+        mock_librosa.feature.rms.return_value = np.array([[0.1, 0.5, 0.9]])
+        # frames_to_time is called multiple times: beats, energy_peaks, rms_times
         mock_librosa.frames_to_time.side_effect = [
             np.array([0.0, 0.5, 1.0]),  # beats
             np.array([0.46, 1.39, 2.32]),  # energy_peaks
+            np.array([0.0, 0.5, 1.0]),  # rms_times
         ]
 
         audio_file = tmp_path / "test.mp3"
@@ -267,9 +276,11 @@ class TestAnalyzeAudio:
         mock_librosa.get_duration.return_value = 10.0
         mock_librosa.onset.onset_strength.return_value = np.zeros(100)
         mock_librosa.util.peak_pick.return_value = np.array([10, 30, 50])
+        mock_librosa.feature.rms.return_value = np.array([[0.1, 0.5, 0.9]])
         mock_librosa.frames_to_time.side_effect = [
             np.array([0.0, 0.5, 1.0]),  # beats
             np.array([0.46, 1.39, 2.32]),  # energy_peaks
+            np.array([0.0, 0.5, 1.0]),  # rms_times
         ]
 
         audio_file = tmp_path / "test.mp3"
@@ -308,6 +319,7 @@ class TestAnalyzeAudio:
         mock_librosa.beat.beat_track.return_value = (120.0, np.array([0]))
         mock_librosa.get_duration.return_value = 10.0
         mock_librosa.frames_to_time.return_value = np.array([0.0])
+        mock_librosa.feature.rms.return_value = np.array([[0.1, 0.5, 0.9]])
 
         audio_file = tmp_path / "test.mp3"
         audio_file.write_bytes(b"fake audio data")
@@ -330,6 +342,7 @@ class TestAnalyzeAudio:
         mock_librosa.beat.beat_track.return_value = (120.0, np.array([0]))
         mock_librosa.get_duration.return_value = 10.0
         mock_librosa.frames_to_time.return_value = np.array([0.0])
+        mock_librosa.feature.rms.return_value = np.array([[0.1, 0.5, 0.9]])
         mock_align.return_value = [{"start": 0.5, "end": 2.0, "text": "Aligned line"}]
 
         lyrics_file = tmp_path / "tekst.txt"
@@ -355,6 +368,7 @@ class TestAnalyzeAudio:
         mock_librosa.beat.beat_track.return_value = (120.0, np.array([0]))
         mock_librosa.get_duration.return_value = 10.0
         mock_librosa.frames_to_time.return_value = np.array([0.0])
+        mock_librosa.feature.rms.return_value = np.array([[0.1, 0.5, 0.9]])
 
         audio_file = tmp_path / "test.mp3"
         audio_file.write_bytes(b"fake audio data")
@@ -376,6 +390,7 @@ class TestAnalyzeAudio:
         mock_librosa.beat.beat_track.return_value = (120.0, np.array([0]))
         mock_librosa.get_duration.return_value = 10.0
         mock_librosa.frames_to_time.return_value = np.array([0.0])
+        mock_librosa.feature.rms.return_value = np.array([[0.1, 0.5, 0.9]])
 
         audio_file = tmp_path / "test.mp3"
         audio_file.write_bytes(b"fake audio data")
@@ -384,3 +399,82 @@ class TestAnalyzeAudio:
 
         assert (tmp_path / "audio_analysis.json").exists()
         assert not (tmp_path / "analysis.json").exists()
+
+
+class TestEnergyCurve:
+    """Tests for energy_curve and energy_mean in analysis output."""
+
+    @patch("musicvid.pipeline.audio_analyzer.whisper")
+    @patch("musicvid.pipeline.audio_analyzer.librosa")
+    def test_energy_curve_present_in_analysis(self, mock_librosa, mock_whisper, mock_whisper_result, mock_audio_signal, tmp_path):
+        """energy_curve and energy_mean must be present in analysis result."""
+        y, sr = mock_audio_signal
+
+        mock_model = MagicMock()
+        mock_model.transcribe.return_value = mock_whisper_result
+        mock_whisper.load_model.return_value = mock_model
+
+        mock_librosa.load.return_value = (y, sr)
+        mock_librosa.beat.beat_track.return_value = (120.0, np.array([0, 11025, 22050]))
+        mock_librosa.get_duration.return_value = 10.0
+        mock_librosa.onset.onset_strength.return_value = np.zeros(100)
+        mock_librosa.util.peak_pick.return_value = np.array([10, 30, 50])
+        # RMS returns shape (1, N) — we index [0] in code
+        mock_librosa.feature.rms.return_value = np.array([[0.1, 0.3, 0.5, 0.8, 1.0]])
+        # frames_to_time called 3 times: beats, energy_peaks, rms_times
+        mock_librosa.frames_to_time.side_effect = [
+            np.array([0.0, 0.5, 1.0]),        # beats
+            np.array([0.46, 1.39, 2.32]),      # energy_peaks
+            np.array([0.0, 0.5, 1.0, 1.5, 2.0]),  # rms_times
+        ]
+
+        audio_file = tmp_path / "test.mp3"
+        audio_file.write_bytes(b"fake audio data")
+
+        result = analyze_audio(str(audio_file))
+
+        assert "energy_curve" in result
+        assert "energy_mean" in result
+        assert isinstance(result["energy_curve"], list)
+        assert isinstance(result["energy_mean"], float)
+        assert len(result["energy_curve"]) == 5
+        # Each entry is [time, energy]
+        for entry in result["energy_curve"]:
+            assert len(entry) == 2
+            assert 0.0 <= entry[1] <= 1.0
+        assert 0.0 <= result["energy_mean"] <= 1.0
+
+    @patch("musicvid.pipeline.audio_analyzer.whisper")
+    @patch("musicvid.pipeline.audio_analyzer.librosa")
+    def test_energy_curve_constant_signal_normalized(self, mock_librosa, mock_whisper, mock_whisper_result, mock_audio_signal, tmp_path):
+        """Constant RMS signal (zero range) should not crash (div-by-zero guard)."""
+        y, sr = mock_audio_signal
+
+        mock_model = MagicMock()
+        mock_model.transcribe.return_value = mock_whisper_result
+        mock_whisper.load_model.return_value = mock_model
+
+        mock_librosa.load.return_value = (y, sr)
+        mock_librosa.beat.beat_track.return_value = (120.0, np.array([0]))
+        mock_librosa.get_duration.return_value = 10.0
+        mock_librosa.onset.onset_strength.return_value = np.zeros(100)
+        mock_librosa.util.peak_pick.return_value = np.array([10])
+        # Constant RMS — all values identical → range is 0
+        mock_librosa.feature.rms.return_value = np.array([[0.5, 0.5, 0.5]])
+        mock_librosa.frames_to_time.side_effect = [
+            np.array([0.0]),              # beats
+            np.array([0.46]),             # energy_peaks
+            np.array([0.0, 0.5, 1.0]),   # rms_times
+        ]
+
+        audio_file = tmp_path / "test.mp3"
+        audio_file.write_bytes(b"fake audio data")
+
+        result = analyze_audio(str(audio_file))
+
+        assert "energy_curve" in result
+        assert "energy_mean" in result
+        # All normalized values should be 0.0 when range is zero
+        for entry in result["energy_curve"]:
+            assert entry[1] == 0.0
+        assert result["energy_mean"] == 0.0

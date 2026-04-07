@@ -156,6 +156,17 @@ def analyze_audio(audio_path, output_dir=None, whisper_model="small", lyrics_pat
     peak_times = librosa.frames_to_time(raw_peaks, sr=sr)
     energy_peaks = [round(float(t), 2) for t in peak_times]
 
+    # Energy curve: RMS energy per frame, normalized 0.0-1.0
+    rms = librosa.feature.rms(y=y, sr=sr, hop_length=512)[0]
+    rms_times = librosa.frames_to_time(np.arange(len(rms)), sr=sr)
+    rms_range = rms.max() - rms.min()
+    if rms_range > 0:
+        rms_norm = (rms - rms.min()) / rms_range
+    else:
+        rms_norm = np.zeros_like(rms)
+    energy_curve = [[round(float(t), 3), round(float(e), 4)] for t, e in zip(rms_times, rms_norm)]
+    energy_mean_val = round(float(np.mean(rms_norm)), 4)
+
     result = {
         "lyrics": lyrics,
         "beats": beats,
@@ -165,6 +176,8 @@ def analyze_audio(audio_path, output_dir=None, whisper_model="small", lyrics_pat
         "mood_energy": mood_energy,
         "language": language,
         "energy_peaks": energy_peaks,
+        "energy_curve": energy_curve,
+        "energy_mean": energy_mean_val,
     }
 
     if output_dir:

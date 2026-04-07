@@ -1,5 +1,3 @@
-# Idea
-
 # Spec: Naprawa Runway — pusty promptText
 
 ## Problem

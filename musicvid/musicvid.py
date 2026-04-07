@@ -464,7 +464,7 @@ def _color_grade_for_style(overall_style):
 @click.option("--new", is_flag=True, default=False, help="Force recalculation, ignore cache.")
 @click.option("--font", "font_path", type=click.Path(), default=None, help="Custom .ttf font file for subtitles.")
 @click.option("--lyrics", "lyrics_path", type=click.Path(), default=None, help="Path to .txt lyrics file (skips Whisper).")
-@click.option("--effects", type=click.Choice(["none", "minimal", "full"]), default="minimal", help="Visual effects level.")
+@click.option("--effects", type=click.Choice(["none", "minimal", "full"]), default="full", help="Visual effects level.")
 @click.option("--clip", "clip_duration", type=click.Choice(["15", "20", "25", "30"]), default=None, help="Clip duration in seconds for social media (selects best fragment).")
 @click.option("--platform", type=click.Choice(["reels", "shorts", "tiktok"]), default=None, help="Social media platform (sets portrait 9:16 resolution).")
 @click.option("--title-card", is_flag=True, default=False, help="Add 2-second title card with song name at start of clip.")

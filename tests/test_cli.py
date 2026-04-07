@@ -1259,7 +1259,7 @@ class TestEffectsFlag:
     @patch("musicvid.musicvid.fetch_videos")
     @patch("musicvid.musicvid.create_scene_plan")
     @patch("musicvid.musicvid.analyze_audio")
-    def test_effects_defaults_to_minimal(
+    def test_effects_defaults_to_full(
         self, mock_analyze, mock_direct, mock_fetch, mock_assemble, mock_font, runner, tmp_path
     ):
         audio_file = tmp_path / "test.mp3"
@@ -1289,7 +1289,7 @@ class TestEffectsFlag:
 
         assert result.exit_code == 0
         call_kwargs = mock_assemble.call_args[1]
-        assert call_kwargs["effects_level"] == "minimal"
+        assert call_kwargs["effects_level"] == "full"
 
 
 class TestAILyricsAlignment:

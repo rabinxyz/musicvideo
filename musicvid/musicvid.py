@@ -700,14 +700,13 @@ def cli(audio_file, mode, provider, style, output, resolution, lang, new, font_p
             click.echo(f"[3/4] Generating assets (provider: {provider})...")
             router = VisualRouter(cache_dir=str(cache_dir), provider=provider)
             fetch_manifest = []
+            total = len(scene_plan["scenes"])
             for i, scene in enumerate(scene_plan["scenes"]):
                 scene["index"] = i
                 src = scene.get("visual_source", "TYPE_AI")
-                query = scene.get("search_query", "")
-                prompt_preview = (scene.get("visual_prompt") or "")[:50]
-                detail = f"query: {query}" if query else f"prompt: {prompt_preview}"
-                total = len(scene_plan["scenes"])
-                click.echo(f"  [{i + 1}/{total}] {scene['section']} | {src} | {detail}")
+                pct = int((i + 1) / total * 100)
+                click.echo(f"\r  [3/4] Generating assets: {i+1}/{total} ({pct}%) — scene_{i:03d} {src}...   ", nl=False)
+
                 asset_path = router.route(scene)
                 if asset_path is None:
                     from musicvid.pipeline.stock_fetcher import _create_placeholder_video
@@ -720,6 +719,7 @@ def cli(audio_file, mode, provider, style, output, resolution, lang, new, font_p
                     "end": scene["end"],
                     "source": src,
                 })
+            click.echo()  # newline after \r progress
             save_cache(str(cache_dir), image_cache_name, fetch_manifest)
         click.echo(f"  Assets: {len(fetch_manifest)} scenes")
     else:

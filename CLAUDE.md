@@ -4,7 +4,7 @@
 CLI tool that generates synchronized MP4 music videos from audio files using stock footage, beat-synced cuts, and whisper-based subtitles.
 
 ## Commands
-- `python3 -m pytest tests/ -v` - run all tests (~790 tests)
+- `python3 -m pytest tests/ -v` - run all tests (~817 tests)
 - `python3 -m musicvid.musicvid song.mp3` - run the CLI (uses cache by default)
 - `python3 -m musicvid.musicvid song.mp3 --new` - force recalculation, ignore cache
 - `python3 -c "import musicvid; print(musicvid.__version__)"` - check version
@@ -30,7 +30,7 @@ CLI tool that generates synchronized MP4 music videos from audio files using sto
 - `--provider [flux-dev|flux-pro|flux-schnell]` (default: flux-pro): selects BFL model for `--mode ai`
 - `--font PATH`: custom .ttf font for subtitles (optional, defaults to auto-downloaded Montserrat Light)
 - `--lyrics PATH`: custom .txt lyrics file (optional); auto-detects single .txt in audio dir. When provided, `lyrics_path` is passed to `analyze_audio()` which runs Whisper for timing then calls `align_lyrics` from `lyrics_aligner` internally (fuzzy match with rapidfuzz, no Claude API call); CLI no longer calls merge directly
-- `--effects [none|minimal|full]` (default: minimal): visual effects level — none (Ken Burns only), minimal (warm grade + vignette + subtle_film_look + cinematic bars), full (+ film grain + light leak)
+- `--effects [none|minimal|full]` (default: full): visual effects level — none (Ken Burns only), minimal (warm grade + vignette + subtle_film_look + cinematic bars), full (+ film grain + light leak)
 - `--clip [15|20|25|30]`: generate short social-media clip — Claude selects best fragment (chorus preferred); clips analysis to window before director; output named `{stem}_{N}s.mp4`
 - `--platform [reels|shorts|tiktok]`: forces portrait 9:16 resolution (1080×1920) and adds platform name to output filename; use with `--clip`
 - `--title-card`: prepends 2s black title card with song name; only active when used with `--clip`
@@ -95,7 +95,7 @@ CLI tool that generates synchronized MP4 music videos from audio files using sto
 - cv2 import in `smart_crop.py` uses `try/except ImportError` fallback (cv2=None) so module loads even when opencv-python not installed; tests mock `@patch("musicvid.pipeline.smart_crop.cv2")`
 - BFL image generator: `generate_images()` accepts `platform=None`; when `platform=="reels"`, uses 768×1360 (native 9:16) and `"portrait 9:16"` prompt hint instead of `"cinematic 16:9"`; `_submit_task()` accepts `width` and `height` params; `generate_single_image()` uses 1024×768 + `"cinematic 16:9"` (landscape; note: `generate_images()` still uses 1360×768 for batch mode)
 - Clip analysis filter: `_filter_analysis_to_clip(analysis, clip_start, clip_end)` in `musicvid.py` — offsets lyrics/beats/sections to clip-relative t=0 before passing to director
-- Lyrics aligner: `musicvid/pipeline/lyrics_aligner.py` — `align_lyrics(whisper_segments, lyrics_path)` fuzzy-matches Whisper segments to lyrics file text using `rapidfuzz` sliding-cursor algorithm; filters noise segments (`_is_vocal`), strips `[Refren:]` brackets, splits long segments into ≤7-word subtitles (`_split_segment`); `MIN_RATIO=45` acceptance threshold; weak matches fall back to Whisper text; mock target: `@patch("musicvid.pipeline.lyrics_aligner.align_lyrics")`
+- Lyrics aligner: `musicvid/pipeline/lyrics_aligner.py` — `align_lyrics(whisper_segments, lyrics_path)` fuzzy-matches Whisper segments to lyrics file text using `rapidfuzz` sliding-cursor algorithm; filters noise segments (`_is_vocal`), strips `[Refren:]` brackets, splits long segments into ≤7-word subtitles (`_split_segment`); `MIN_RATIO=45` acceptance threshold; weak matches fall back to Whisper text; `_is_vocal` filters: NON_VOCAL set (muzyka/music/instrumental/muzyk/intro), `startswith("muzy")` prefix, single-word short tokens (<8 chars); mock target: `@patch("musicvid.pipeline.lyrics_aligner.align_lyrics")`
 - Lyrics parser: `musicvid/pipeline/lyrics_parser.py` — `merge_whisper_with_lyrics_file(whisper_segments, lyrics_lines, audio_duration)` for deterministic sync (legacy, no longer called from pipeline); `align_with_claude()` kept but not used in CLI; `parse()` for variant A (plain text) and B (MM:SS timestamps)
 - EnergyReactor: `musicvid/pipeline/energy_reactor.py` — `EnergyReactor(analysis, reel_mode=False)` provides energy-reactive parameters at arbitrary time t; methods: `get_energy(t)` (interpolated 0-1), `get_section(t)`, `get_saturation(t)` (0.82+e*0.28), `get_contrast(t)` (1.05+e*0.15), `get_zoom_scale(t)` (min 1.08, 1.02+e*0.06), `get_vignette_strength(t)` (0.7-e*0.5), `get_transition(t)` → {type, duration}, `get_font_size(t, base=54)`, `get_subtitle_animation(t)`, `get_light_flash_times()` (max 2, spike>0.4 in 0.5s, energy>0.85); `reel_mode=True` applies 1.3x energy boost capped at 1.0; uses binary search interpolation over energy_curve
 - EnergyReactor integration: assembler creates `EnergyReactor` from `analysis["energy_curve"]` in `assemble_video()`; passes `reactor` and `scene_start` to `apply_section_grade()` for energy-reactive color grading; `reel_mode=True` when `target_size==(1080, 1920)`; `_assign_dynamic_transitions` accepts optional `reactor=None` — when provided, uses `reactor.get_transition()` instead of `_TRANSITIONS_MAP`

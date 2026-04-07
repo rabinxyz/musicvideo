@@ -29,7 +29,23 @@ def _build_user_message(analysis, style_override=None, mode=None):
     downbeats = beats[::4] if beats else []
     downbeats_preview = [round(d, 2) for d in downbeats[:20]]
 
-    msg = f"Here is the audio analysis for the music video:\n\n{json.dumps(analysis, indent=2)}"
+    # Strip heavy fields not needed by the director for scene planning
+    analysis_for_director = {k: v for k, v in analysis.items() if k != "energy_curve"}
+
+    beats_full = analysis_for_director.get("beats", [])
+    if len(beats_full) > 100:
+        step = len(beats_full) // 100
+        analysis_for_director["beats"] = beats_full[::step][:100]
+
+    peaks = analysis_for_director.get("energy_peaks", [])
+    if len(peaks) > 20:
+        analysis_for_director["energy_peaks"] = peaks[:20]
+
+    lyrics = analysis_for_director.get("lyrics", [])
+    if len(lyrics) > 50:
+        analysis_for_director["lyrics"] = lyrics[:50]
+
+    msg = f"Here is the audio analysis for the music video:\n\n{json.dumps(analysis_for_director, indent=2)}"
     msg += f"\n\nBPM: {bpm:.0f}"
     msg += f"\nBar duration (4 beats): {bar_duration:.2f}s"
     msg += f"\nOptimal scene duration (4 bars): {bar_duration * 4:.2f}s"

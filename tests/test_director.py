@@ -585,3 +585,42 @@ class TestDirectorPromptMotionRequirement:
         prompt_path = Path(__file__).parent.parent / "musicvid" / "prompts" / "director_system.txt"
         content = prompt_path.read_text()
         assert "MUST be a non-empty string" in content
+
+
+class TestBuildUserMessageFiltering:
+    """energy_curve and large lists are trimmed before sending to Claude."""
+
+    def _base_analysis(self):
+        return {
+            "duration": 300.0,
+            "bpm": 120.0,
+            "beats": [i * 0.5 for i in range(500)],
+            "energy_curve": [[i * 0.1, i * 0.01] for i in range(25800)],
+            "energy_peaks": [i * 1.0 for i in range(50)],
+            "lyrics": [{"start": i, "end": i + 1, "text": f"word {i}"} for i in range(100)],
+            "sections": [],
+            "mood_energy": "medium",
+        }
+
+    def test_energy_curve_excluded(self):
+        msg = _build_user_message(self._base_analysis())
+        assert "energy_curve" not in msg
+
+    def test_beats_capped_at_100(self):
+        msg = _build_user_message(self._base_analysis())
+        # Extract the JSON blob between the intro phrase and the BPM line
+        json_str = msg.split("Here is the audio analysis for the music video:\n\n")[1].split("\n\nBPM:")[0]
+        data = json.loads(json_str)
+        assert len(data["beats"]) <= 100
+
+    def test_energy_peaks_capped_at_20(self):
+        msg = _build_user_message(self._base_analysis())
+        json_str = msg.split("Here is the audio analysis for the music video:\n\n")[1].split("\n\nBPM:")[0]
+        data = json.loads(json_str)
+        assert len(data["energy_peaks"]) <= 20
+
+    def test_lyrics_capped_at_50(self):
+        msg = _build_user_message(self._base_analysis())
+        json_str = msg.split("Here is the audio analysis for the music video:\n\n")[1].split("\n\nBPM:")[0]
+        data = json.loads(json_str)
+        assert len(data["lyrics"]) <= 50

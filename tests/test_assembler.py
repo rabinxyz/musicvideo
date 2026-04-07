@@ -1982,3 +1982,37 @@ class TestReelIntroHook:
         mock_video.duration = 30.0
         result = _create_reel_intro_hook(mock_video, (1080, 1920))
         assert result is None
+
+
+class TestWrapForPortrait(unittest.TestCase):
+    def test_short_text_no_wrap(self):
+        from musicvid.pipeline.assembler import wrap_for_portrait
+        result = wrap_for_portrait("Alleluja", max_chars=25)
+        assert result == "Alleluja"
+
+    def test_long_text_wraps_to_two_lines(self):
+        from musicvid.pipeline.assembler import wrap_for_portrait
+        result = wrap_for_portrait("Panie Boże prowadź mnie dalej", max_chars=25)
+        lines = result.split("\n")
+        assert len(lines) == 2
+        for line in lines:
+            assert len(line) <= 25
+
+    def test_exact_boundary_no_wrap(self):
+        from musicvid.pipeline.assembler import wrap_for_portrait
+        # 25 chars exactly
+        result = wrap_for_portrait("abcde fghij klmno pqrst", max_chars=25)
+        assert "\n" not in result
+
+    def test_single_long_word_not_broken(self):
+        from musicvid.pipeline.assembler import wrap_for_portrait
+        result = wrap_for_portrait("Superdługiesłowopolskie", max_chars=25)
+        assert result == "Superdługiesłowopolskie"
+
+    def test_multiple_wraps(self):
+        from musicvid.pipeline.assembler import wrap_for_portrait
+        result = wrap_for_portrait("Jeden dwa trzy cztery pięć sześć siedem osiem", max_chars=15)
+        lines = result.split("\n")
+        assert len(lines) >= 3
+        for line in lines:
+            assert len(line) <= 15

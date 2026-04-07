@@ -401,6 +401,25 @@ def _make_reel_zoom_punch(punch_times):
     return zoom_punch
 
 
+def wrap_for_portrait(text, max_chars=25):
+    """Wrap text for portrait mode — max_chars per line, word-level breaks."""
+    words = text.split()
+    lines = []
+    current = []
+    current_len = 0
+    for word in words:
+        if current_len + len(word) + 1 > max_chars and current:
+            lines.append(" ".join(current))
+            current = [word]
+            current_len = len(word)
+        else:
+            current.append(word)
+            current_len += len(word) + 1
+    if current:
+        lines.append(" ".join(current))
+    return "\n".join(lines)
+
+
 def _create_subtitle_clips(lyrics, subtitle_style, size, font_path=None, subtitle_margin_bottom=80, sections=None, reels_mode=False):
     """Create subtitle TextClips from lyrics with word-level timing."""
     clips = []

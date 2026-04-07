@@ -143,6 +143,7 @@ ANIMATION RULES:
   "Gentle push forward through outdoor worship gathering, people with hands raised at sunset, warm golden backlight, authentic documentary feel, real emotion"
   "Camera slowly pulls back revealing vast ocean horizon, waves in foreground, light dancing on water surface, contemplative mood, film grain aesthetic"
 - For non-animated scenes (animate: false), set motion_prompt to ""
+- IMPORTANT: motion_prompt for TYPE_VIDEO_RUNWAY and TYPE_ANIMATED MUST be a non-empty string of at least 5 words describing camera movement and mood. If unsure, use: "Slow cinematic camera push forward, natural golden light"
 - Avoid fast or jarring motion — worship music requires slow, peaceful movement
 
 OUTPUT FORMAT (pure JSON):

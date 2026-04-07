@@ -1,6 +1,7 @@
 """Tests for director module."""
 
 import json
+from pathlib import Path
 from unittest.mock import patch, MagicMock
 
 import pytest
@@ -575,3 +576,12 @@ class TestBuildUserMessageRunwayMode:
         }
         msg = _build_user_message(analysis)
         assert "Use TYPE_VIDEO_RUNWAY" not in msg
+
+
+class TestDirectorPromptMotionRequirement:
+    """Ensure director system prompt requires non-empty motion_prompt."""
+
+    def test_system_prompt_requires_nonempty_motion_prompt(self):
+        prompt_path = Path(__file__).parent.parent / "musicvid" / "prompts" / "director_system.txt"
+        content = prompt_path.read_text()
+        assert "MUST be a non-empty string" in content

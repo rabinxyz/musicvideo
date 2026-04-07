@@ -403,6 +403,27 @@ def _assign_dynamic_transitions(scenes, bpm):
     return scenes
 
 
+_REEL_TRANSITIONS_MAP = {
+    ("verse", "chorus"):  "slide_up",
+    ("chorus", "verse"):  "zoom_in_hard",
+    ("chorus", "chorus"): "wipe_right",
+    ("verse", "verse"):   "slide_left",
+    ("bridge", "chorus"): "slide_up",
+    ("verse", "bridge"):  "slide_left",
+    ("intro", "verse"):   "slide_up",
+    ("chorus", "outro"):  "slide_left",
+}
+_DEFAULT_REEL_TRANSITION = "slide_left"
+
+
+def _assign_reel_transitions(scenes, bpm):
+    """Assign reel-specific transitions (more dynamic than full video)."""
+    for i in range(len(scenes) - 1):
+        key = (scenes[i].get("section", ""), scenes[i + 1].get("section", ""))
+        scenes[i]["transition_to_next"] = _REEL_TRANSITIONS_MAP.get(key, _DEFAULT_REEL_TRANSITION)
+    return scenes
+
+
 _STYLE_TO_LUT = {
     "worship": "warm",
     "contemplative": "cinematic",
@@ -849,6 +870,7 @@ def _run_preset_mode(preset, reel_duration, analysis, scene_plan, fetch_manifest
             clip_scene_plan = _filter_scene_plan_to_clip(scene_plan, clip_start, clip_end)
             for scene in clip_scene_plan["scenes"]:
                 scene["motion"] = _remap_motion_for_portrait(scene.get("motion", "static"))
+            _assign_reel_transitions(clip_scene_plan["scenes"], analysis.get("bpm", 120))
             clip_manifest = _filter_manifest_to_clip(
                 fetch_manifest, scene_plan["scenes"], clip_start, clip_end
             )

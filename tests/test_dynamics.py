@@ -88,6 +88,49 @@ class TestAssignDynamicTransitions:
         assert result[0]["transition_to_next"] == "cross_dissolve"
 
 
+from musicvid.musicvid import _assign_reel_transitions, _REEL_TRANSITIONS_MAP
+
+
+class TestReelTransitions:
+    def _make_scenes(self, sections):
+        scenes = []
+        t = 0.0
+        for s in sections:
+            scenes.append({"section": s, "start": t, "end": t + 10.0})
+            t += 10.0
+        return scenes
+
+    def test_verse_to_chorus_is_slide_up(self):
+        scenes = self._make_scenes(["verse", "chorus"])
+        result = _assign_reel_transitions(scenes, bpm=84.0)
+        assert result[0]["transition_to_next"] == "slide_up"
+
+    def test_chorus_to_verse_is_zoom_in_hard(self):
+        scenes = self._make_scenes(["chorus", "verse"])
+        result = _assign_reel_transitions(scenes, bpm=84.0)
+        assert result[0]["transition_to_next"] == "zoom_in_hard"
+
+    def test_chorus_to_chorus_is_wipe_right(self):
+        scenes = self._make_scenes(["chorus", "chorus"])
+        result = _assign_reel_transitions(scenes, bpm=84.0)
+        assert result[0]["transition_to_next"] == "wipe_right"
+
+    def test_verse_to_verse_is_slide_left(self):
+        scenes = self._make_scenes(["verse", "verse"])
+        result = _assign_reel_transitions(scenes, bpm=84.0)
+        assert result[0]["transition_to_next"] == "slide_left"
+
+    def test_bridge_to_chorus_is_slide_up(self):
+        scenes = self._make_scenes(["bridge", "chorus"])
+        result = _assign_reel_transitions(scenes, bpm=84.0)
+        assert result[0]["transition_to_next"] == "slide_up"
+
+    def test_last_scene_has_no_transition(self):
+        scenes = self._make_scenes(["verse", "chorus"])
+        result = _assign_reel_transitions(scenes, bpm=84.0)
+        assert "transition_to_next" not in result[-1]
+
+
 from unittest.mock import patch, MagicMock
 
 

@@ -244,6 +244,10 @@ def _concatenate_with_transitions(scene_clips, scenes, bpm, target_size):
         "cross_dissolve": max(0.2, min(0.8, round(beat_duration / 2, 2))),
         "fade":          max(0.2, min(0.8, round(beat_duration, 2))),
         "dip_white":     max(0.2, min(0.8, round(beat_duration * 0.75, 2))),
+        "slide_left":    0.3,
+        "slide_up":      0.3,
+        "wipe_right":    0.2,
+        "zoom_in_hard":  0.1,
     }
 
     # Determine transitions between each consecutive pair
@@ -269,6 +273,28 @@ def _concatenate_with_transitions(scene_clips, scenes, bpm, target_size):
                 positioned = positioned.with_effects([vfx.CrossFadeIn(prev_d)])
             elif prev_trans == "fade" and prev_d > 0:
                 positioned = positioned.with_effects([vfx.FadeIn(prev_d)])
+            elif prev_trans == "slide_left" and prev_d > 0:
+                w = target_size[0]
+                _d = prev_d
+                def _make_slide_left_pos(w, _d):
+                    def pos(t):
+                        if t < _d:
+                            return (int(w * (1 - t / _d)), 0)
+                        return (0, 0)
+                    return pos
+                positioned = positioned.with_position(_make_slide_left_pos(w, _d))
+            elif prev_trans == "slide_up" and prev_d > 0:
+                h = target_size[1]
+                _d = prev_d
+                def _make_slide_up_pos(h, _d):
+                    def pos(t):
+                        if t < _d:
+                            return (0, int(h * (1 - t / _d)))
+                        return (0, 0)
+                    return pos
+                positioned = positioned.with_position(_make_slide_up_pos(h, _d))
+            elif prev_trans == "wipe_right" and prev_d > 0:
+                positioned = positioned.with_effects([vfx.CrossFadeIn(prev_d)])
         # Apply outgoing transition effect
         if i < len(scene_clips) - 1:
             trans, d = transitions[i]
@@ -276,11 +302,13 @@ def _concatenate_with_transitions(scene_clips, scenes, bpm, target_size):
                 positioned = positioned.with_effects([vfx.CrossFadeOut(d)])
             elif trans == "fade" and d > 0:
                 positioned = positioned.with_effects([vfx.FadeOut(d)])
+            elif trans == "zoom_in_hard" and d > 0:
+                pass  # zoom_in_hard doesn't need outgoing effect on the outgoing clip
         clips_positioned.append(positioned)
-        # Advance cursor; overlap for dissolves
+        # Advance cursor; overlap for dissolves/slides
         if i < len(scene_clips) - 1:
             trans, d = transitions[i]
-            if trans == "cross_dissolve":
+            if trans in ("cross_dissolve", "slide_left", "slide_up", "wipe_right", "zoom_in_hard"):
                 cursor += clip.duration - d
             else:
                 cursor += clip.duration
@@ -290,7 +318,7 @@ def _concatenate_with_transitions(scene_clips, scenes, bpm, target_size):
     flash_cursor = 0.0
     for i, clip in enumerate(scene_clips[:-1]):
         trans, d = transitions[i]
-        if trans == "cross_dissolve":
+        if trans in ("cross_dissolve", "slide_left", "slide_up", "wipe_right", "zoom_in_hard"):
             flash_cursor += clip.duration - d
         else:
             flash_cursor += clip.duration

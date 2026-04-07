@@ -1773,3 +1773,55 @@ class TestApplySectionGrade:
         mock_clip.image_transform.return_value = mock_clip
         result = apply_section_grade(mock_clip, "unknown_section")
         mock_clip.image_transform.assert_called_once()
+
+
+class TestReelTransitionRendering:
+    @patch("musicvid.pipeline.assembler.CompositeVideoClip")
+    @patch("musicvid.pipeline.assembler.concatenate_videoclips")
+    def test_slide_left_uses_composite(self, mock_concat, mock_composite):
+        from musicvid.pipeline.assembler import _concatenate_with_transitions
+        clip_a = MagicMock()
+        clip_a.duration = 5.0
+        clip_a.with_start.return_value = clip_a
+        clip_a.with_effects.return_value = clip_a
+        clip_b = MagicMock()
+        clip_b.duration = 5.0
+        clip_b.with_start.return_value = clip_b
+        clip_b.with_position.return_value = clip_b
+        clip_b.with_effects.return_value = clip_b
+
+        mock_result = MagicMock()
+        mock_result.with_duration.return_value = mock_result
+        mock_composite.return_value = mock_result
+
+        scenes = [
+            {"section": "verse", "transition_to_next": "slide_left"},
+            {"section": "verse"},
+        ]
+        _concatenate_with_transitions([clip_a, clip_b], scenes, bpm=120.0, target_size=(1080, 1920))
+        mock_composite.assert_called()
+
+    @patch("musicvid.pipeline.assembler.CompositeVideoClip")
+    @patch("musicvid.pipeline.assembler.concatenate_videoclips")
+    def test_slide_up_uses_composite(self, mock_concat, mock_composite):
+        from musicvid.pipeline.assembler import _concatenate_with_transitions
+        clip_a = MagicMock()
+        clip_a.duration = 5.0
+        clip_a.with_start.return_value = clip_a
+        clip_a.with_effects.return_value = clip_a
+        clip_b = MagicMock()
+        clip_b.duration = 5.0
+        clip_b.with_start.return_value = clip_b
+        clip_b.with_position.return_value = clip_b
+        clip_b.with_effects.return_value = clip_b
+
+        mock_result = MagicMock()
+        mock_result.with_duration.return_value = mock_result
+        mock_composite.return_value = mock_result
+
+        scenes = [
+            {"section": "verse", "transition_to_next": "slide_up"},
+            {"section": "chorus"},
+        ]
+        _concatenate_with_transitions([clip_a, clip_b], scenes, bpm=120.0, target_size=(1080, 1920))
+        mock_composite.assert_called()

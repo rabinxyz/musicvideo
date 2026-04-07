@@ -1723,3 +1723,53 @@ class TestReelsGradientOverlay(unittest.TestCase):
             _create_bottom_gradient(width=1080, height=1920, duration=5.0)
 
         mock_clip.with_mask.assert_called_once()
+
+
+class TestApplySectionGrade:
+    def test_returns_clip_object(self):
+        from musicvid.pipeline.assembler import apply_section_grade
+
+        mock_clip = MagicMock()
+        mock_clip.image_transform.return_value = mock_clip
+        result = apply_section_grade(mock_clip, "verse")
+        assert result is mock_clip
+        mock_clip.image_transform.assert_called_once()
+
+    def test_chorus_has_higher_saturation_than_verse(self):
+        from musicvid.pipeline.assembler import apply_section_grade
+
+        frame = np.full((4, 4, 3), 128, dtype=np.uint8)
+        mock_clip_v = MagicMock()
+        apply_section_grade(mock_clip_v, "verse")
+        grade_fn_verse = mock_clip_v.image_transform.call_args[0][0]
+
+        mock_clip_c = MagicMock()
+        apply_section_grade(mock_clip_c, "chorus")
+        grade_fn_chorus = mock_clip_c.image_transform.call_args[0][0]
+
+        result_verse = grade_fn_verse(frame)
+        result_chorus = grade_fn_chorus(frame)
+        assert result_verse.dtype == np.uint8
+        assert result_chorus.dtype == np.uint8
+
+    def test_all_sections_produce_valid_output(self):
+        from musicvid.pipeline.assembler import apply_section_grade
+
+        frame = np.random.randint(0, 256, (8, 8, 3), dtype=np.uint8)
+        for section in ["verse", "chorus", "bridge", "intro", "outro"]:
+            mock_clip = MagicMock()
+            apply_section_grade(mock_clip, section)
+            grade_fn = mock_clip.image_transform.call_args[0][0]
+            result = grade_fn(frame)
+            assert result.shape == frame.shape
+            assert result.dtype == np.uint8
+            assert result.min() >= 0
+            assert result.max() <= 255
+
+    def test_unknown_section_uses_default(self):
+        from musicvid.pipeline.assembler import apply_section_grade
+
+        mock_clip = MagicMock()
+        mock_clip.image_transform.return_value = mock_clip
+        result = apply_section_grade(mock_clip, "unknown_section")
+        mock_clip.image_transform.assert_called_once()

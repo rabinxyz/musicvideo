@@ -30,6 +30,37 @@ _SECTION_FONT_SIZES = {
 }
 _DEFAULT_FONT_SIZE = 54
 
+_SECTION_GRADES = {
+    "verse":  (0.88, 1.08, 0.01),
+    "chorus": (1.10, 1.18, 0.0),
+    "bridge": (0.80, 1.25, -0.02),
+    "intro":  (0.85, 1.05, 0.02),
+    "outro":  (0.82, 1.03, 0.01),
+}
+_DEFAULT_GRADE = (0.92, 1.10, 0.0)
+
+
+def apply_section_grade(clip, section):
+    """Apply per-section color grade (saturation, contrast, brightness).
+
+    Uses NumPy luminance-based saturation — no cv2 dependency.
+    """
+    import numpy as np
+
+    sat, cont, bright = _SECTION_GRADES.get(section, _DEFAULT_GRADE)
+
+    def grade_frame(frame):
+        f = frame.astype(np.float32) + bright * 255
+        f = (f - 128) * cont + 128
+        # Saturation: blend toward luminance
+        r, g, b = f[..., 0], f[..., 1], f[..., 2]
+        luminance = 0.2126 * r + 0.7152 * g + 0.0722 * b
+        lum3 = np.stack([luminance] * 3, axis=-1)
+        result = lum3 + (f - lum3) * sat
+        return np.clip(result, 0, 255).astype(np.uint8)
+
+    return clip.image_transform(grade_frame)
+
 
 def _get_section_for_time(t, sections):
     """Return section label at time t, or 'verse' if not found."""
@@ -492,6 +523,8 @@ def assemble_video(analysis, scene_plan, fetch_manifest, audio_path, output_path
         scene = scenes[idx]
         clip = _load_scene_clip(manifest_entry["video_path"], scene, target_size, reels_style=reels_style)
         clip = apply_effects(clip, level=effects_level)
+        section = scene.get("section", "verse")
+        clip = apply_section_grade(clip, section)
         scene_clips.append(clip)
 
     bpm = analysis.get("bpm", 120.0)

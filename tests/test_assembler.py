@@ -2220,3 +2220,79 @@ class TestReelsMultilinePosition(unittest.TestCase):
         height = call_kwargs["size"][1]
         single_line_height = 52 + int(52 * 0.35)
         assert height > single_line_height, f"Height {height} should account for 2 lines"
+
+
+class TestReelsSafeZone(unittest.TestCase):
+    @patch("musicvid.pipeline.assembler.vfx")
+    @patch("musicvid.pipeline.assembler.TextClip")
+    def test_subtitle_within_safe_zone(self, mock_textclip, mock_vfx):
+        from musicvid.pipeline.assembler import _create_subtitle_clips
+
+        mock_clip = MagicMock()
+        mock_clip.with_duration.return_value = mock_clip
+        mock_clip.with_start.return_value = mock_clip
+        mock_clip.with_position.return_value = mock_clip
+        mock_clip.with_effects.return_value = mock_clip
+        mock_textclip.return_value = mock_clip
+
+        lyrics = [{"start": 1.0, "end": 3.0,
+                    "text": "Panie Boże prowadź mnie dalej", "words": []}]
+        style = {"color": "#FFFFFF", "outline_color": "#000000"}
+        frame_h = 1920
+
+        _create_subtitle_clips(lyrics, style, (1080, frame_h),
+                               reels_mode=True, subtitle_margin_bottom=200)
+
+        pos_call = mock_clip.with_position.call_args[0][0]
+        y_pos = pos_call[1]
+        safe_top = frame_h * 0.10   # 192
+        safe_bottom = frame_h * 0.85  # 1632
+
+        assert y_pos >= safe_top, f"y={y_pos} above safe top {safe_top}"
+        assert y_pos <= safe_bottom, f"y={y_pos} below safe bottom {safe_bottom}"
+
+    @patch("musicvid.pipeline.assembler.vfx")
+    @patch("musicvid.pipeline.assembler.TextClip")
+    def test_font_shrinks_if_outside_safe_zone(self, mock_textclip, mock_vfx):
+        from musicvid.pipeline.assembler import _create_subtitle_clips
+
+        mock_clip = MagicMock()
+        mock_clip.with_duration.return_value = mock_clip
+        mock_clip.with_start.return_value = mock_clip
+        mock_clip.with_position.return_value = mock_clip
+        mock_clip.with_effects.return_value = mock_clip
+        mock_textclip.return_value = mock_clip
+
+        # Very long text that wraps to many lines
+        long_text = " ".join(["słowo"] * 20)
+        lyrics = [{"start": 1.0, "end": 3.0, "text": long_text, "words": []}]
+        style = {"color": "#FFFFFF", "outline_color": "#000000"}
+
+        _create_subtitle_clips(lyrics, style, (1080, 1920),
+                               reels_mode=True, subtitle_margin_bottom=200)
+
+        pos_call = mock_clip.with_position.call_args[0][0]
+        y_pos = pos_call[1]
+        safe_top = 1920 * 0.10
+
+        assert y_pos >= safe_top, f"y={y_pos} should be >= safe_top={safe_top}"
+
+    @patch("musicvid.pipeline.assembler.vfx")
+    @patch("musicvid.pipeline.assembler.TextClip")
+    def test_landscape_no_safe_zone_enforcement(self, mock_textclip, mock_vfx):
+        from musicvid.pipeline.assembler import _create_subtitle_clips
+
+        mock_clip = MagicMock()
+        mock_clip.with_duration.return_value = mock_clip
+        mock_clip.with_start.return_value = mock_clip
+        mock_clip.with_position.return_value = mock_clip
+        mock_clip.with_effects.return_value = mock_clip
+        mock_textclip.return_value = mock_clip
+
+        lyrics = [{"start": 1.0, "end": 3.0, "text": "Test text", "words": []}]
+        style = {"color": "#FFFFFF", "outline_color": "#000000"}
+
+        _create_subtitle_clips(lyrics, style, (1920, 1080), reels_mode=False)
+
+        call_kwargs = mock_textclip.call_args[1]
+        assert call_kwargs["font_size"] == 54  # default, not capped

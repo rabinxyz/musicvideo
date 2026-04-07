@@ -463,6 +463,19 @@ def _create_subtitle_clips(lyrics, subtitle_style, size, font_path=None, subtitl
             print(f"Warning: subtitle y={y_pos} is outside frame height={size[1]}, clamping")
             y_pos = size[1] - padded_height - 10
 
+        if reels_mode:
+            safe_top = size[1] * 0.10
+            safe_bottom = size[1] * 0.85
+            while y_pos < safe_top and font_size > 28:
+                font_size -= 4
+                lyric_text = wrap_for_portrait(segment["text"], max_chars=25)
+                lines_count = lyric_text.count("\n") + 1
+                line_height = int(font_size * 1.4)
+                total_height = lines_count * line_height
+                padded_height = total_height
+                y_pos = size[1] - total_height - margin_bottom
+            y_pos = max(y_pos, safe_top)
+
         effective_font = font_path
         try:
             txt_clip = TextClip(

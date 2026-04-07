@@ -182,7 +182,10 @@ class VisualRouter:
             )
 
         # Step 2: animate via Runway image-to-video
-        motion = scene.get("motion_prompt", "slow camera push forward, gentle movement")
+        motion = scene.get("motion_prompt") or scene.get("visual_prompt") or ""
+        if not motion.strip():
+            motion = "Slow cinematic camera push forward, natural golden light, peaceful atmosphere"
+        motion = motion.strip()[:300]
         try:
             return animate_image(image_path, motion, duration=5, output_path=output_path)
         except Exception as exc:
@@ -204,7 +207,10 @@ class VisualRouter:
                 image_path = generate_single_image(bfl_prompt, image_path, "flux-dev")
 
             # Step 2: animate via Runway image-to-video
-            motion = scene.get("motion_prompt", "slow camera push forward, gentle movement")
+            motion = scene.get("motion_prompt") or scene.get("visual_prompt") or ""
+            if not motion.strip():
+                motion = "Slow cinematic camera push forward, natural golden light, peaceful atmosphere"
+            motion = motion.strip()[:300]
             try:
                 return animate_image(image_path, motion, duration=5, output_path=output_path)
             except Exception as exc:

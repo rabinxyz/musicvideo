@@ -394,7 +394,8 @@ class TestVisualRouterAnimatedImageToVideo:
             router.route(scene)
 
         called_motion = mock_animate.call_args[0][1]
-        assert called_motion == "slow camera push forward, gentle movement"
+        # With new fallback logic: missing motion_prompt falls back to visual_prompt
+        assert called_motion == "Mountain scene"
 
 
 SCENE_RUNWAY = {
@@ -530,3 +531,133 @@ class TestVisualRouterDefaultSource:
 
         mock_gen.assert_called_once_with("Calm lake at dawn", ai_path, "flux-dev")
         assert result == ai_path
+
+
+class TestMotionPromptFallback:
+    """Ensure _route_animated and _route_runway handle empty/None motion_prompt."""
+
+    @patch("musicvid.pipeline.visual_router.animate_image")
+    @patch("musicvid.pipeline.visual_router.generate_single_image")
+    @patch.dict(os.environ, {"RUNWAY_API_KEY": "test-key", "BFL_API_KEY": "test-key"})
+    def test_route_animated_none_motion_prompt(self, mock_gen, mock_animate):
+        mock_gen.return_value = "/tmp/scene_000.jpg"
+        mock_animate.return_value = "/tmp/animated_scene_000.mp4"
+
+        from musicvid.pipeline.visual_router import VisualRouter
+        router = VisualRouter("/tmp/cache", provider="flux-dev")
+        scene = {
+            "index": 0, "start": 0, "end": 5,
+            "visual_source": "TYPE_ANIMATED",
+            "visual_prompt": "golden sunrise over hills",
+            "motion_prompt": None,
+        }
+        router.route(scene)
+
+        motion_arg = mock_animate.call_args[0][1]
+        assert motion_arg is not None
+        assert len(motion_arg.strip()) > 0
+
+    @patch("musicvid.pipeline.visual_router.animate_image")
+    @patch("musicvid.pipeline.visual_router.generate_single_image")
+    @patch.dict(os.environ, {"RUNWAY_API_KEY": "test-key", "BFL_API_KEY": "test-key"})
+    def test_route_animated_empty_motion_prompt(self, mock_gen, mock_animate):
+        mock_gen.return_value = "/tmp/scene_001.jpg"
+        mock_animate.return_value = "/tmp/animated_scene_001.mp4"
+
+        from musicvid.pipeline.visual_router import VisualRouter
+        router = VisualRouter("/tmp/cache", provider="flux-dev")
+        scene = {
+            "index": 1, "start": 0, "end": 5,
+            "visual_source": "TYPE_ANIMATED",
+            "visual_prompt": "golden sunrise over hills",
+            "motion_prompt": "",
+        }
+        router.route(scene)
+
+        motion_arg = mock_animate.call_args[0][1]
+        assert len(motion_arg.strip()) > 0
+
+    @patch("musicvid.pipeline.visual_router.animate_image")
+    @patch("musicvid.pipeline.visual_router.generate_single_image")
+    @patch.dict(os.environ, {"RUNWAY_API_KEY": "test-key", "BFL_API_KEY": "test-key"})
+    def test_route_runway_none_motion_prompt(self, mock_gen, mock_animate):
+        mock_gen.return_value = "/tmp/runway_img_002.jpg"
+        mock_animate.return_value = "/tmp/runway_scene_002.mp4"
+
+        from musicvid.pipeline.visual_router import VisualRouter
+        router = VisualRouter("/tmp/cache", provider="flux-dev")
+        scene = {
+            "index": 2, "start": 0, "end": 5,
+            "visual_source": "TYPE_VIDEO_RUNWAY",
+            "visual_prompt": "peaceful ocean view",
+            "search_query": "ocean waves",
+            "motion_prompt": None,
+        }
+        router.route(scene)
+
+        motion_arg = mock_animate.call_args[0][1]
+        assert motion_arg is not None
+        assert len(motion_arg.strip()) > 0
+
+    @patch("musicvid.pipeline.visual_router.animate_image")
+    @patch("musicvid.pipeline.visual_router.generate_single_image")
+    @patch.dict(os.environ, {"RUNWAY_API_KEY": "test-key", "BFL_API_KEY": "test-key"})
+    def test_route_runway_empty_motion_prompt(self, mock_gen, mock_animate):
+        mock_gen.return_value = "/tmp/runway_img_003.jpg"
+        mock_animate.return_value = "/tmp/runway_scene_003.mp4"
+
+        from musicvid.pipeline.visual_router import VisualRouter
+        router = VisualRouter("/tmp/cache", provider="flux-dev")
+        scene = {
+            "index": 3, "start": 0, "end": 5,
+            "visual_source": "TYPE_VIDEO_RUNWAY",
+            "visual_prompt": "peaceful ocean view",
+            "search_query": "ocean waves",
+            "motion_prompt": "",
+        }
+        router.route(scene)
+
+        motion_arg = mock_animate.call_args[0][1]
+        assert len(motion_arg.strip()) > 0
+
+    @patch("musicvid.pipeline.visual_router.animate_image")
+    @patch("musicvid.pipeline.visual_router.generate_single_image")
+    @patch.dict(os.environ, {"RUNWAY_API_KEY": "test-key", "BFL_API_KEY": "test-key"})
+    def test_route_runway_falls_back_to_visual_prompt(self, mock_gen, mock_animate):
+        mock_gen.return_value = "/tmp/runway_img_004.jpg"
+        mock_animate.return_value = "/tmp/runway_scene_004.mp4"
+
+        from musicvid.pipeline.visual_router import VisualRouter
+        router = VisualRouter("/tmp/cache", provider="flux-dev")
+        scene = {
+            "index": 4, "start": 0, "end": 5,
+            "visual_source": "TYPE_VIDEO_RUNWAY",
+            "visual_prompt": "peaceful ocean view",
+            "search_query": "ocean waves",
+            "motion_prompt": "",
+        }
+        router.route(scene)
+
+        motion_arg = mock_animate.call_args[0][1]
+        assert len(motion_arg.strip()) > 0
+
+    @patch("musicvid.pipeline.visual_router.animate_image")
+    @patch("musicvid.pipeline.visual_router.generate_single_image")
+    @patch.dict(os.environ, {"RUNWAY_API_KEY": "test-key", "BFL_API_KEY": "test-key"})
+    def test_route_runway_motion_truncated_to_300(self, mock_gen, mock_animate):
+        mock_gen.return_value = "/tmp/runway_img_005.jpg"
+        mock_animate.return_value = "/tmp/runway_scene_005.mp4"
+
+        from musicvid.pipeline.visual_router import VisualRouter
+        router = VisualRouter("/tmp/cache", provider="flux-dev")
+        scene = {
+            "index": 5, "start": 0, "end": 5,
+            "visual_source": "TYPE_VIDEO_RUNWAY",
+            "visual_prompt": "nature",
+            "search_query": "nature",
+            "motion_prompt": "a" * 400,
+        }
+        router.route(scene)
+
+        motion_arg = mock_animate.call_args[0][1]
+        assert len(motion_arg) <= 300

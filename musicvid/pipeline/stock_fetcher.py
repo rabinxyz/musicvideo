@@ -17,6 +17,13 @@ STYLE_QUERIES = {
 
 PEXELS_API_URL = "https://api.pexels.com/videos/search"
 
+_downloaded_urls = set()
+
+
+def reset_download_registry():
+    """Clear the global set of downloaded video URLs."""
+    _downloaded_urls.clear()
+
 
 def _build_search_query(scene, overall_style):
     """Build a Pexels search query from scene data."""
@@ -100,13 +107,20 @@ def fetch_video_by_query(query, min_duration, output_path):
         search_result = _search_pexels(query, api_key)
         videos = search_result.get("videos", [])
 
+        # Filter out already-downloaded videos
+        fresh = [v for v in videos if v.get("url") not in _downloaded_urls]
+        if not fresh:
+            fresh = videos  # fallback: reuse if no alternatives
+
         # Prefer videos long enough; fall back to first available
         candidate = next(
-            (v for v in videos if v.get("duration", 0) >= min_duration),
-            videos[0] if videos else None,
+            (v for v in fresh if v.get("duration", 0) >= min_duration),
+            fresh[0] if fresh else None,
         )
         if candidate is None:
             return None
+
+        _downloaded_urls.add(candidate.get("url", ""))
 
         video_file = _get_best_video_file(candidate.get("video_files", []))
         if video_file is None:
@@ -150,7 +164,11 @@ def fetch_videos(scene_plan, output_dir=None):
                 search_result = _search_pexels(query, api_key)
                 videos = search_result.get("videos", [])
                 if videos:
-                    video_data = videos[0]
+                    fresh = [v for v in videos if v.get("url") not in _downloaded_urls]
+                    if not fresh:
+                        fresh = videos
+                    video_data = fresh[0]
+                    _downloaded_urls.add(video_data.get("url", ""))
                     video_file = _get_best_video_file(video_data.get("video_files", []))
                     if video_file:
                         dest = videos_dir / f"scene_{i:03d}.mp4"

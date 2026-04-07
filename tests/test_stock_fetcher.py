@@ -7,7 +7,10 @@ from pathlib import Path
 
 import pytest
 
-from musicvid.pipeline.stock_fetcher import fetch_videos, _build_search_query
+from musicvid.pipeline.stock_fetcher import (
+    fetch_videos, fetch_video_by_query, _build_search_query,
+    reset_download_registry, _downloaded_urls,
+)
 
 
 class TestBuildSearchQuery:
@@ -167,3 +170,94 @@ class TestFetchVideoByQuery:
             result = fetch_video_by_query("any query", 5.0, str(output))
         assert result == str(output)
         mock_req.get.assert_not_called()
+
+
+class TestStockDeduplication:
+    """Tests for the URL deduplication registry."""
+
+    def setup_method(self):
+        reset_download_registry()
+
+    @patch.dict(os.environ, {"PEXELS_API_KEY": "test-key"})
+    @patch("musicvid.pipeline.stock_fetcher.requests")
+    def test_fetch_video_by_query_skips_already_downloaded(self, mock_requests, tmp_path):
+        """Two calls with same results should pick different videos."""
+        def make_mock_response(videos_json):
+            mock_search = MagicMock()
+            mock_search.json.return_value = videos_json
+            mock_search.raise_for_status = MagicMock()
+            mock_download = MagicMock()
+            mock_download.raise_for_status = MagicMock()
+            mock_download.iter_content = MagicMock(return_value=[b"video-data"])
+            return [mock_search, mock_download]
+
+        videos_payload = {
+            "videos": [
+                {
+                    "url": "https://pexels.com/video/1",
+                    "duration": 10,
+                    "video_files": [
+                        {"id": 1, "width": 1920, "height": 1080,
+                         "link": "https://example.com/video1.mp4"},
+                    ],
+                },
+                {
+                    "url": "https://pexels.com/video/2",
+                    "duration": 10,
+                    "video_files": [
+                        {"id": 2, "width": 1920, "height": 1080,
+                         "link": "https://example.com/video2.mp4"},
+                    ],
+                },
+            ]
+        }
+
+        mock_requests.get.side_effect = (
+            make_mock_response(videos_payload)
+            + make_mock_response(videos_payload)
+        )
+
+        output1 = str(tmp_path / "scene_000.mp4")
+        output2 = str(tmp_path / "scene_001.mp4")
+
+        fetch_video_by_query("mountain sunrise", min_duration=5.0, output_path=output1)
+        fetch_video_by_query("mountain sunrise", min_duration=5.0, output_path=output2)
+
+        assert len(_downloaded_urls) == 2
+
+    def test_reset_clears_registry(self):
+        """reset_download_registry() empties the set."""
+        _downloaded_urls.add("https://pexels.com/video/999")
+        assert len(_downloaded_urls) == 1
+        reset_download_registry()
+        assert len(_downloaded_urls) == 0
+
+    @patch.dict(os.environ, {"PEXELS_API_KEY": "test-key"})
+    @patch("musicvid.pipeline.stock_fetcher.requests")
+    def test_fallback_when_all_downloaded(self, mock_requests, tmp_path):
+        """When only video is already registered, still returns a result (fallback)."""
+        _downloaded_urls.add("https://pexels.com/video/1")
+
+        mock_search = MagicMock()
+        mock_search.json.return_value = {
+            "videos": [
+                {
+                    "url": "https://pexels.com/video/1",
+                    "duration": 10,
+                    "video_files": [
+                        {"id": 1, "width": 1920, "height": 1080,
+                         "link": "https://example.com/video1.mp4"},
+                    ],
+                },
+            ]
+        }
+        mock_search.raise_for_status = MagicMock()
+        mock_download = MagicMock()
+        mock_download.raise_for_status = MagicMock()
+        mock_download.iter_content = MagicMock(return_value=[b"video-data"])
+        mock_requests.get.side_effect = [mock_search, mock_download]
+
+        output = str(tmp_path / "scene_000.mp4")
+        result = fetch_video_by_query("mountain sunrise", min_duration=5.0, output_path=output)
+
+        assert result is not None

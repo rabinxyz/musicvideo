@@ -416,6 +416,19 @@ def _lut_for_style(overall_style):
     return _STYLE_TO_LUT.get(overall_style, "warm")
 
 
+_STYLE_TO_COLOR_GRADE = {
+    "worship": "worship-warm",
+    "contemplative": "worship-warm",
+    "powerful": "teal-orange",
+    "joyful": "natural",
+}
+
+
+def _color_grade_for_style(overall_style):
+    """Return color grade name for a given director overall_style."""
+    return _STYLE_TO_COLOR_GRADE.get(overall_style, "worship-warm")
+
+
 @click.command()
 @click.argument("audio_file", type=click.Path(exists=True))
 @click.option("--mode", type=click.Choice(["stock", "ai", "runway", "hybrid"]), default="runway", help="Video source mode.")
@@ -440,6 +453,7 @@ def _lut_for_style(overall_style):
 @click.option("--logo-opacity", type=float, default=0.85, help="Logo opacity 0.0-1.0.")
 @click.option("--lut-style", type=click.Choice(["warm", "cold", "cinematic", "natural", "faded"]), default=None, help="Built-in LUT color grade style.")
 @click.option("--lut-intensity", type=float, default=0.85, help="LUT intensity 0.0-1.0.")
+@click.option("--color-grade", "color_grade", type=click.Choice(["worship-warm", "teal-orange", "bleach", "natural"]), default=None, help="Global color grade style applied via FFmpeg curves.")
 @click.option("--subtitle-style", "subtitle_style_override", type=click.Choice(["fade", "karaoke", "none"]), default="karaoke", help="Subtitle animation style.")
 @click.option("--transitions", "transitions_mode", type=click.Choice(["cut", "auto"]), default="auto", help="Scene transition style (auto: director decides, cut: force hard cuts).")
 @click.option("--beat-sync", "beat_sync", type=click.Choice(["off", "auto"]), default="auto", help="Align scene cuts to beat positions.")
@@ -457,7 +471,7 @@ def _lut_for_style(overall_style):
 def cli(audio_file, mode, provider, style, output, resolution, lang, new, font_path, lyrics_path,
         effects, clip_duration, platform, title_card, animate_mode, preset, reel_duration,
         logo_path, logo_position, logo_size, logo_opacity,
-        lut_style, lut_intensity, subtitle_style_override, transitions_mode, beat_sync,
+        lut_style, lut_intensity, color_grade, subtitle_style_override, transitions_mode, beat_sync,
         skip_confirm, quick_mode, economy_mode, sequential_assembly, reels_style,
         wow_effects, wow_zoom_punch, wow_light_flash, wow_dynamic_grade, wow_particles):
     """Generate a music video from AUDIO_FILE."""
@@ -468,6 +482,7 @@ def cli(audio_file, mode, provider, style, output, resolution, lang, new, font_p
         effects = "none"
         animate_mode = "never"
         lut_style = None
+        color_grade = None
         transitions_mode = "cut"
         beat_sync = "off"
         wow_effects = False
@@ -600,6 +615,10 @@ def cli(audio_file, mode, provider, style, output, resolution, lang, new, font_p
         lut_style = _lut_for_style(scene_plan.get("overall_style", "worship"))
         click.echo(f"  Auto LUT: {lut_style} (styl: {scene_plan.get('overall_style')})")
 
+    if not color_grade and not quick_mode:
+        color_grade = _color_grade_for_style(scene_plan.get("overall_style", "worship"))
+        click.echo(f"  Color grade: {color_grade} (auto)")
+
     # Override transitions if --transitions cut
     if transitions_mode == "cut":
         for scene in scene_plan["scenes"]:
@@ -710,6 +729,7 @@ def cli(audio_file, mode, provider, style, output, resolution, lang, new, font_p
             logo_opacity=logo_opacity,
             lut_style=lut_style,
             lut_intensity=lut_intensity,
+            color_grade=color_grade,
             sequential_assembly=sequential_assembly,
             reels_style=reels_style,
             wow_config=wow_config,
@@ -751,6 +771,7 @@ def cli(audio_file, mode, provider, style, output, resolution, lang, new, font_p
         cinematic_bars=(effects == "full"),
         lut_style=lut_style,
         lut_intensity=lut_intensity,
+        color_grade=color_grade,
         reels_style=reels_style,
         wow_config=wow_config,
     )
@@ -760,7 +781,7 @@ def cli(audio_file, mode, provider, style, output, resolution, lang, new, font_p
 def _run_preset_mode(preset, reel_duration, analysis, scene_plan, fetch_manifest,
                      audio_path, output_dir, stem, font, effects, cache_dir, new,
                      logo_path=None, logo_position="top-left", logo_size=None, logo_opacity=0.85,
-                     lut_style=None, lut_intensity=0.85, sequential_assembly=False,
+                     lut_style=None, lut_intensity=0.85, color_grade=None, sequential_assembly=False,
                      reels_style="blur-bg", wow_config=None):
     """Handle --preset flag: generate full video and/or social reels."""
     generate_full = preset in ("full", "all")
@@ -808,6 +829,7 @@ def _run_preset_mode(preset, reel_duration, analysis, scene_plan, fetch_manifest
                 cinematic_bars=(effects == "full"),
                 lut_style=lut_style,
                 lut_intensity=lut_intensity,
+                color_grade=color_grade,
                 wow_config=wow_config,
             ),
         ))
@@ -853,6 +875,7 @@ def _run_preset_mode(preset, reel_duration, analysis, scene_plan, fetch_manifest
                     logo_opacity=logo_opacity,
                     lut_style=lut_style,
                     lut_intensity=lut_intensity,
+                    color_grade=color_grade,
                     reels_style=reels_style,
                     wow_config=wow_config,
                 ),

@@ -502,7 +502,7 @@ def _load_scene_clip(video_path, scene, target_size, reels_style="blur-bg"):
     return _create_ken_burns_clip(clip, duration, scene.get("motion", "static"), target_size)
 
 
-def assemble_video(analysis, scene_plan, fetch_manifest, audio_path, output_path, resolution="1080p", font_path=None, effects_level="minimal", clip_start=None, clip_end=None, title_card_text=None, audio_fade_out=1.0, subtitle_margin_bottom=80, cinematic_bars=False, logo_path=None, logo_position="top-left", logo_size=None, logo_opacity=0.85, lut_path=None, lut_style=None, lut_intensity=0.85, reels_style="blur-bg", wow_config=None):
+def assemble_video(analysis, scene_plan, fetch_manifest, audio_path, output_path, resolution="1080p", font_path=None, effects_level="minimal", clip_start=None, clip_end=None, title_card_text=None, audio_fade_out=1.0, subtitle_margin_bottom=80, cinematic_bars=False, logo_path=None, logo_position="top-left", logo_size=None, logo_opacity=0.85, lut_path=None, lut_style=None, lut_intensity=0.85, reels_style="blur-bg", color_grade=None, wow_config=None):
     """Assemble the final music video.
 
     Args:
@@ -599,6 +599,16 @@ def assemble_video(analysis, scene_plan, fetch_manifest, audio_path, output_path
         write_kwargs["ffmpeg_params"] = lut_ffmpeg_params
 
     final.write_videofile(output_path, **write_kwargs)
+
+    # Apply global color grade via FFmpeg curves (post-write)
+    if color_grade:
+        from musicvid.pipeline.color_grade import apply_global_color_grade
+        import shutil
+        is_social = (target_size == (1080, 1920))
+        tmp_graded = output_path + ".graded.mp4"
+        success = apply_global_color_grade(output_path, tmp_graded, color_grade, is_social=is_social)
+        if success:
+            shutil.move(tmp_graded, output_path)
 
     if wow_config and wow_config.get("enabled", True):
         apply_wow_effects(

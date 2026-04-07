@@ -199,15 +199,15 @@ class TestColorGradeFilter(unittest.TestCase):
         sections = [{"label": "chorus", "start": 20.0, "end": 40.0}]
         result = _build_color_grade_filter(sections)
         self.assertIsNotNone(result)
-        self.assertIn("saturation=1.15", result)
-        self.assertIn("contrast=1.15", result)
+        self.assertIn("saturation=1.05", result)
+        self.assertIn("contrast=1.10", result)
 
     def test_verse_has_lower_saturation(self):
         from musicvid.pipeline.wow_effects import _build_color_grade_filter
         sections = [{"label": "verse", "start": 0.0, "end": 20.0}]
         result = _build_color_grade_filter(sections)
         self.assertIsNotNone(result)
-        self.assertIn("saturation=0.85", result)
+        self.assertIn("saturation=0.90", result)
         self.assertIn("contrast=1.05", result)
 
     def test_uses_enable_expression(self):
@@ -364,6 +364,65 @@ class TestApplyWowEffects(unittest.TestCase):
                 self.assertIn("WARN", printed_args)
         finally:
             wm.ENABLE_ZOOMPAN = original
+
+
+class TestEffectsBalanceConstants(unittest.TestCase):
+    """Test that WOW effect constants match the balance spec."""
+
+    def test_light_flash_limited_to_first_and_last_chorus(self):
+        from musicvid.pipeline.wow_effects import _build_light_flash_filter
+        sections = [
+            {"label": "verse", "start": 0.0, "end": 10.0},
+            {"label": "chorus", "start": 10.0, "end": 20.0},
+            {"label": "verse", "start": 20.0, "end": 30.0},
+            {"label": "chorus", "start": 30.0, "end": 40.0},
+            {"label": "verse", "start": 40.0, "end": 50.0},
+            {"label": "chorus", "start": 50.0, "end": 60.0},
+        ]
+        result = _build_light_flash_filter(sections)
+        assert result is not None
+        assert "10.000" in result
+        assert "50.000" in result
+        assert "30.000" not in result
+
+    def test_flash_uses_reduced_brightness(self):
+        from musicvid.pipeline.wow_effects import _build_light_flash_filter, FLASH_MAX_BRIGHTNESS
+        sections = [{"label": "chorus", "start": 5.0, "end": 15.0}]
+        result = _build_light_flash_filter(sections)
+        assert str(FLASH_MAX_BRIGHTNESS) in result
+        assert "255*" not in result
+
+    def test_flash_uses_slower_decay(self):
+        from musicvid.pipeline.wow_effects import _build_light_flash_filter
+        sections = [{"label": "chorus", "start": 5.0, "end": 15.0}]
+        result = _build_light_flash_filter(sections)
+        assert "exp(-6" in result
+        assert "exp(-15" not in result
+
+    def test_flash_peak_time(self):
+        from musicvid.pipeline.wow_effects import _build_light_flash_filter, FLASH_PEAK_TIME
+        sections = [{"label": "chorus", "start": 5.0, "end": 15.0}]
+        result = _build_light_flash_filter(sections)
+        expected_end = f"{5.0 + FLASH_PEAK_TIME:.3f}"
+        assert expected_end in result
+
+    def test_chorus_saturation_reduced(self):
+        from musicvid.pipeline.wow_effects import _build_color_grade_filter
+        sections = [{"label": "chorus", "start": 5.0, "end": 15.0}]
+        result = _build_color_grade_filter(sections)
+        assert "saturation=1.05" in result
+        assert "saturation=1.15" not in result
+
+    def test_verse_saturation_increased(self):
+        from musicvid.pipeline.wow_effects import _build_color_grade_filter
+        sections = [{"label": "verse", "start": 0.0, "end": 10.0}]
+        result = _build_color_grade_filter(sections)
+        assert "saturation=0.9" in result
+        assert "saturation=0.85" not in result
+
+    def test_flash_max_brightness_constant(self):
+        from musicvid.pipeline.wow_effects import FLASH_MAX_BRIGHTNESS
+        assert FLASH_MAX_BRIGHTNESS <= 90  # 255 * 0.35 = 89.25
 
 
 if __name__ == "__main__":

@@ -15,6 +15,11 @@ import tempfile
 # in init eval_mode. Safe to re-enable when FFmpeg fixes scale eval.
 ENABLE_ZOOMPAN = False
 
+# Effects balance constants (fix-effects-balance spec)
+FLASH_MAX_BRIGHTNESS = 89  # 255 * 0.35 opacity cap
+FLASH_PEAK_TIME = 0.06     # seconds (was 0.05)
+FLASH_FADE_RATE = 6        # exp(-6*t) for 0.5s visible decay (was exp(-15) for 0.3s)
+
 
 def default_wow_config():
     """Return default WOW effects configuration dict."""
@@ -180,9 +185,9 @@ def _build_zoom_punch_filter(beats, sections, video_width, video_height):
 
 
 def _build_light_flash_filter(sections):
-    """Build FFmpeg geq filter for white light flash at first beat of each chorus.
+    """Build FFmpeg geq filter for white light flash at first and last chorus start.
 
-    Flash: brightness spike at chorus start, decaying over 0.3s.
+    Max 2 flashes per video. Flash: brightness spike at chorus start, decaying over 0.5s.
     """
     chorus_starts = [
         round(float(s["start"]), 3)
@@ -192,10 +197,16 @@ def _build_light_flash_filter(sections):
     if not chorus_starts:
         return None
 
+    # Balance spec: only first and last chorus
+    if len(chorus_starts) == 1:
+        flash_times = chorus_starts
+    else:
+        flash_times = [chorus_starts[0], chorus_starts[-1]]
+
     flash_parts = []
-    for t in chorus_starts:
+    for t in flash_times:
         flash_parts.append(
-            f"(255*between(T,{t:.3f},{t+0.05:.3f})*exp(-15*(T-{t:.3f})))"
+            f"({FLASH_MAX_BRIGHTNESS}*between(T,{t:.3f},{t+FLASH_PEAK_TIME:.3f})*exp(-{FLASH_FADE_RATE}*(T-{t:.3f})))"
         )
 
     flash_expr = "+".join(flash_parts)
@@ -225,14 +236,14 @@ def _build_color_grade_filter(sections):
 
         if label == "chorus":
             filters.append(
-                f"eq=saturation=1.15:brightness=0.0:contrast=1.15:enable='{enable}'"
+                f"eq=saturation=1.05:brightness=0.0:contrast=1.10:enable='{enable}'"
             )
             filters.append(
                 f"colorbalance=rs=0.08:gs=0.03:bs=-0.05:enable='{enable}'"
             )
         else:
             filters.append(
-                f"eq=saturation=0.85:brightness=0.02:contrast=1.05:enable='{enable}'"
+                f"eq=saturation=0.90:brightness=0.02:contrast=1.05:enable='{enable}'"
             )
             filters.append(
                 f"colorbalance=rs=0.05:gs=0.02:bs=-0.03:enable='{enable}'"

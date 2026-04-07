@@ -4,7 +4,7 @@
 CLI tool that generates synchronized MP4 music videos from audio files using stock footage, beat-synced cuts, and whisper-based subtitles.
 
 ## Commands
-- `python3 -m pytest tests/ -v` - run all tests (~689 tests)
+- `python3 -m pytest tests/ -v` - run all tests (~728 tests)
 - `python3 -m musicvid.musicvid song.mp3` - run the CLI (uses cache by default)
 - `python3 -m musicvid.musicvid song.mp3 --new` - force recalculation, ignore cache
 - `python3 -c "import musicvid; print(musicvid.__version__)"` - check version
@@ -25,7 +25,8 @@ CLI tool that generates synchronized MP4 music videos from audio files using sto
 - `fetch_manifest` entries in ai mode now include `start`, `end`, `source` keys (in addition to `scene_index`, `video_path`)
 - `UNSPLASH_ACCESS_KEY` env var: optional, for TYPE_PHOTO_STOCK scenes (free at unsplash.com/developers, 50 req/h)
 - `generate_single_image(prompt, output_path, provider)` added to `image_generator.py` — generates a single image (used by VisualRouter internally)
-- `fetch_video_by_query(query, min_duration, output_path)` added to `stock_fetcher.py` — direct query without style mapping (used by VisualRouter)
+- `fetch_video_by_query(query, min_duration, output_path)` added to `stock_fetcher.py` — direct query without style mapping (used by VisualRouter); filters already-downloaded URLs via `_downloaded_urls` set (deduplication); `reset_download_registry()` clears between runs
+- Stock dedup: `_downloaded_urls` module-level set in `stock_fetcher.py` — both `fetch_video_by_query` and `fetch_videos` filter already-downloaded Pexels video URLs; falls back to reuse if all results are downloaded; tests import `_downloaded_urls` and `reset_download_registry` directly
 - `--provider [flux-dev|flux-pro|flux-schnell]` (default: flux-pro): selects BFL model for `--mode ai`
 - `--font PATH`: custom .ttf font for subtitles (optional, defaults to auto-downloaded Montserrat Light)
 - `--lyrics PATH`: custom .txt lyrics file (optional); auto-detects single .txt in audio dir. When provided, `lyrics_path` is passed to `analyze_audio()` which runs Whisper for timing then calls `align_lyrics` from `lyrics_aligner` internally (fuzzy match with rapidfuzz, no Claude API call); CLI no longer calls merge directly
@@ -51,6 +52,10 @@ CLI tool that generates synchronized MP4 music videos from audio files using sto
 - CLI tests for parallel assembly must mock `@patch("musicvid.musicvid.assemble_all_parallel")` for multi-job presets (`--preset social`, `--preset all`) since `_run_preset_mode` no longer calls `assemble_video` directly in those paths
 - `--lut-style [warm|cold|cinematic|natural|faded]` (default: None — auto-selected from `scene_plan["overall_style"]` after Stage 2 via `_lut_for_style()`): LUT color grade style — passed as `lut_style` kwarg to all `assemble_video` calls (assembler already supports it via `color_grade.py`); `_run_preset_mode` accepts `lut_style`/`lut_intensity` kwargs
 - `_lut_for_style(overall_style)` in `musicvid.py` — maps scene plan style to LUT: worship→warm, contemplative→cinematic, powerful→cold, joyful→natural, unknown/fallback→warm; called after Stage 2 when `--lut-style` not explicitly set and not quick mode
+- `--color-grade [worship-warm|teal-orange|bleach|natural]` (default: None — auto-selected via `_color_grade_for_style()`): FFmpeg curves-based color grade applied post-write; `worship-warm` uses curves+eq, `bleach`/`natural` use eq only; social reels get slightly stronger eq via `is_social=True`; `_STYLE_TO_COLOR_GRADE`: worship→worship-warm, contemplative→worship-warm, powerful→teal-orange, joyful→natural; set to None in `--quick` mode
+- `CURVES_GRADES` dict in `color_grade.py` — maps grade name to `{curves, eq_full, eq_social}` dicts; `get_curves_grade_filter(grade_name, is_social)` returns FFmpeg `-vf` string; `apply_global_color_grade(input, output, grade, is_social)` runs FFmpeg subprocess, returns True/False (failure preserves original)
+- Per-section color grade: `apply_section_grade(clip, section)` in `assembler.py` — per-clip MoviePy `image_transform()` adjusting saturation/contrast/brightness; `_SECTION_GRADES`: verse (0.88/1.08/0.01), chorus (1.10/1.18/0.0), bridge (0.80/1.25/-0.02); called after `apply_effects()` in `assemble_video()`; pure NumPy luminance-based saturation (no cv2)
+- `assemble_video` accepts `color_grade=None` kwarg — applies `apply_global_color_grade` from `color_grade.py` after `write_videofile` (before WOW effects); uses temp file + `shutil.move` for in-place replacement; social (1080×1920) passes `is_social=True`
 - `--subtitle-style [fade|karaoke|none]` (default: karaoke): overrides `scene_plan["subtitle_style"]["animation"]` in `cli()` after Stage 2
 - `--transitions [cut|auto]` (default: auto): if "cut", overrides all `scene["transition"]` in scene_plan after Stage 2
 - `--beat-sync [off|auto]` (default: auto): if "auto", calls `_apply_beat_sync()` to snap interior scene boundaries to nearest beat position after Stage 2; helpers `_snap_to_nearest_beat`, `_apply_beat_sync` defined in `musicvid.py`
@@ -75,6 +80,12 @@ CLI tool that generates synchronized MP4 music videos from audio files using sto
 - Ken Burns motions also include `diagonal_drift` (top-left → bottom-right pan) and `cut_zoom` (aggressive 1.0→1.25 zoom for chorus energy)
 - Assembler `_concatenate_with_transitions(scene_clips, scenes, bpm, target_size)` replaces direct `concatenate_videoclips` in `assemble_video`; handles cut/cross_dissolve/fade/dip_white using `scene["transition_to_next"]`; mock target: `@patch("musicvid.pipeline.assembler._concatenate_with_transitions")`
 - Dynamics post-processing in `cli()` after `_apply_beat_sync`: `_enforce_motion_variety(scenes)` (always, deduplicates adjacent same motions) → `_assign_dynamic_transitions(scenes, bpm)` (when `transitions_mode=="auto"`, sets `transition_to_next` per section pair); both mutate scenes list in-place
+- Reel transitions: `_REEL_TRANSITIONS_MAP` and `_assign_reel_transitions(scenes, bpm)` in `musicvid.py` — more dynamic transitions for social reels: verse→chorus: slide_up, chorus→verse: zoom_in_hard, chorus→chorus: wipe_right, verse→verse: slide_left; called in `_run_preset_mode` after `_remap_motion_for_portrait`
+- Reel transition rendering: `_concatenate_with_transitions` handles slide_left (0.3s), slide_up (0.3s), wipe_right (0.2s), zoom_in_hard (0.1s); slides use `with_position()` with callable factory closures; wipe uses CrossFadeIn; all overlap cursor like cross_dissolve
+- Reel zoom punch: `_make_reel_zoom_punch(punch_times)` in `assembler.py` — MoviePy per-frame transform on chorus downbeats (every 4th beat in chorus sections); scale 1.0→1.12 in 0.067s (attack), 1.12→1.0 in 0.267s (release); applied in `assemble_video` only for portrait (1080×1920)
+- Reel text flash: white ColorClip (0.05s, opacity 0.6) created per subtitle in `_create_subtitle_clips` when `reels_mode=True`; positioned at `offset_start` with CrossFadeIn/Out; mask via ImageClip
+- Reel intro hook: `_create_reel_intro_hook(video_clip, target_size)` in `assembler.py` — freeze frame from video at t=0.5s, displayed 0.5s with FadeOut 0.3s; prepended to final composite in portrait mode; returns None on failure (no crash)
+- `_create_bottom_gradient` default opacity changed to 0.5 (from 0.6) for portrait mode per spec
 - `enforce_animation_rules(scenes)` called inside Stage 3 (mode=ai, after animate_mode overrides), not at the fixed post-dynamics location mentioned in old notes
 - `--reels-style [crop|blur-bg]` (default: blur-bg): portrait conversion style — `blur-bg` creates blurred background + sharp smart crop overlay; `crop` does tighter POI-centered smart crop; passed as `reels_style` kwarg to `assemble_video` and all social AssemblyJobs
 - Smart crop: `musicvid/pipeline/smart_crop.py` — `detect_poi(image_path) -> (x, y)` (Haar face detection → saliency map → center fallback); `smart_crop(image_path, target_w, target_h, poi=None) -> PIL.Image`; `blur_bg_composite(image_path, target_w, target_h) -> PIL.Image`; `convert_for_platform(image_path, platform, style) -> str` (saves to `smart_{stem}.jpg` alongside source)
@@ -100,6 +111,10 @@ CLI tool that generates synchronized MP4 music videos from audio files using sto
 - `_create_subtitle_clips` gains `reels_mode=False` kwarg — chorus subtitles get scale-pop transform; `reels_mode=True` + chorus → `font_size=72`
 - Assembler tests for logo must mock `@patch("musicvid.pipeline.assembler.apply_logo")`
 - Logo overlay tests mock `@patch("musicvid.pipeline.logo_overlay.ImageClip")` and `@patch("musicvid.pipeline.logo_overlay.cairosvg")` for SVG tests
+- Assembler reel tests: `TestReelTransitionRendering` (slide_left/slide_up use CompositeVideoClip), `TestReelZoomPunch` (transform function + attack/release timing), `TestTextFlash` (reels_mode creates ColorClip flash, non-reels doesn't), `TestReelIntroHook` (freeze frame creation + None on failure), `TestApplySectionGrade` (per-section grade via image_transform)
+- Stock dedup tests: `TestStockDeduplication` in `test_stock_fetcher.py` — uses `reset_download_registry()` in setup_method; tests import `_downloaded_urls` directly
+- Color grade curves tests: `TestCurvesGrades` and `TestApplyGlobalColorGrade` in `test_color_grade.py` — mock `@patch("musicvid.pipeline.color_grade.subprocess")`
+- Reel transition map tests: `TestReelTransitions` in `test_dynamics.py` — tests `_assign_reel_transitions` from `musicvid.musicvid`
 
 ## Caching
 - Content-addressed cache in `output/tmp/{audio_hash}/` (MD5 of first 64KB, 12 chars)

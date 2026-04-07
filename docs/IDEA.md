@@ -1,228 +1,209 @@
 # Idea
 
-# Spec: Synchronizacja napisów — fuzzy match z cursor (sliding window)
+# Spec: Pro wizualizacje — filtry, efekty, przejścia, brak duplikatów
 
-## Koncepcja
-Profesjonalne podejście do synchronizacji karaoke:
-- Plik tekstu = ciągły strumień słów (bez podziału na linie)
-- Whisper = timing + niedokładny tekst (literówki, złączone słowa)
-- Cursor = pozycja w strumieniu słów gdzie skończyliśmy ostatnie dopasowanie
-- Dla każdego segmentu Whispera: szukaj pasującego fragmentu OD cursor wzwyż
+## Problem 1 — brak filtrów kolorów dla pełnego teledysku
 
-## Przygotowanie tekstu z pliku
+Social media mają LUT — pełny teledysk nie.
+Ujednolicić: oba formaty dostają ten sam domyślny filtr kolorów.
 
-### Krok 1 — jeden ciągły strumień słów
-  import re
+Domyślny LUT "Worship Warm":
+  Shadows: lekki shift w kierunku deep blue (#1a1a2e)
+  Midtones: ciepły amber, lekko desaturowane
+  Highlights: cream/ivory (#fffff0)
+  Kontrast: +12%
+  Saturacja: -8% (filmowy look)
 
-  with open(lyrics_path, encoding='utf-8') as f:
-      raw = f.read()
+Implementacja przez FFmpeg curves filter (szybkie, nie frame-by-frame):
+  curves=r='0/0 0.3/0.28 0.7/0.75 1/1':
+        g='0/0 0.3/0.29 0.7/0.72 1/0.97':
+        b='0/0.05 0.3/0.32 0.7/0.68 1/0.92'
 
-  # Usuń didaskalia w nawiasach: [Refren:], [x2], [Bridge], itp.
-  raw = re.sub(r'\[.*?\]', '', raw, flags=re.DOTALL)
+Dodaj do KAŻDEGO eksportu przez FFmpeg jako ostatni krok:
+  Pełny teledysk: curves filter + eq=saturation=0.92:contrast=1.12
+  Rolki: ten sam filter + eq=saturation=1.05:contrast=1.15 (lekko mocniej)
 
-  # Podziel na słowa — ignoruj podział na linie
-  all_words = re.findall(r'\b\w+\b', raw, re.UNICODE)
-  # all_words = ['Tylko', 'w', 'Bogu', 'moje', 'jest', 'zbawienie', ...]
+Nowa flaga: --color-grade [worship-warm|teal-orange|bleach|natural]
+Domyślnie: worship-warm
 
-  # Ciągły string do fuzzy matchowania (małe litery, bez interpunkcji)
-  word_string = ' '.join(w.lower() for w in all_words)
+Mapowanie styli do LUT:
+  worship-warm: ciepły amber, filmowy — dla contemplative/worship
+  teal-orange:  teal shadows + orange highlights — dla powerful/joyful
+  bleach:       desaturacja +kontrast — dla bridge/dramatycznych scen
+  natural:      minimalne zmiany — dla intro/outro
 
-## Algorytm sliding cursor fuzzy match
+Claude-reżyser wybiera color_grade w overall_style:
+  "color_grade": "worship-warm"
 
-### Krok 2 — przetwórz segmenty Whispera
+## Problem 2 — duplikaty filmów stock
 
-  from rapidfuzz import fuzz
+Pexels zwraca te same filmy przy podobnych queries.
+Efekt: kilka scen ma identyczne tło — wygląda amatorsko.
 
-  cursor = 0          # pozycja ZNAKOWA w word_string gdzie zaczyna szukanie
-  result_lyrics = []  # wynikowa lista napisów
+Rozwiązanie — globalny rejestr pobranych URL:
 
-  for seg in vocal_segments:  # segmenty bez szumu
-      whisper_raw = seg['text'].strip()
-      # Oczyść tekst Whispera — małe litery, tylko litery i spacje
-      whisper_clean = ' '.join(re.findall(r'\b\w+\b', whisper_raw.lower()))
+W stock_fetcher.py:
+  _downloaded_urls = set()  # globalny na cały run
 
-      if not whisper_clean or len(whisper_clean) < 3:
-          continue
+  def fetch_video_by_query(query, min_duration, output_path):
+      resp = requests.get(pexels_url, params={...})
+      videos = resp.json()['videos']
 
-      # Okno szukania: od cursor do cursor + max_window
-      # Zakładamy że Whisper może "rozjechać się" o max 2x długość segmentu
-      max_window = max(300, len(whisper_clean) * 6)
-      search_text = word_string[cursor:cursor + max_window]
+      # Odfiltruj już pobrane
+      fresh_videos = [v for v in videos
+                      if v['url'] not in _downloaded_urls]
 
-      if not search_text.strip():
-          break  # koniec tekstu
+      if not fresh_videos:
+          # Spróbuj z innym zapytaniem (dodaj synonim)
+          fresh_videos = videos  # fallback — weź pierwszy
 
-      # Sliding window — szukaj najlepiej pasującego podciągu
-      target_len = len(whisper_clean)
-      best_ratio = 0
-      best_pos = 0  # pozycja w search_text (nie w word_string)
+      video = fresh_videos[0]
+      _downloaded_urls.add(video['url'])
+      # pobierz i zapisz...
 
-      # Krok przesunięcia okna — mały żeby nie przeoczyć
-      step = max(1, target_len // 8)
+Dodatkowo: przy każdym zapytaniu dodaj losowy element różnicujący:
+  QUERY_VARIANTS = {
+      "mountain sunrise": ["mountain sunrise morning", "mountain peak dawn", "alpine sunrise"],
+      "lake reflection":  ["calm lake mirror", "mountain lake reflection", "lake dawn still"],
+      "forest light":     ["forest sunbeam", "forest morning rays", "pine forest light"],
+  }
+  Rotuj między wariantami per run używając hash audio jako seed.
 
-      for i in range(0, max(1, len(search_text) - target_len + 1), step):
-          # Weź fragment o długości ~1.5x długości segmentu Whispera
-          window = search_text[i:i + int(target_len * 1.5)]
-          ratio = fuzz.partial_ratio(whisper_clean, window)
-          if ratio > best_ratio:
-              best_ratio = ratio
-              best_pos = i
+## Problem 3 — więcej dynamiki i efektów
 
-      # Próg akceptacji — minimum 45% podobieństwo
-      MIN_RATIO = 45
+### 3A — Więcej typów przejść dla rolek
 
-      if best_ratio >= MIN_RATIO:
-          # Znajdź odpowiednie słowa ORYGINALNEGO tekstu (z interpunkcją)
-          # best_pos to pozycja znakowa w search_text (= word_string od cursor)
-          abs_pos = cursor + best_pos
-          matched_len = int(target_len * 1.3)
+Rolki muszą być 2x bardziej dynamiczne niż pełny film.
 
-          # Przelicz pozycję znakową na indeks słowa
-          words_before_cursor = word_string[:abs_pos].split()
-          word_idx = len(words_before_cursor)
+Dla rolek dodaj:
+  SLIDE_LEFT: scena B wjeżdża z prawej
+    FFmpeg: xfade=transition=slideleft:duration=0.3
+  SLIDE_UP: scena B wjeżdża z dołu (naturalny dla 9:16)
+    FFmpeg: xfade=transition=slideup:duration=0.3
+  ZOOM_IN_HARD: agresywny zoom 1.0→1.3 na ostatnich 3 klatkach przed cięciem
+  WIPE_RIGHT: poziome przejście jak w CapCut
+    FFmpeg: xfade=transition=wipeleft:duration=0.2
 
-          # Liczba słów w dopasowaniu (szacuj z długości)
-          n_words = max(1, len(whisper_clean.split()))
-          original_words = all_words[word_idx:word_idx + n_words]
-          matched_text = ' '.join(original_words)
+Mapa przejść dla rolek (bardziej dynamiczna niż pełny film):
+  verse→chorus:  SLIDE_UP (wejście w refren z dołu — energetyczne)
+  chorus→verse:  ZOOM_IN_HARD + fade
+  chorus→chorus: WIPE_RIGHT (szybkie, dynamiczne)
+  verse→verse:   SLIDE_LEFT
+  bridge→chorus: SLIDE_UP z flash
 
-          result_lyrics.append({
-              'start': seg['start'],
-              'end': seg['end'],
-              'text': matched_text,
-              'match_ratio': best_ratio,
-              'words': []
-          })
+### 3B — Zoom punch na rolkach
 
-          # Przesuń cursor NA KONIEC dopasowania
-          # Następne szukanie zaczyna się STĄD
-          new_cursor = abs_pos + matched_len
-          cursor = min(new_cursor, len(word_string))
+Na każdym downbeat refrenu w rolkach:
+Agresywniejszy zoom punch niż w pełnym filmie:
+  scale 1.0 → 1.12 w 2 klatkach, powrót 1.12 → 1.0 w 8 klatkach
 
-          print(f"  {seg['start']:.1f}s: '{matched_text}' (ratio={best_ratio})")
-      else:
-          # Słabe dopasowanie — użyj tekstu z Whispera jako fallback
-          print(f"  WARN {seg['start']:.1f}s: słaby match ({best_ratio}) — Whisper: '{whisper_raw}'")
-          result_lyrics.append({
-              'start': seg['start'],
-              'end': seg['end'],
-              'text': whisper_raw,
-              'match_ratio': best_ratio,
-              'words': []
-          })
-          # Przesuń cursor o trochę żeby nie utknąć
-          cursor += max(50, len(whisper_clean))
+Implementacja przez MoviePy transform():
+  def zoom_punch(get_frame, t, punch_times, fps=30):
+      frame = get_frame(t)
+      for pt in punch_times:
+          if 0 <= t - pt < 0.067:  # pierwsze 2 klatki
+              scale = 1.0 + 0.12 * ((t - pt) / 0.067)
+              return zoom_frame(frame, scale)
+          elif 0.067 <= t - pt < 0.333:  # kolejne 8 klatek
+              scale = 1.12 - 0.12 * ((t - pt - 0.067) / 0.267)
+              return zoom_frame(frame, scale)
+      return frame
 
-  return result_lyrics
+### 3C — Text flash na rolkach
 
-## Podział długich segmentów na krótsze napisy
+Przy wejściu każdej linijki napisu w rolce:
+Krótki white flash 0.05s (3 klatki) na początku napisu.
 
-Whisper łączy kilka linii w jeden segment (np. 15s z 2 zdaniami).
-Podziel na mniejsze napisy po MAX_WORDS słów:
+Implementacja: ColorClip biały z opacity animowaną:
+  t=0: opacity 0.6
+  t=0.05: opacity 0 (zanika)
 
-  MAX_WORDS_PER_SUBTITLE = 7
+### 3D — Gradient overlay dolny dla rolek
 
-  def split_segment(seg):
-      words = seg['text'].split()
-      if len(words) <= MAX_WORDS_PER_SUBTITLE:
-          return [seg]
+Stały gradient czarny na dole ekranu (30% wysokości):
+  opacity: 0.5
+Poprawia czytelność napisów na jasnych klipach.
 
-      groups = []
-      for i in range(0, len(words), MAX_WORDS_PER_SUBTITLE):
-          groups.append(' '.join(words[i:i + MAX_WORDS_PER_SUBTITLE]))
+Implementacja: ImageClip z numpy gradient array, with_position('bottom').
 
-      duration = seg['end'] - seg['start']
-      time_per = duration / len(groups)
+### 3E — Intro hook dla rolek (pierwsze 2s)
 
-      result = []
-      for i, group in enumerate(groups):
-          result.append({
-              'start': round(seg['start'] + i * time_per, 2),
-              'end': round(seg['start'] + (i + 1) * time_per - 0.1, 2),
-              'text': group,
-              'words': [],
-              'match_ratio': seg.get('match_ratio', 0)
-          })
-      return result
+Rolka MUSI zaczynać się od najlepszego momentu wizualnie:
+Pierwsze 2s = najlepsza klatka z całej rolki (peak visual moment).
 
-  # Zastosuj po matchowaniu
-  final_lyrics = []
-  for seg in result_lyrics:
-      final_lyrics.extend(split_segment(seg))
+Implementacja:
+  Weź środkową klatkę pierwszego klipu jako thumbnail
+  Wyświetl ją przez 0.5s przed startem wideo (freeze frame)
+  Fade in 0.3s z tej klatki do normalnego wideo
 
-## Filtrowanie szumu przed matchingiem
+## Problem 4 — LUT automatyczny per sekcja
 
-  NON_VOCAL = {'muzyka', 'music', 'instrumental'}
+Nie jeden LUT dla całości — różny kontrast per sekcja:
 
-  def is_vocal(seg):
-      text = seg['text'].strip().lower()
-      text_clean = re.sub(r'[\[\]()♪♫ ]', '', text)
-      if text_clean in NON_VOCAL:
-          return False
-      if len(text_clean) < 3:
-          return False
-      return True
+Verse:   eq=saturation=0.88:contrast=1.08:brightness=0.01  (spokojny)
+Chorus:  eq=saturation=1.10:contrast=1.18:brightness=0.0   (energetyczny)
+Bridge:  eq=saturation=0.80:contrast=1.25:brightness=-0.02 (dramatyczny)
+Intro:   eq=saturation=0.85:contrast=1.05:brightness=0.02  (delikatny)
+Outro:   eq=saturation=0.82:contrast=1.03:brightness=0.01  (wyciszenie)
 
-  vocal_segments = [s for s in whisper_segments if is_vocal(s)]
+Implementacja w assembler.py:
+Każdy klip dostaje swój eq filter przez MoviePy image_transform()
+zanim zostanie złączony z resztą.
 
-## Nowy moduł musicvid/pipeline/lyrics_aligner.py
+def apply_section_grade(clip, section):
+    grades = {
+        'verse':  (0.88, 1.08, 0.01),
+        'chorus': (1.10, 1.18, 0.0),
+        'bridge': (0.80, 1.25, -0.02),
+        'intro':  (0.85, 1.05, 0.02),
+        'outro':  (0.82, 1.03, 0.01),
+    }
+    sat, cont, bright = grades.get(section, (0.92, 1.10, 0.0))
+    def grade_frame(frame):
+        # Brightness
+        f = frame.astype(float) + bright * 255
+        # Contrast
+        f = (f - 128) * cont + 128
+        # Saturation przez HSV
+        import cv2
+        f = np.clip(f, 0, 255).astype(np.uint8)
+        hsv = cv2.cvtColor(f, cv2.COLOR_RGB2HSV).astype(float)
+        hsv[:,:,1] *= sat
+        hsv = np.clip(hsv, 0, 255).astype(np.uint8)
+        return cv2.cvtColor(hsv, cv2.COLOR_HSV2RGB)
+    return clip.image_transform(grade_frame)
 
-Eksportuj funkcję:
-  align_lyrics(whisper_segments, lyrics_path) -> list[dict]
+## Problem 5 — Global LUT przez FFmpeg na końcu (szybko)
 
-Która implementuje cały algorytm powyżej.
+Po złożeniu całego wideo przez MoviePy:
+Przepuść przez FFmpeg z globalnym LUT jako ostatni krok:
 
-## Integracja w audio_analyzer.py
+def apply_global_lut(input_path, output_path, color_grade):
+    lut_filters = {
+        'worship-warm': "curves=r='0/0 0.3/0.28 0.7/0.75 1/1':g='0/0 0.3/0.29 0.7/0.72 1/0.97':b='0/0.05 0.3/0.32 0.7/0.68 1/0.92',eq=saturation=0.92:contrast=1.12",
+        'teal-orange':  "curves=r='0/0 0.5/0.58 1/1':g='0/0 0.5/0.50 1/0.96':b='0/0.08 0.5/0.45 1/0.88',eq=saturation=1.05:contrast=1.15",
+        'bleach':       "eq=saturation=0.75:contrast=1.30:brightness=-0.01",
+        'natural':      "eq=saturation=0.95:contrast=1.05",
+    }
+    vf = lut_filters.get(color_grade, lut_filters['worship-warm'])
 
-Gdy lyrics_path dostępny:
-  from musicvid.pipeline.lyrics_aligner import align_lyrics
+    cmd = [
+        'ffmpeg', '-i', input_path,
+        '-vf', vf,
+        '-c:v', 'libx264', '-preset', 'fast',
+        '-c:a', 'copy',  # audio bez re-encodingu
+        '-y', output_path
+    ]
+    subprocess.run(cmd, check=True)
 
-  vocal_segs = [s for s in lyrics if is_vocal_segment(s)]
-  aligned = align_lyrics(vocal_segs, lyrics_path)
-
-  # Podziel długie segmenty
-  final = []
-  for seg in aligned:
-      final.extend(split_segment(seg))
-
-  lyrics = final
-  print(f"[Lyrics] Aligned: {len(lyrics)} napisów z {len(vocal_segs)} segmentów")
-
-## requirements.txt
-rapidfuzz>=3.0.0
-
-## Testy
-
-test_cursor_advances:
-  Po dopasowaniu segmentu 1 cursor > 0
-  Segment 2 szuka od cursor, nie od 0
-
-test_fuzzy_typos:
-  whisper "tolko w bogu mojest" → match "Tylko w Bogu moje jest zbawienie"
-  ratio >= 45
-
-test_brackets_ignored:
-  Plik ma "[Refren:]" → nie pojawia się w wynikach
-
-test_sequential:
-  Wyniki posortowane chronologicznie
-  lyrics[i]['start'] < lyrics[i+1]['start'] zawsze
-
-test_split_long:
-  Segment z 14 słowami → 2 napisy po 7 słów
-  Timing rozłożony równomiernie
-
-test_noise_filtered:
-  Segment "Muzyka" @ 0.0s → odfiltrowany, nie w wynikach
-
-test_first_subtitle_timing:
-  lyrics[0]['start'] >= 28.0  (nie 0.0s)
+Gdy FFmpeg LUT fail: użyj oryginału (fallback — nie crashuj).
 
 ## Acceptance Criteria
-- lyrics[0]['start'] >= 28.0s
-- Tekst pochodzi z pliku (poprawna polszczyzna, bez literówek)
-- Cursor przesuwa się tylko do przodu
-- Słabe dopasowania używają tekstu Whispera jako fallback
-- [Refren:] i podobne są ignorowane
-- Długie segmenty podzielone na krótsze napisy
-- python3 -m pytest tests/test_lyrics_aligner.py -v przechodzi
+- Pełny teledysk i rolki mają ten sam domyślny LUT worship-warm
+- Brak duplikatów filmów Pexels w jednym run
+- Rolki mają slide-up/slide-left/wipe przejścia (nie tylko fade)
+- Zoom punch na downbeat refrenu dla rolek
+- Gradient overlay dolny dla rolek
+- Per-sekcja color grade (chorus jaśniejszy niż verse)
+- Global LUT przez FFmpeg na końcu każdego eksportu
+- python3 -m pytest tests/ -v przechodzi

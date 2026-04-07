@@ -1856,3 +1856,50 @@ class TestReelZoomPunch:
         get_frame = lambda t: frame
         result = fn(get_frame, 1.0)
         np.testing.assert_array_equal(result, frame)
+
+
+class TestTextFlash:
+    @patch("musicvid.pipeline.assembler.ColorClip")
+    @patch("musicvid.pipeline.assembler.vfx")
+    @patch("musicvid.pipeline.assembler.TextClip")
+    def test_reels_mode_creates_flash_clips(self, mock_text_clip, mock_vfx, mock_color_clip):
+        mock_clip = MagicMock()
+        mock_clip.with_duration.return_value = mock_clip
+        mock_clip.with_start.return_value = mock_clip
+        mock_clip.with_position.return_value = mock_clip
+        mock_clip.with_effects.return_value = mock_clip
+        mock_clip.transform.return_value = mock_clip
+        mock_text_clip.return_value = mock_clip
+
+        flash_clip = MagicMock()
+        flash_clip.with_duration.return_value = flash_clip
+        flash_clip.with_start.return_value = flash_clip
+        flash_clip.with_effects.return_value = flash_clip
+        flash_clip.with_mask.return_value = flash_clip
+        mock_color_clip.return_value = flash_clip
+
+        lyrics = [{"start": 5.0, "end": 7.0, "text": "Hallelujah"}]
+        sections = [{"label": "chorus", "start": 0.0, "end": 10.0}]
+        subtitle_style = {"font_size": 54, "color": "#FFFFFF", "outline_color": "#000000"}
+
+        clips = _create_subtitle_clips(lyrics, subtitle_style, (1080, 1920),
+                                       sections=sections, reels_mode=True)
+        assert len(clips) >= 2  # subtitle + flash
+        mock_color_clip.assert_called()
+
+    @patch("musicvid.pipeline.assembler.vfx")
+    @patch("musicvid.pipeline.assembler.TextClip")
+    def test_non_reels_mode_no_flash(self, mock_text_clip, mock_vfx):
+        mock_clip = MagicMock()
+        mock_clip.with_duration.return_value = mock_clip
+        mock_clip.with_start.return_value = mock_clip
+        mock_clip.with_position.return_value = mock_clip
+        mock_clip.with_effects.return_value = mock_clip
+        mock_text_clip.return_value = mock_clip
+
+        lyrics = [{"start": 5.0, "end": 7.0, "text": "Hallelujah"}]
+        subtitle_style = {"font_size": 54, "color": "#FFFFFF", "outline_color": "#000000"}
+
+        clips = _create_subtitle_clips(lyrics, subtitle_style, (1920, 1080),
+                                       sections=None, reels_mode=False)
+        assert len(clips) == 1  # only subtitle, no flash

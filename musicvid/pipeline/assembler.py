@@ -478,6 +478,22 @@ def _create_subtitle_clips(lyrics, subtitle_style, size, font_path=None, subtitl
 
         clips.append(txt_clip)
 
+        # White flash on subtitle entry for reels
+        if reels_mode:
+            flash_duration = 0.05
+            flash = ColorClip(size=size, color=(255, 255, 255), duration=flash_duration)
+            flash = flash.with_start(offset_start)
+            flash = flash.with_effects([
+                vfx.CrossFadeIn(flash_duration / 2),
+                vfx.CrossFadeOut(flash_duration / 2),
+            ])
+            # Set opacity to 0.6 via mask
+            import numpy as np
+            mask_frame = np.full((size[1], size[0]), 0.6, dtype=np.float32)
+            mask_clip = ImageClip(mask_frame, is_mask=True).with_duration(flash_duration)
+            flash = flash.with_mask(mask_clip)
+            clips.append(flash)
+
     return clips
 
 

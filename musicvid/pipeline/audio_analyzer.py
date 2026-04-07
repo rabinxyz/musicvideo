@@ -157,7 +157,7 @@ def analyze_audio(audio_path, output_dir=None, whisper_model="small", lyrics_pat
     energy_peaks = [round(float(t), 2) for t in peak_times]
 
     # Energy curve: RMS energy per frame, normalized 0.0-1.0
-    rms = librosa.feature.rms(y=y, sr=sr, hop_length=512)[0]
+    rms = librosa.feature.rms(y=y, hop_length=512)[0]
     rms_times = librosa.frames_to_time(np.arange(len(rms)), sr=sr)
     rms_range = rms.max() - rms.min()
     if rms_range > 0:

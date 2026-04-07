@@ -1,5 +1,3 @@
-# Idea
-
 # Spec: Naprawa librosa.feature.rms() — nieoczekiwany argument sr
 
 ## Problem

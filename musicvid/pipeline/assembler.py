@@ -363,6 +363,37 @@ def _make_scale_pop_transform(anim_duration=0.15):
     return scale_pop
 
 
+def _make_reel_zoom_punch(punch_times):
+    """Return a MoviePy transform for reel zoom punch on chorus downbeats.
+
+    Scale 1.0 -> 1.12 in 2 frames (0.067s), return 1.12 -> 1.0 in 8 frames (0.267s).
+    """
+    from PIL import Image
+    import numpy as np
+
+    def zoom_punch(get_frame, t):
+        frame = get_frame(t)
+        for pt in punch_times:
+            dt = t - pt
+            if 0 <= dt < 0.067:
+                scale = 1.0 + 0.12 * (dt / 0.067)
+            elif 0.067 <= dt < 0.333:
+                scale = 1.12 - 0.12 * ((dt - 0.067) / 0.267)
+            else:
+                continue
+            fh, fw = frame.shape[:2]
+            new_w = max(1, int(fw / scale))
+            new_h = max(1, int(fh / scale))
+            x = (fw - new_w) // 2
+            y = (fh - new_h) // 2
+            cropped = frame[y:y + new_h, x:x + new_w]
+            img = Image.fromarray(cropped).resize((fw, fh), Image.LANCZOS)
+            return np.array(img)
+        return frame
+
+    return zoom_punch
+
+
 def _create_subtitle_clips(lyrics, subtitle_style, size, font_path=None, subtitle_margin_bottom=80, sections=None, reels_mode=False):
     """Create subtitle TextClips from lyrics with word-level timing."""
     clips = []
@@ -557,6 +588,20 @@ def assemble_video(analysis, scene_plan, fetch_manifest, audio_path, output_path
 
     bpm = analysis.get("bpm", 120.0)
     video = _concatenate_with_transitions(scene_clips, scenes, bpm, target_size)
+
+    # Reel zoom punch on chorus downbeats
+    if target_size == (1080, 1920):
+        sections = analysis.get("sections", [])
+        beats = analysis.get("beats", [])
+        downbeats = beats[::4]
+        chorus_downbeats = []
+        for db in downbeats:
+            for sec in sections:
+                if sec.get("label") == "chorus" and sec["start"] <= db < sec["end"]:
+                    chorus_downbeats.append(db)
+                    break
+        if chorus_downbeats:
+            video = video.transform(_make_reel_zoom_punch(chorus_downbeats))
 
     subtitle_clips = _create_subtitle_clips(
         analysis.get("lyrics", []),

@@ -13,6 +13,7 @@ from musicvid.pipeline.assembler import (
     _create_ken_burns_clip,
     _create_subtitle_clips,
     _get_resolution,
+    _make_reel_zoom_punch,
 )
 
 
@@ -1825,3 +1826,33 @@ class TestReelTransitionRendering:
         ]
         _concatenate_with_transitions([clip_a, clip_b], scenes, bpm=120.0, target_size=(1080, 1920))
         mock_composite.assert_called()
+
+
+class TestReelZoomPunch:
+    def test_returns_transform_function(self):
+        punch_times = [2.0, 4.0]
+        fn = _make_reel_zoom_punch(punch_times)
+        assert callable(fn)
+
+    def test_no_zoom_outside_punch_window(self):
+        punch_times = [2.0]
+        fn = _make_reel_zoom_punch(punch_times)
+        frame = np.full((100, 100, 3), 128, dtype=np.uint8)
+        get_frame = lambda t: frame
+        result = fn(get_frame, 0.0)
+        np.testing.assert_array_equal(result, frame)
+
+    def test_zoom_during_punch_attack(self):
+        punch_times = [2.0]
+        fn = _make_reel_zoom_punch(punch_times)
+        frame = np.full((100, 100, 3), 128, dtype=np.uint8)
+        get_frame = lambda t: frame
+        result = fn(get_frame, 2.03)
+        assert result.shape == frame.shape
+
+    def test_empty_punch_times_returns_unmodified(self):
+        fn = _make_reel_zoom_punch([])
+        frame = np.full((100, 100, 3), 128, dtype=np.uint8)
+        get_frame = lambda t: frame
+        result = fn(get_frame, 1.0)
+        np.testing.assert_array_equal(result, frame)

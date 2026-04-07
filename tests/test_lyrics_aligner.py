@@ -180,5 +180,74 @@ class TestFirstSubtitleTiming(unittest.TestCase):
             os.unlink(path)
 
 
+class TestEnhancedVocalFiltering(unittest.TestCase):
+    """Enhanced _is_vocal() filtering for noise tokens and Polish variants."""
+
+    def _is_vocal(self, text):
+        from musicvid.pipeline.lyrics_aligner import _is_vocal
+        return _is_vocal({"text": text})
+
+    def test_muzyk_in_non_vocal(self):
+        """'muzyk' is in NON_VOCAL set and filtered out."""
+        self.assertFalse(self._is_vocal("muzyk"))
+
+    def test_intro_in_non_vocal(self):
+        """'intro' is in NON_VOCAL set and filtered out."""
+        self.assertFalse(self._is_vocal("intro"))
+
+    def test_muzyka_still_filtered(self):
+        """Original 'muzyka' still filtered."""
+        self.assertFalse(self._is_vocal("Muzyka"))
+
+    def test_startswith_muzy_catches_variants(self):
+        """Polish variants like 'Muzykę', 'Muzykalny' caught by startswith."""
+        self.assertFalse(self._is_vocal("Muzykę"))
+        self.assertFalse(self._is_vocal("Muzykalny"))
+        self.assertFalse(self._is_vocal("muzycy"))
+
+    def test_single_short_word_filtered(self):
+        """Single short words (< 8 chars) are filtered as noise tokens."""
+        self.assertFalse(self._is_vocal("hmm"))
+        self.assertFalse(self._is_vocal("Tak"))
+        self.assertFalse(self._is_vocal("Oooo"))
+
+    def test_single_long_word_passes(self):
+        """Single word >= 8 chars passes the filter."""
+        self.assertTrue(self._is_vocal("zbawienie"))
+        self.assertTrue(self._is_vocal("Alleluja!"))
+
+    def test_multi_word_short_passes(self):
+        """Multi-word segments pass even if individual words are short."""
+        self.assertTrue(self._is_vocal("Bogu moje"))
+        self.assertTrue(self._is_vocal("Pan jest"))
+
+    def test_real_lyrics_pass(self):
+        """Real Polish Christian lyrics pass the filter."""
+        self.assertTrue(self._is_vocal("Tylko w Bogu moje jest zbawienie"))
+        self.assertTrue(self._is_vocal("Pan jest pasterzem moim"))
+
+    def test_instrumental_still_filtered(self):
+        """Original 'instrumental' still filtered."""
+        self.assertFalse(self._is_vocal("instrumental"))
+
+    def test_intro_with_alignment(self):
+        """'Intro' segment at start is filtered during alignment."""
+        import tempfile, os
+        segments = [
+            {"start": 0.0, "end": 10.0, "text": "Intro"},
+            {"start": 28.0, "end": 32.0, "text": "Tylko w Bogu moje jest zbawienie"},
+        ]
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False, encoding="utf-8") as f:
+            f.write("Tylko w Bogu moje jest zbawienie\n")
+            path = f.name
+        try:
+            result = align_lyrics(segments, path)
+            texts = " ".join(r["text"] for r in result)
+            self.assertNotIn("Intro", texts)
+            self.assertTrue(len(result) >= 1)
+        finally:
+            os.unlink(path)
+
+
 if __name__ == "__main__":
     unittest.main()

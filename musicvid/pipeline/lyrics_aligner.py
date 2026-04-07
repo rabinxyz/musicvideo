@@ -4,7 +4,7 @@ import re
 
 from rapidfuzz import fuzz
 
-NON_VOCAL = {"muzyka", "music", "instrumental"}
+NON_VOCAL = {"muzyka", "music", "instrumental", "muzyk", "intro"}
 
 MAX_WORDS_PER_SUBTITLE = 7
 
@@ -17,7 +17,11 @@ def _is_vocal(seg):
     text_clean = re.sub(r"[\[\]()♪♫ ]", "", text)
     if text_clean in NON_VOCAL:
         return False
+    if text_clean.startswith("muzy"):
+        return False
     if len(text_clean) < 3:
+        return False
+    if len(text.split()) == 1 and len(text_clean) < 8:
         return False
     return True
 

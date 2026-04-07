@@ -659,7 +659,7 @@ def assemble_video(analysis, scene_plan, fetch_manifest, audio_path, output_path
 
     # Bottom gradient overlay for portrait/reels mode — improves subtitle readability
     if target_size == (1080, 1920):
-        gradient = _create_bottom_gradient(target_size[0], target_size[1], video.duration)
+        gradient = _create_bottom_gradient(target_size[0], target_size[1], video.duration, opacity=0.5)
         layers.insert(1, gradient)
 
     if cinematic_bars:

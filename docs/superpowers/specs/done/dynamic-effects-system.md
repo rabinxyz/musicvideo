@@ -1,5 +1,3 @@
-# Idea
-
 # Spec: System dynamicznych efektów dopasowanych do utworu
 
 ## Filozofia
